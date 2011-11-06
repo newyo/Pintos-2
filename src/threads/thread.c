@@ -24,6 +24,8 @@
    that are ready to run but not actually running. */
 static struct list ready_list[PRI_MAX + 1];
 
+static struct list *sleep_list = NULL;
+
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -139,6 +141,8 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  sleep_list_test();
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -346,6 +350,41 @@ thread_foreach (thread_action_func *func, void *aux)
     {
       struct thread *t = list_entry (e, struct thread, allelem);
       func (t, aux);
+    }
+}
+
+void
+sleep_init()
+{
+  list_init (sleep_list);
+}
+
+void
+sleep_add(struct thread *t, int64_t wakeup)
+{
+  list_insert_ordered(t, wakeup);
+  list_list_remove(t);
+}
+
+struct thread *
+sleep_get()
+{
+  struct list_elem *e = list_pop_front(sleep_list);
+  list_remove(e, sleep_list);
+  return e->pid;
+}
+
+void
+sleep_list_test()
+{
+  struct list_elem *e = list_begin(sleep_list);
+  if (e->pid->wakeup >= timer_ticks ())
+    {
+      struct list_elem *em = list_pop_front(sleep_list);
+      //insert thread in the READ_LIST
+      em->wakeup = 0;
+      list_insert(em, ready_list);
+      
     }
 }
 
