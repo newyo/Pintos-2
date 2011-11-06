@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "../devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -359,18 +360,33 @@ sleep_init()
   list_init (sleep_list);
 }
 
+bool sleep_cmp (const struct list_elem *a,
+                const struct list_elem *b,
+                void *aux) {
+
+//TODO
+
+  struct thread *aa, *bb;
+  list_entry(a, struct thread, aa);
+  list_entry(b, struct thread, bb);
+  return ((aa->wakeup) < (bb->wakeup));
+
+//  return true;
+}
+
 void
 sleep_add(struct thread *t, int64_t wakeup)
 {
-  list_insert_ordered(t, wakeup);
-  list_list_remove(t);
+  t->wakeup = wakeup;
+  list_insert_ordered(sleep_list, &(t->elem), sleep_cmp, NULL);
+  list_remove(&(t->elem));
 }
 
 struct thread *
 sleep_get()
 {
   struct list_elem *e = list_pop_front(sleep_list);
-  list_remove(e, sleep_list);
+  list_remove(e);
   return e->pid;
 }
 
@@ -378,13 +394,16 @@ void
 sleep_list_test()
 {
   struct list_elem *e = list_begin(sleep_list);
-  if (e->pid->wakeup >= timer_ticks ())
+  struct thread *t;
+  list_entry(e, struct thread, t);
+  if (t->wakeup >= timer_ticks ())
     {
       struct list_elem *em = list_pop_front(sleep_list);
       //insert thread in the READ_LIST
-      em->wakeup = 0;
-      list_insert(em, ready_list);
-      
+      struct thread *emt;
+      list_entry(em, struct thread, emt);
+      emt->wakeup = 0;
+      list_insert(em, ready_list[emt->priority]);
     }
 }
 
