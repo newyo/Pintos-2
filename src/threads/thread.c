@@ -379,8 +379,8 @@ sleep_cmp (const struct list_elem *a,
   struct thread *aa, *bb;
   (void)aux;
   
-  aa = list_entry(a, struct thread, elem);
-  bb = list_entry(b, struct thread, elem);
+  aa = list_entry (a, struct thread, elem);
+  bb = list_entry (b, struct thread, elem);
   
   return aa->wakeup < bb->wakeup;
 }
@@ -410,6 +410,7 @@ sleep_wakeup (void)
         
       list_pop_front (&sleep_list);
       t->wakeup = 0;
+      list_remove (&t->elem);
       list_push_front (&ready_list[t->priority], head);
     }
 }
@@ -687,4 +688,4 @@ allocate_tid (void)
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
-uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+const uint32_t thread_stack_ofs = offsetof (struct thread, stack);

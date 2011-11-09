@@ -143,6 +143,8 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-void sleep_add(struct thread *t, int64_t wakeup);
+void sleep_add (struct thread *t, int64_t wakeup);
+
+const uint32_t thread_stack_ofs;
 
 #endif /* threads/thread.h */
