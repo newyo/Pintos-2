@@ -26,7 +26,7 @@
 static struct list ready_list[PRI_MAX + 1];
 /* Everything would go down if PRI_MIN was not 0. Nvm ... */
 
-static struct list *sleep_list = NULL;
+static struct list sleep_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -129,7 +129,7 @@ thread_start (void)
   intr_enable ();
   
   /* enables sleeping ability */
-  list_init (sleep_list);
+  list_init (&sleep_list);
 
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
@@ -385,20 +385,20 @@ sleep_add(struct thread *t, int64_t wakeup)
   
   t->wakeup = wakeup;
   list_remove (&t->elem);
-  list_insert_ordered (sleep_list, &t->elem, sleep_cmp, NULL);
+  list_insert_ordered (&sleep_list, &t->elem, sleep_cmp, NULL);
 }
 
 static void
 sleep_wakeup (void)
 {
-  for (;;)
+  while( !list_empty (&sleep_list))
     {
-      struct list_elem *head = list_begin (sleep_list);
+      struct list_elem *head = list_begin (&sleep_list);
       struct thread *t = list_entry (head, struct thread, elem);
       if (t->wakeup < timer_ticks ())
         break;
         
-      list_pop_front (sleep_list);
+      list_pop_front (&sleep_list);
       t->wakeup = 0;
       list_push_front (&ready_list[t->priority], head);
     }
