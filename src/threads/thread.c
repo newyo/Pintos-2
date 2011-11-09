@@ -11,8 +11,9 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "../devices/timer.h"
 #ifdef USERPROG
-#include "userprog/process.h"
+#  include "userprog/process.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -23,6 +24,9 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list[PRI_MAX + 1];
+/* Everything would go down if PRI_MIN was not 0. Nvm ... */
+
+static struct list sleep_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -71,6 +75,11 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+static bool sleep_cmp (const struct list_elem *a,
+                       const struct list_elem *b,
+                       void *aux);
+static void sleep_wakeup (void);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -94,7 +103,7 @@ thread_init (void)
   int i;
   for (i = PRI_MIN; i <= PRI_MAX; ++i)
     {
-      list_init (&(ready_list[i]));
+      list_init (&ready_list[i]);
     }
 
   list_init (&all_list);
@@ -118,6 +127,9 @@ thread_start (void)
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
+  
+  /* enables sleeping ability */
+  list_init (&sleep_list);
 
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
@@ -139,6 +151,8 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  sleep_wakeup ();
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -260,7 +274,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   int priority = t->priority;
-  list_push_back (&(ready_list[priority]), &t->elem);
+  list_push_back (&ready_list[priority], &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -322,7 +336,7 @@ thread_exit (void)
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void
-thread_yield (void) 
+thread_yield (void)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
@@ -354,6 +368,47 @@ thread_foreach (thread_action_func *func, void *aux)
     {
       struct thread *t = list_entry (e, struct thread, allelem);
       func (t, aux);
+    }
+}
+
+static bool
+sleep_cmp (const struct list_elem *a,
+           const struct list_elem *b,
+           void *aux)
+{
+  struct thread *aa, *bb;
+  aa = list_entry(a, struct thread, elem);
+  bb = list_entry(b, struct thread, elem);
+  
+  return aa->wakeup < bb->wakeup;
+}
+
+/* removes thread from ready_list and inserts it to sleep_list */
+void
+sleep_add(struct thread *t, int64_t wakeup)
+{
+  ASSERT (t);
+  ASSERT (wakeup > 0);
+  ASSERT (!t->wakeup); /* ensure t is not alredy sleeping */
+  
+  t->wakeup = wakeup;
+  list_remove (&t->elem);
+  list_insert_ordered (&sleep_list, &t->elem, sleep_cmp, NULL);
+}
+
+static void
+sleep_wakeup (void)
+{
+  while( !list_empty (&sleep_list))
+    {
+      struct list_elem *head = list_begin (&sleep_list);
+      struct thread *t = list_entry (head, struct thread, elem);
+      if (t->wakeup < timer_ticks ())
+        break;
+        
+      list_pop_front (&sleep_list);
+      t->wakeup = 0;
+      list_push_front (&ready_list[t->priority], head);
     }
 }
 
@@ -535,13 +590,14 @@ next_thread_to_run (void)
   int i;
   for (i = PRI_MAX; PRI_MIN <= i; --i)
     {
-      if (!(list_empty (&(ready_list[i]))))
+      if (!list_empty (&ready_list[i]))
         {
-          return list_entry (list_pop_front (&(ready_list[i])), struct thread, elem);
+          return list_entry (list_pop_front (&ready_list[i]),
+                             struct thread,
+                             elem);
         }
     }
-
-    return idle_thread;
+  return idle_thread;
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -617,11 +673,11 @@ schedule (void)
 static tid_t
 allocate_tid (void) 
 {
-  static tid_t next_tid = 1;
+  static tid_t next_tid = 0;
   tid_t tid;
 
   lock_acquire (&tid_lock);
-  tid = next_tid++;
+  tid = ++ next_tid;
   lock_release (&tid_lock);
 
   return tid;
