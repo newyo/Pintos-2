@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "../devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -23,6 +24,8 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+static struct list sleep_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -71,6 +74,19 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+static bool sleep_cmp (const struct list_elem *a,
+                       const struct list_elem *b,
+                       void *aux);
+static void sleep_wakeup (void);
+
+static inline struct thread *
+thread_list_entry (const struct list_elem *e)
+{
+  struct thread *result = list_entry (e, struct thread, elem);
+  ASSERT (is_thread (result));
+  return result;
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -92,6 +108,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -133,6 +150,8 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  //sleep_wakeup ();
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -336,6 +355,53 @@ thread_foreach (thread_action_func *func, void *aux)
     {
       struct thread *t = list_entry (e, struct thread, allelem);
       func (t, aux);
+    }
+}
+
+static bool
+sleep_cmp (const struct list_elem *a,
+           const struct list_elem *b,
+           void *aux)
+{
+  (void)aux;
+  
+  struct thread *aa = thread_list_entry (a);
+  struct thread *bb = thread_list_entry (b);
+  
+  return aa->wakeup < bb->wakeup;
+}
+
+/* removes thread from ready_list and inserts it to sleep_list */
+void
+sleep_add(int64_t wakeup)
+{
+  ASSERT (wakeup > 0);
+  
+  struct thread *current_thread = thread_current ();
+  current_thread->wakeup = wakeup;
+  thread_block ();
+  list_insert_ordered (&sleep_list, &current_thread->elem, sleep_cmp, NULL);
+}
+
+static void
+sleep_wakeup (void)
+{
+#ifndef _NDEBUG
+  printf("sleep_wakeup called\n");
+#endif
+  while (!list_empty (&sleep_list))
+    {
+      struct list_elem *head = list_begin (&sleep_list);
+      struct thread *t = thread_list_entry (head);
+#ifndef _NDEBUG
+      printf("sleep_wakeup called: %d\n", t->tid);
+#endif
+      if (t->wakeup >= timer_ticks ())
+        break;
+        
+      list_pop_front (&sleep_list);
+      t->wakeup = 0;
+      thread_unblock (t);
     }
 }
 
