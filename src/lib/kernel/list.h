@@ -124,6 +124,8 @@ struct list
 
 void list_init (struct list *);
 
+#define list_elem_init(elem) ((elem)->head = (elem)->tail = NULL)
+
 /* List traversal. */
 struct list_elem *list_begin (struct list *);
 struct list_elem *list_next (struct list_elem *);

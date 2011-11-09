@@ -178,6 +178,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  list_elem_init (&lock->elem);
   sema_init (&lock->semaphore, 1);
 }
 
@@ -192,12 +193,17 @@ lock_init (struct lock *lock)
 void
 lock_acquire (struct lock *lock)
 {
+  struct thread *current_thread = thread_current ();
+  
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  lock->holder = current_thread;
+  
+  /* add this lock to list of thread's hlod locks */
+  list_push_front (&current_thread->hold_locks, &lock->elem);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -210,14 +216,20 @@ bool
 lock_try_acquire (struct lock *lock)
 {
   bool success;
+  struct thread *current_thread = thread_current ();
 
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
 
-  success = sema_try_down (&lock->semaphore);
-  if (success)
-    lock->holder = thread_current ();
-  return success;
+  if (!sema_try_down (&lock->semaphore))
+    {
+      return false;
+    }
+    
+  lock->holder = current_thread;
+  
+  /* add this lock to list of thread's hlod locks */
+  list_push_front (&current_thread->hold_locks, &lock->elem);
 }
 
 /* Releases LOCK, which must be owned by the current thread.
@@ -233,6 +245,8 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+  
+  list_remove (&lock->elem);
 }
 
 /* Returns true if the current thread holds LOCK, false
