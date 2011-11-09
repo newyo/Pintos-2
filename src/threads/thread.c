@@ -377,9 +377,14 @@ sleep_add(int64_t wakeup)
 {
   ASSERT (wakeup > 0);
   
-  struct thread *current_thread = thread_current ();
+  struct thread *current_thread = running_thread ();
+  enum intr_level old_level = intr_disable ();
+  
   current_thread->wakeup = wakeup;
   thread_block ();
+  
+  intr_set_level (old_level);
+  
   list_insert_ordered (&sleep_list, &current_thread->elem, sleep_cmp, NULL);
 }
 
@@ -449,7 +454,7 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
-
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -498,7 +503,7 @@ kernel_thread (thread_func *function, void *aux)
   function (aux);       /* Execute the thread function. */
   thread_exit ();       /* If function() returns, kill the thread. */
 }
-
+
 /* Returns the running thread. */
 struct thread *
 running_thread (void) 
