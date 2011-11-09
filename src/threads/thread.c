@@ -13,7 +13,7 @@
 #include "threads/vaddr.h"
 #include "../devices/timer.h"
 #ifdef USERPROG
-#include "userprog/process.h"
+#  include "userprog/process.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -24,6 +24,7 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list[PRI_MAX + 1];
+/* Everything would go down if PRI_MIN was not 0. Nvm ... */
 
 static struct list *sleep_list = NULL;
 
@@ -102,7 +103,7 @@ thread_init (void)
   int i;
   for (i = PRI_MIN; i <= PRI_MAX; ++i)
     {
-      list_init (&(ready_list[i]));
+      list_init (&ready_list[i]);
     }
 
   list_init (&all_list);
@@ -265,7 +266,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   int priority = t->priority;
-  list_push_back (&(ready_list[priority]), &t->elem);
+  list_push_back (&ready_list[priority], &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -327,7 +328,7 @@ thread_exit (void)
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void
-thread_yield (void) 
+thread_yield (void)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
@@ -560,13 +561,14 @@ next_thread_to_run (void)
   int i;
   for (i = PRI_MAX; PRI_MIN <= i; --i)
     {
-      if (!(list_empty (&(ready_list[i]))))
+      if (!list_empty (&ready_list[i]))
         {
-          return list_entry (list_pop_front (&(ready_list[i])), struct thread, elem);
+          return list_entry (list_pop_front (&ready_list[i]),
+                             struct thread,
+                             elem);
         }
     }
-
-    return idle_thread;
+  return idle_thread;
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -642,11 +644,11 @@ schedule (void)
 static tid_t
 allocate_tid (void) 
 {
-  static tid_t next_tid = 1;
+  static tid_t next_tid = 0;
   tid_t tid;
 
   lock_acquire (&tid_lock);
-  tid = next_tid++;
+  tid = ++ next_tid;
   lock_release (&tid_lock);
 
   return tid;
