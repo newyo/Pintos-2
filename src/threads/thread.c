@@ -217,7 +217,7 @@ thread_create (const char *name, int priority,
   
   /* Test if the newly created thread has higher priority than the current one.
      Yield if appropriate. */
-  thread *current_thread = thread_current ();
+  struct thread *current_thread = thread_current ();
   if (current_thread->priority < priority)
     {
        switch_threads (current_thread, t);
