@@ -55,7 +55,7 @@ static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
 /* Scheduling. */
-#define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+#define TIME_SLICE (4)          /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 /* If false (default), use round-robin scheduler.
@@ -377,6 +377,8 @@ sleep_cmp (const struct list_elem *a,
            void *aux)
 {
   struct thread *aa, *bb;
+  (void)aux;
+  
   aa = list_entry(a, struct thread, elem);
   bb = list_entry(b, struct thread, elem);
   
@@ -399,7 +401,7 @@ sleep_add(struct thread *t, int64_t wakeup)
 static void
 sleep_wakeup (void)
 {
-  while( !list_empty (&sleep_list))
+  while (!list_empty (&sleep_list))
     {
       struct list_elem *head = list_begin (&sleep_list);
       struct thread *t = list_entry (head, struct thread, elem);
