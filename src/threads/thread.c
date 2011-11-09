@@ -74,6 +74,11 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+static bool sleep_cmp (const struct list_elem *a,
+                       const struct list_elem *b,
+                       void *aux);
+static void sleep_wakeup (void);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -121,6 +126,9 @@ thread_start (void)
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
+  
+  /* enables sleeping ability */
+  list_init (sleep_list);
 
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
@@ -143,7 +151,7 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  sleep_list_test();
+  sleep_wakeup ();
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -354,53 +362,44 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-void
-sleep_init()
+static bool
+sleep_cmp (const struct list_elem *a,
+           const struct list_elem *b,
+           void *aux)
 {
-  list_init (sleep_list);
-}
-
-bool sleep_cmp (const struct list_elem *a,
-                const struct list_elem *b,
-                void *aux) {
-
   struct thread *aa, *bb;
   aa = list_entry(a, struct thread, elem);
   bb = list_entry(b, struct thread, elem);
   
-  return ((aa->wakeup) < (bb->wakeup));
+  return aa->wakeup < bb->wakeup;
 }
 
+/* removes thread from ready_list and inserts it to sleep_list */
 void
 sleep_add(struct thread *t, int64_t wakeup)
 {
-  t->wakeup = wakeup;
-  list_insert_ordered(sleep_list, &(t->elem), sleep_cmp, NULL);
-  list_remove(&(t->elem));
-}
-
-struct thread *
-sleep_get()
-{
-  struct list_elem *e = list_pop_front(sleep_list);
-  list_remove(e);
+  ASSERT (t);
+  ASSERT (wakeup > 0);
+  ASSERT (!t->wakeup); /* ensure t is not alredy sleeping */
   
-  struct thread *ee = list_entry(e, struct thread, elem);
-  return ee;
+  t->wakeup = wakeup;
+  list_remove (&t->elem);
+  list_insert_ordered (sleep_list, &t->elem, sleep_cmp, NULL);
 }
 
-void
-sleep_list_test()
+static void
+sleep_wakeup (void)
 {
-  struct list_elem *e = list_begin(sleep_list);
-  struct thread *t = list_entry(e, struct thread, elem);
-  if (t->wakeup >= timer_ticks ())
+  for (;;)
     {
-      struct list_elem *em = list_pop_front(sleep_list);
-      //insert thread in the READ_LIST
-      struct thread *emt = list_entry(em, struct thread, elem);
-      emt->wakeup = 0;
-      list_push_front(&ready_list[emt->priority], em);
+      struct list_elem *head = list_begin (sleep_list);
+      struct thread *t = list_entry (head, struct thread, elem);
+      if (t->wakeup < timer_ticks ())
+        break;
+        
+      list_pop_front (sleep_list);
+      t->wakeup = 0;
+      list_push_front (&ready_list[t->priority], head);
     }
 }
 

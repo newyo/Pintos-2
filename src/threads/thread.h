@@ -140,12 +140,6 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-bool sleep_cmp (const struct list_elem *a,
-                const struct list_elem *b,
-                void *aux);
-void sleep_init(void);
 void sleep_add(struct thread *t, int64_t wakeup);
-struct thread * sleep_get(void);
-void sleep_list_test(void);
 
 #endif /* threads/thread.h */
