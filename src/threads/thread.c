@@ -364,14 +364,11 @@ bool sleep_cmp (const struct list_elem *a,
                 const struct list_elem *b,
                 void *aux) {
 
-//TODO
-
   struct thread *aa, *bb;
-  list_entry(a, struct thread, aa);
-  list_entry(b, struct thread, bb);
+  aa = list_entry(a, struct thread, elem);
+  bb = list_entry(b, struct thread, elem);
+  
   return ((aa->wakeup) < (bb->wakeup));
-
-//  return true;
 }
 
 void
@@ -387,23 +384,23 @@ sleep_get()
 {
   struct list_elem *e = list_pop_front(sleep_list);
   list_remove(e);
-  return e->pid;
+  
+  struct thread *ee = list_entry(e, struct thread, elem);
+  return ee;
 }
 
 void
 sleep_list_test()
 {
   struct list_elem *e = list_begin(sleep_list);
-  struct thread *t;
-  list_entry(e, struct thread, t);
+  struct thread *t = list_entry(e, struct thread, elem);
   if (t->wakeup >= timer_ticks ())
     {
       struct list_elem *em = list_pop_front(sleep_list);
       //insert thread in the READ_LIST
-      struct thread *emt;
-      list_entry(em, struct thread, emt);
+      struct thread *emt = list_entry(em, struct thread, elem);
       emt->wakeup = 0;
-      list_insert(em, ready_list[emt->priority]);
+      list_push_front(&ready_list[emt->priority], em);
     }
 }
 
