@@ -434,30 +434,6 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
   thread_yield ();
-#if 0
-  struct thread *current_thread = thread_current ();
-  int current_priority = current_thread->priority;
-  
-  ASSERT (new_priority >= PRI_MIN && new_priority <= PRI_MAX);
-  if (current_priority == new_priority)
-    {
-       /* priority left unchanged */
-       return;
-    }
-  
-  current_thread->priority = new_priority;
-  
-  /* remove thread from its current list and insert it in the new priority
-   * list. */
-  list_remove (&current_thread->elem);
-  list_push_back (&ready_list[new_priority], &current_thread->elem);
-  
-  if (new_priority < current_priority)
-    {
-       thread_yield ();
-    }
-#endif
-
 }
 
 /* Returns the current thread's priority. */
