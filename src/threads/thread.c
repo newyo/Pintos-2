@@ -151,8 +151,6 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  //sleep_wakeup ();
-
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -375,32 +373,33 @@ sleep_cmp (const struct list_elem *a,
 void
 sleep_add(int64_t wakeup)
 {
-  ASSERT (wakeup > 0);
+  if(wakeup < 0)
+    {
+      wakeup = 0; // TODO: wtf?
+    }
   
-  struct thread *current_thread = running_thread ();
   enum intr_level old_level = intr_disable ();
+  struct thread *current_thread = thread_current ();
   
-  current_thread->wakeup = wakeup;
+  current_thread->wakeup = wakeup + timer_ticks ();
+  
+  list_insert_ordered (&sleep_list, &current_thread->elem, sleep_cmp,
+                       NULL);
+  
+  printf ("\tsleep_add(%lld) for %d, %d elements in list.\n",
+          wakeup, current_thread->tid, list_size (&sleep_list));
   thread_block ();
-  
   intr_set_level (old_level);
-  
-  list_insert_ordered (&sleep_list, &current_thread->elem, sleep_cmp, NULL);
 }
 
 static void
 sleep_wakeup (void)
 {
-#ifndef _NDEBUG
-  printf("sleep_wakeup called\n");
-#endif
+  enum intr_level old_level = intr_disable ();
   while (!list_empty (&sleep_list))
     {
       struct list_elem *head = list_begin (&sleep_list);
       struct thread *t = thread_list_entry (head);
-#ifndef _NDEBUG
-      printf("sleep_wakeup called: %d\n", t->tid);
-#endif
       if (t->wakeup >= timer_ticks ())
         break;
         
@@ -408,6 +407,7 @@ sleep_wakeup (void)
       t->wakeup = 0;
       thread_unblock (t);
     }
+  intr_set_level (old_level);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -626,6 +626,8 @@ thread_schedule_tail (struct thread *prev)
 static void
 schedule (void) 
 {
+  sleep_wakeup ();
+  
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
