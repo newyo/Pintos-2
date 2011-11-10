@@ -420,7 +420,7 @@ sleep_wakeup (void)
     {
       struct list_elem *head = list_begin (&sleep_list);
       struct thread *t = thread_list_entry (head);
-      if (t->wakeup >= timer_ticks ())
+      if (t->wakeup > timer_ticks ())
         break;
         
       list_pop_front (&sleep_list);
