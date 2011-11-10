@@ -234,12 +234,14 @@ thread_create (const char *name, int priority,
   
   /* Test if the newly created thread has higher priority than the current one.
      Yield if appropriate. */
+
+#if 0
   struct thread *current_thread = thread_current ();
   if (current_thread->priority < priority)
     {
        switch_threads (current_thread, t);
     }
-
+#endif
   return tid;
 }
 
@@ -393,7 +395,7 @@ sleep_add(int64_t wakeup)
 {
   if(wakeup < 0)
     {
-      wakeup = 0; // TODO: wtf?
+      wakeup = 0;
     }
   
   enum intr_level old_level = intr_disable ();
@@ -404,8 +406,8 @@ sleep_add(int64_t wakeup)
   list_insert_ordered (&sleep_list, &current_thread->elem, sleep_cmp,
                        NULL);
   
-  printf ("\tsleep_add(%lld) for %d, %d elements in list.\n",
-          wakeup, current_thread->tid, list_size (&sleep_list));
+//  printf ("\tsleep_add(%lld) for %d, %d elements in list.\n",
+//          wakeup, current_thread->tid, list_size (&sleep_list));
   thread_block ();
   intr_set_level (old_level);
 }
@@ -432,6 +434,8 @@ sleep_wakeup (void)
 void
 thread_set_priority (int new_priority) 
 {
+  thread_current ()->priority = new_priority;
+#if 0
   struct thread *current_thread = thread_current ();
   int current_priority = current_thread->priority;
   
@@ -453,6 +457,8 @@ thread_set_priority (int new_priority)
     {
        thread_yield ();
     }
+#endif
+
 }
 
 /* Returns the current thread's priority. */
