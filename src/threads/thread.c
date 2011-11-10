@@ -23,7 +23,7 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
-static struct list ready_list;
+static struct list ready_list[PRI_MAX + 1];
 
 static struct list sleep_list;
 
@@ -106,7 +106,13 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  list_init (&ready_list);
+
+  int i;
+  for (i = PRI_MIN; i <= PRI_MAX; ++i)
+    {
+      list_init (&(ready_list[i]));
+    }
+
   list_init (&all_list);
   list_init (&sleep_list);
 
@@ -225,6 +231,14 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  
+  /* Test if the newly created thread has higher priority than the current one.
+     Yield if appropriate. */
+  struct thread *current_thread = thread_current ();
+  if (current_thread->priority < priority)
+    {
+       switch_threads (current_thread, t);
+    }
 
   return tid;
 }
@@ -262,7 +276,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  int priority = t->priority;
+  list_push_back (&(ready_list[priority]), &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -332,8 +347,11 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  if (cur != idle_thread)
+    {
+      int priority = cur->priority;
+      list_push_back (&(ready_list[priority]), &cur->elem);
+    }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -414,7 +432,27 @@ sleep_wakeup (void)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *current_thread = thread_current ();
+  int current_priority = current_thread->priority;
+  
+  ASSERT (new_priority >= PRI_MIN && new_priority <= PRI_MAX);
+  if (current_priority == new_priority)
+    {
+       /* priority left unchanged */
+       return;
+    }
+  
+  current_thread->priority = new_priority;
+  
+  /* remove thread from its current list and insert it in the new priority
+   * list. */
+  list_remove (&current_thread->elem);
+  list_push_back (&ready_list[new_priority], &current_thread->elem);
+  
+  if (new_priority < current_priority)
+    {
+       thread_yield ();
+    }
 }
 
 /* Returns the current thread's priority. */
@@ -564,10 +602,16 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  int i;
+  for (i = PRI_MAX; PRI_MIN <= i; --i)
+    {
+      if (!(list_empty (&(ready_list[i]))))
+        {
+          return list_entry (list_pop_front (&(ready_list[i])), struct thread, elem);
+        }
+    }
+
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page
