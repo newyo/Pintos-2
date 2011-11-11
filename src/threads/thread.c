@@ -75,6 +75,7 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
 static void sleep_wakeup (void);
+static int thread_get_priority_of (const struct thread *t);
 
 static inline struct thread *
 thread_list_entry (const struct list_elem *e)
@@ -232,7 +233,7 @@ thread_create (const char *name, int priority,
   /* Test if the newly created thread has higher priority than the current one.
    * Yield if appropriate. 
    */
-  if (thread_current ()->priority <= priority)
+  if (thread_get_priority () <= priority)
     {
        thread_yield ();
     }
@@ -346,7 +347,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread)
     {
-      int priority = cur->priority;
+      int priority = thread_get_priority_of (cur);
       list_push_back (&(ready_list[priority]), &cur->elem);
     }
   cur->status = THREAD_READY;
@@ -394,7 +395,7 @@ thread_cmp_priority (const struct list_elem *a,
   struct thread *aa = thread_list_entry (a);
   struct thread *bb = thread_list_entry (b);
   
-  return aa->priority > bb->priority;
+  return thread_get_priority_of (aa) > thread_get_priority_of (bb);
 }
 
 /* removes thread from ready_list and inserts it to sleep_list */
@@ -446,11 +447,18 @@ thread_set_priority (int new_priority)
   thread_yield ();
 }
 
+static int
+thread_get_priority_of (const struct thread *t)
+{
+  ASSERT (t != NULL);
+  return t->priority;
+}
+
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_get_priority_of (thread_current ());
 }
 
 /* Sets the current thread's nice value to NICE. */
