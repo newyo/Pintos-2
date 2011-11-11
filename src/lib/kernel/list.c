@@ -44,7 +44,7 @@ is_head (struct list_elem *elem)
 /* Returns true if ELEM is an interior element,
    false otherwise. */
 inline bool
-list_is_interior (struct list_elem *elem)
+list_is_interior (const struct list_elem *elem)
 {
   return elem != NULL && elem->prev != NULL && elem->next != NULL;
 }

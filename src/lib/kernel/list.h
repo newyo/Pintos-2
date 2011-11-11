@@ -126,7 +126,7 @@ void list_init (struct list *);
 
 #define list_elem_init(elem) ((elem)->prev = (elem)->next = NULL)
 
-bool list_is_interior (struct list_elem *elem);
+bool list_is_interior (const struct list_elem *elem);
 
 /* List traversal. */
 struct list_elem *list_begin (struct list *);
@@ -151,6 +151,11 @@ void list_push_back (struct list *, struct list_elem *);
 struct list_elem *list_remove (struct list_elem *);
 struct list_elem *list_pop_front (struct list *);
 struct list_elem *list_pop_back (struct list *);
+
+/* removes e from list, yielding list_is_interior (e) to return false */
+#define list_remove_property(e) \
+  ((void)(((void)(!list_is_interior (e) || list_remove (e)),0), \
+          ((void)(list_elem_init(e)                       ),0)))
 
 /* List elements. */
 struct list_elem *list_front (struct list *);
