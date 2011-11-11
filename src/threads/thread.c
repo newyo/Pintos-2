@@ -74,9 +74,6 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-static bool sleep_cmp (const struct list_elem *a,
-                       const struct list_elem *b,
-                       void *aux);
 static void sleep_wakeup (void);
 
 static inline struct thread *
@@ -374,10 +371,10 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-static bool
-sleep_cmp (const struct list_elem *a,
-           const struct list_elem *b,
-           void *aux)
+bool
+thread_cmp_wakeup (const struct list_elem *a,
+                   const struct list_elem *b,
+                   void *aux)
 {
   (void)aux;
   
@@ -385,6 +382,19 @@ sleep_cmp (const struct list_elem *a,
   struct thread *bb = thread_list_entry (b);
   
   return aa->wakeup < bb->wakeup;
+}
+
+bool
+thread_cmp_priority (const struct list_elem *a,
+                     const struct list_elem *b,
+                     void *aux)
+{
+  (void)aux;
+  
+  struct thread *aa = thread_list_entry (a);
+  struct thread *bb = thread_list_entry (b);
+  
+  return aa->priority > bb->priority;
 }
 
 /* removes thread from ready_list and inserts it to sleep_list */
@@ -401,7 +411,7 @@ sleep_add(int64_t wakeup)
   
   current_thread->wakeup = wakeup + timer_ticks ();
   
-  list_insert_ordered (&sleep_list, &current_thread->elem, sleep_cmp,
+  list_insert_ordered (&sleep_list, &current_thread->elem, thread_cmp_wakeup,
                        NULL);
   
 //  printf ("\tsleep_add(%lld) for %d, %d elements in list.\n",

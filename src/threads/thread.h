@@ -142,4 +142,11 @@ int thread_get_load_avg (void);
 
 void sleep_add (int64_t wakeup);
 
+bool thread_cmp_wakeup (const struct list_elem *a,
+                        const struct list_elem *b,
+                        void *aux);
+bool thread_cmp_priority (const struct list_elem *a,
+                          const struct list_elem *b,
+                          void *aux);
+
 #endif /* threads/thread.h */
