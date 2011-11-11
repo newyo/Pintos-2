@@ -108,7 +108,7 @@ thread_init (void)
   int i;
   for (i = PRI_MIN; i <= PRI_MAX; ++i)
     {
-      list_init (&(ready_list[i]));
+      list_init (&ready_list[i]);
     }
 
   list_init (&all_list);
@@ -274,8 +274,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  int priority = t->priority;
-  list_push_back (&(ready_list[priority]), &t->elem);
+  int priority = thread_get_priority_of (t);
+  list_push_back (&ready_list[priority], &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -348,7 +348,7 @@ thread_yield (void)
   if (cur != idle_thread)
     {
       int priority = thread_get_priority_of (cur);
-      list_push_back (&(ready_list[priority]), &cur->elem);
+      list_push_back (&ready_list[priority], &cur->elem);
     }
   cur->status = THREAD_READY;
   schedule ();
@@ -605,13 +605,11 @@ next_thread_to_run (void)
   int i;
   for (i = PRI_MAX; PRI_MIN <= i; --i)
     {
-      if (!(list_empty (&(ready_list[i]))))
-        {
-          return list_entry (list_pop_front (&(ready_list[i])), struct thread, elem);
-        }
+      if (list_empty (&ready_list[i]))
+        continue;
+      return list_entry (list_pop_front (&ready_list[i]), struct thread, elem);
     }
-
-    return idle_thread;
+  return idle_thread;
 }
 
 /* Completes a thread switch by activating the new thread's page
