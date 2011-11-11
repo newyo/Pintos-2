@@ -94,6 +94,8 @@ struct thread
     struct list_elem elem;              /* List element. */
 
     int64_t wakeup;                     /* only used for sleep */
+    
+    struct list lock_list;              /* list of held locks */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

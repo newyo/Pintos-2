@@ -184,6 +184,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  list_elem_init (&lock->holder_elem);
   sema_init (&lock->semaphore, 1);
 }
 
@@ -203,7 +204,12 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  
+  enum intr_level old_level = intr_disable ();
+  struct thread *current_thread = thread_current ();
+  list_push_back (&current_thread->lock_list, &lock->holder_elem);
+  lock->holder = current_thread;
+  intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -222,7 +228,13 @@ lock_try_acquire (struct lock *lock)
 
   success = sema_try_down (&lock->semaphore);
   if (success)
-    lock->holder = thread_current ();
+    {
+      enum intr_level old_level = intr_disable ();
+      struct thread *current_thread = thread_current ();
+      list_push_back (&current_thread->lock_list, &lock->holder_elem);
+      lock->holder = current_thread;
+      intr_set_level (old_level);
+    }
   return success;
 }
 
@@ -236,8 +248,12 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
+  
+  enum intr_level old_level = intr_disable ();
+  list_remove_property (&lock->holder_elem);
   lock->holder = NULL;
+  intr_set_level (old_level);
+  
   sema_up (&lock->semaphore);
 }
 
@@ -248,7 +264,11 @@ bool
 lock_held_by_current_thread (const struct lock *lock) 
 {
   ASSERT (lock != NULL);
-
+  ASSERT (
+    (lock->holder == NULL && !list_is_interior (&lock->holder_elem)) ||
+    (lock->holder != NULL &&  list_is_interior (&lock->holder_elem))
+  )
+  
   return lock->holder == thread_current ();
 }
 
