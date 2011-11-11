@@ -75,7 +75,7 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
 static void sleep_wakeup (void);
-static int thread_get_priority_of (const struct thread *t);
+static int thread_get_priority_of (struct thread *t);
 
 static inline struct thread *
 thread_list_entry (const struct list_elem *e)
@@ -448,10 +448,52 @@ thread_set_priority (int new_priority)
 }
 
 static int
-thread_get_priority_of (const struct thread *t)
+thread_get_priority_of_real (struct thread *t)
+{
+  /* result = t->priority
+   * for each lock_iter in t->lock_list:
+   *   for each thread_iter in lock->semaphore.waiters:
+   *     result = max(result, thread_get_priority_of_real(thread_iter))
+   * return result
+   */
+   
+  // TODO: detect deadlock.
+  // Deadlocked threads would render a stackover currently.
+  
+  int result = t->priority;
+  
+  struct list_elem *lock_iter;
+  struct list_elem *lock_iter_end = list_end (&t->lock_list);
+  
+  for (lock_iter = list_begin (&t->lock_list);
+       lock_iter != lock_iter_end;
+       lock_iter = list_next (lock_iter))
+    {
+      struct lock *lock = list_entry (lock_iter, struct lock, holder_elem);
+      struct list_elem *thread_iter;
+      struct list_elem *thread_iter_end = list_end (&lock->semaphore.waiters);
+      
+      for (thread_iter = list_begin (&lock->semaphore.waiters);
+           thread_iter != thread_iter_end;
+           thread_iter = list_next (thread_iter))
+        {
+          struct thread *locked_thread = thread_list_entry (thread_iter);
+          int locked_prio = thread_get_priority_of_real (locked_thread);
+          if (locked_prio > result)
+            result = locked_prio;
+        }
+    }
+  return result;
+}
+
+static int
+thread_get_priority_of (struct thread *t)
 {
   ASSERT (t != NULL);
-  return t->priority;
+  enum intr_level old_level = intr_disable ();
+  int result = thread_get_priority_of_real(t);
+  intr_set_level (old_level);
+  return result;
 }
 
 /* Returns the current thread's priority. */

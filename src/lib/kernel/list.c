@@ -522,3 +522,16 @@ list_min (struct list *list, list_less_func *less, void *aux)
     }
   return min;
 }
+
+void *
+list_foldl (struct list *list,
+            void *(*fun) (struct list_elem *elem, void *accu),
+            void *initial_accu)
+{
+  struct list_elem *e;
+  for (e = list_begin (list); e != list_end (list); e = list_next (e))
+    {
+      initial_accu = fun (e, initial_accu);
+    }
+  return initial_accu;
+}
