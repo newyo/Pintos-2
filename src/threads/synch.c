@@ -250,7 +250,7 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   enum intr_level old_level = intr_disable ();
-  list_remove_property (&lock->holder_elem);
+  list_remove_properly (&lock->holder_elem);
   lock->holder = NULL;
   intr_set_level (old_level);
   

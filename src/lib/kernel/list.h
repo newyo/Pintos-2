@@ -153,7 +153,7 @@ struct list_elem *list_pop_front (struct list *);
 struct list_elem *list_pop_back (struct list *);
 
 /* removes e from list, yielding list_is_interior (e) to return false */
-#define list_remove_property(e) \
+#define list_remove_properly(e) \
   ((void)(((void)(!list_is_interior (e) || list_remove (e)),0), \
           ((void)(list_elem_init(e)                       ),0)))
 
