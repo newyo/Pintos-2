@@ -43,8 +43,8 @@ is_head (struct list_elem *elem)
 
 /* Returns true if ELEM is an interior element,
    false otherwise. */
-static inline bool
-is_interior (struct list_elem *elem)
+inline bool
+list_is_interior (struct list_elem *elem)
 {
   return elem != NULL && elem->prev != NULL && elem->next != NULL;
 }
@@ -81,7 +81,7 @@ list_begin (struct list *list)
 struct list_elem *
 list_next (struct list_elem *elem)
 {
-  ASSERT (is_head (elem) || is_interior (elem));
+  ASSERT (is_head (elem) || list_is_interior (elem));
   return elem->next;
 }
 
@@ -112,7 +112,7 @@ list_rbegin (struct list *list)
 struct list_elem *
 list_prev (struct list_elem *elem)
 {
-  ASSERT (is_interior (elem) || is_tail (elem));
+  ASSERT (list_is_interior (elem) || is_tail (elem));
   return elem->prev;
 }
 
@@ -168,7 +168,7 @@ list_tail (struct list *list)
 void
 list_insert (struct list_elem *before, struct list_elem *elem)
 {
-  ASSERT (is_interior (before) || is_tail (before));
+  ASSERT (list_is_interior (before) || is_tail (before));
   ASSERT (elem != NULL);
 
   elem->prev = before->prev;
@@ -184,13 +184,13 @@ void
 list_splice (struct list_elem *before,
              struct list_elem *first, struct list_elem *last)
 {
-  ASSERT (is_interior (before) || is_tail (before));
+  ASSERT (list_is_interior (before) || is_tail (before));
   if (first == last)
     return;
   last = list_prev (last);
 
-  ASSERT (is_interior (first));
-  ASSERT (is_interior (last));
+  ASSERT (list_is_interior (first));
+  ASSERT (list_is_interior (last));
 
   /* Cleanly remove FIRST...LAST from its current list. */
   first->prev->next = last->next;
@@ -248,7 +248,7 @@ list_push_back (struct list *list, struct list_elem *elem)
 struct list_elem *
 list_remove (struct list_elem *elem)
 {
-  ASSERT (is_interior (elem));
+  ASSERT (list_is_interior (elem));
   elem->prev->next = elem->next;
   elem->next->prev = elem->prev;
   return elem->next;

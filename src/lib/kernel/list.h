@@ -126,6 +126,8 @@ void list_init (struct list *);
 
 #define list_elem_init(elem) ((elem)->prev = (elem)->next = NULL)
 
+bool list_is_interior (struct list_elem *elem);
+
 /* List traversal. */
 struct list_elem *list_begin (struct list *);
 struct list_elem *list_next (struct list_elem *);
