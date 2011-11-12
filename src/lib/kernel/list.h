@@ -126,6 +126,8 @@ void list_init (struct list *);
 
 #define list_elem_init(elem) ((elem)->prev = (elem)->next = NULL)
 
+bool list_is_interior (const struct list_elem *elem);
+
 /* List traversal. */
 struct list_elem *list_begin (struct list *);
 struct list_elem *list_next (struct list_elem *);
@@ -149,6 +151,11 @@ void list_push_back (struct list *, struct list_elem *);
 struct list_elem *list_remove (struct list_elem *);
 struct list_elem *list_pop_front (struct list *);
 struct list_elem *list_pop_back (struct list *);
+
+/* removes e from list, yielding list_is_interior (e) to return false */
+#define list_remove_properly(e) \
+  ((void)(((void)(!list_is_interior (e) || list_remove (e)),0), \
+          ((void)(list_elem_init(e)                       ),0)))
 
 /* List elements. */
 struct list_elem *list_front (struct list *);
@@ -179,5 +186,9 @@ void list_unique (struct list *, struct list *duplicates,
 /* Max and min. */
 struct list_elem *list_max (struct list *, list_less_func *, void *aux);
 struct list_elem *list_min (struct list *, list_less_func *, void *aux);
+
+void *list_foldl (struct list *list,
+                  void *(*fun) (struct list_elem *elem, void *accu),
+                  void *initial_accu);
 
 #endif /* lib/kernel/list.h */

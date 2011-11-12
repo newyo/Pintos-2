@@ -92,11 +92,10 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    
-    /* list of locks the thread currently holds */
-    struct list hold_locks;
 
     int64_t wakeup;                     /* only used for sleep */
+    
+    struct list lock_list;              /* list of held locks */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -143,8 +142,13 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-void sleep_add (struct thread *t, int64_t wakeup);
+void sleep_add (int64_t wakeup);
 
-const uint32_t thread_stack_ofs;
+bool thread_cmp_wakeup (const struct list_elem *a,
+                        const struct list_elem *b,
+                        void *aux);
+bool thread_cmp_priority (const struct list_elem *a,
+                          const struct list_elem *b,
+                          void *aux);
 
 #endif /* threads/thread.h */
