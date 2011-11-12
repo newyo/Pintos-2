@@ -395,7 +395,7 @@ thread_cmp_priority (const struct list_elem *a,
   struct thread *aa = thread_list_entry (a);
   struct thread *bb = thread_list_entry (b);
   
-  return thread_get_priority_of (aa) > thread_get_priority_of (bb);
+  return thread_get_priority_of (aa) < thread_get_priority_of (bb);
 }
 
 /* removes thread from ready_list and inserts it to sleep_list */
