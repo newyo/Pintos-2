@@ -158,6 +158,16 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+    
+  if(timer_ticks () % TIMER_FREQ == 0) {
+    /* Because of assumptions made by some of the tests, 
+     *load_avg must be updated exactly when the system 
+     * tick counter reaches a multiple of a second, that 
+     * is, when timer_ticks () % TIMER_FREQ == 0, and 
+     * not at any other time.
+     */
+     // thread_get_recent_cpu ()); //TODO
+  }
 }
 
 /* Prints thread statistics. */
@@ -491,7 +501,17 @@ thread_get_priority_of (struct thread *t)
 {
   ASSERT (t != NULL);
   enum intr_level old_level = intr_disable ();
-  int result = thread_get_priority_of_real(t);
+
+  int result = PRI_MIN;
+  if(thread_mlfqs)
+    {
+      result = PRI_MAX - (thread_get_recent_cpu() / 4) - (thread_get_nice() * 2);
+    }
+  else
+    {
+      result = thread_get_priority_of_real(t);
+    }
+
   intr_set_level (old_level);
   return result;
 }
@@ -503,18 +523,33 @@ thread_get_priority (void)
   return thread_get_priority_of (thread_current ());
 }
 
-/* Sets the current thread's nice value to NICE. */
+
+/* Sets the current thread's nice value to new_nice and 
+ * recalculates the thread's priority based on the new 
+ * value (see section B.2 Calculating Priority). If the 
+ * running thread no longer has the highest priority, 
+ * yields.
+ */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
-  /* Not yet implemented. */
+  ASSERT(-20 <= nice && nice <= 20);
+  thread_current ()->nice = nice;
+  int cpu = thread_get_recent_cpu();
+  //TODO reshedule
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
+  return thread_current ()->nice;
+}
+
+int
+threads_get_ready_threads (void)
+{
+  //TODO
   return 0;
 }
 
@@ -522,16 +557,18 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int load_avg = (59/60)*thread_get_load_avg() + (1/60)*threads_get_ready_threads();
+  return load_avg;
 }
 
-/* Returns 100 times the current thread's recent_cpu value. */
+/* Returns 100 times the current thread's recent_cpu value, 
+ * rounded to the nearest integer.
+ */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int recent_cpu = (2*thread_get_load_avg())/(2*thread_get_load_avg() + 1) * thread_get_recent_cpu() + thread_get_nice();
+  return (recent_cpu * 100);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -617,7 +654,15 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  t->priority = priority;
+  
+  if(!thread_mlfqs)
+    {
+      t->priority = priority;
+    }
+  else
+    {
+      //TODO
+    }
   t->magic = THREAD_MAGIC;
   list_init (&t->lock_list);
   list_push_back (&all_list, &t->allelem);
