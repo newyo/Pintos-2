@@ -3,27 +3,71 @@
 
 #include <stdint.h>
 
-#define head << 17
-#define tail << 14
+#define _FP_T_SGN_LEN  (1)
+#define _FP_T_INT_LEN  (17)
+#define _FP_T_FRAC_LEN (14)
 
-typedef fp_t uint32_t; //fix_point
+typedef struct fp_t fp_t;
 
-static inline fp_t add(fp_t left, fp_t right)
+struct fp_t
+{
+  int8_t   signedness : _FP_T_SGN_LEN;
+  uint16_t int_part   : _FP_T_INT_LEN;
+  uint32_t frac_part  : _FP_T_FRAC_LEN;
+};
+
+static inline uint32_t
+ABS(int32_t val)
+{
+  if (val >= 0)
+    return val;
+  return -val;
+}
+
+static inline fp_t
+fp_from_int (int32_t val)
+{
+  // ensure abs(val) does not consume more than _FP_T_INT_LEN bits.
+  ASSERT (ABS (val) & ~((1<<_FP_T_INT_LEN) - 1) == 0);
+  
+  struct fp_t result;
+  result.signedness = val < 0 ? 1 : 0;
+  result.int_part = ABS (val);
+  result.frac_part = 0;
+  return result;
+}
+
+static inline int32_t
+fp_to_int (const fp_t val)
+{
+  int result = val.int_part;
+  if (val.frac_part >> (_FP_T_FRAC_LEN-1))
+    ++result;
+  if (val.signedness)
+    result = -result;
+  return result;
+}
+
+static inline fp_t
+add (fp_t left, fp_t right)
 {
   return 0; //TODO
 }
 
-static inline fp_t sub(fp_t left, fp_t right)
+static inline fp_t
+sub (fp_t left, fp_t right)
 {
   return 0; //TODO
 }
 
-static inline fp_t mult(fp_t left, fp_t right)
+static inline fp_t
+mult (fp_t left, fp_t right)
 {
   return 0; //TODO
 }
 
-static inline fp_t div(fp_t left, fp_t right)
+static inline fp_t
+div (fp_t left, fp_t right)
 {
   return 0; //TODO
 }
