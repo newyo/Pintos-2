@@ -76,6 +76,7 @@ static tid_t allocate_tid (void);
 
 static void sleep_wakeup (void);
 static int thread_get_priority_of (struct thread *t);
+static int threads_get_ready_threads (void);
 
 static inline struct thread *
 thread_list_entry (const struct list_elem *e)
@@ -554,7 +555,7 @@ thread_get_nice (void)
   return thread_current ()->nice;
 }
 
-int
+static int
 threads_get_ready_threads (void)
 {
   //TODO
