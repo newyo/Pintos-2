@@ -373,6 +373,7 @@ thread_foreach (thread_action_func *func, void *aux)
   struct list_elem *e;
 
   ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (func != NULL);
 
   for (e = list_begin (&all_list); e != list_end (&all_list);
        e = list_next (e))
@@ -391,6 +392,8 @@ thread_cmp_wakeup (const struct list_elem *a,
   
   struct thread *aa = thread_list_entry (a);
   struct thread *bb = thread_list_entry (b);
+  ASSERT(is_thread(aa));
+  ASSERT(is_thread(bb));
   
   return aa->wakeup < bb->wakeup;
 }
@@ -404,6 +407,8 @@ thread_cmp_priority (const struct list_elem *a,
   
   struct thread *aa = thread_list_entry (a);
   struct thread *bb = thread_list_entry (b);
+  ASSERT(is_thread(aa));
+  ASSERT(is_thread(bb));
   
   return thread_get_priority_of (aa) < thread_get_priority_of (bb);
 }
@@ -451,8 +456,9 @@ sleep_wakeup (void)
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
-thread_set_priority (int new_priority) 
+thread_set_priority (int new_priority)
 {
+  ASSERT (PRI_MIN <= new_priority && new_priority <= PRI_MAX);
   thread_current ()->priority = new_priority;
   thread_yield ();
 }
@@ -469,6 +475,8 @@ thread_get_priority_of_real (struct thread *t)
    
   // TODO: detect deadlock.
   // Deadlocked threads would render a stackover currently.
+  
+  ASSERT (is_thread (t));
   
   int result = t->priority;
   
@@ -499,7 +507,7 @@ thread_get_priority_of_real (struct thread *t)
 static int
 thread_get_priority_of (struct thread *t)
 {
-  ASSERT (t != NULL);
+  ASSERT (is_thread(t));
   enum intr_level old_level = intr_disable ();
 
   int result = PRI_MIN;
