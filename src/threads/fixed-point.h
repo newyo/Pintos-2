@@ -12,9 +12,9 @@ typedef struct fp_t fp_t;
 struct fp_t
 {
   int8_t   signedness : _FP_T_SGN_LEN;
-  uint16_t int_part   : _FP_T_INT_LEN;
-  uint32_t frac_part  : _FP_T_FRAC_LEN;
-};
+  uint32_t int_part   : _FP_T_INT_LEN;
+  uint16_t frac_part  : _FP_T_FRAC_LEN;
+} __attribute__ ((packed));
 
 static inline uint32_t
 ABS(int32_t val)
@@ -24,11 +24,17 @@ ABS(int32_t val)
   return -val;
 }
 
+static inline int
+fp_value_exceeds_bits (int64_t value, int bits)
+{
+  return value & ~((1<<bits) - 1);
+}
+
 static inline fp_t
 fp_from_int (int32_t val)
 {
   // ensure abs(val) does not consume more than _FP_T_INT_LEN bits.
-  ASSERT (ABS (val) & ~((1<<_FP_T_INT_LEN) - 1) == 0);
+  ASSERT (!fp_value_exceeds_bits (ABS (val), _FP_T_INT_LEN));
   
   struct fp_t result;
   result.signedness = val < 0 ? 1 : 0;
@@ -49,28 +55,119 @@ fp_to_int (const fp_t val)
 }
 
 static inline fp_t
-add (fp_t left, fp_t right)
+fp_negate (const fp_t value)
 {
-  return 0; //TODO
+  struct fp_t result;
+  result.signedness = !value.signedness;
+  result.int_part = value.int_part;
+  result.frac_part = value.frac_part;
+  return result;
 }
 
 static inline fp_t
-sub (fp_t left, fp_t right)
+fp_add (const fp_t left, const fp_t right)
 {
-  return 0; //TODO
+  struct fp_t result;
+  int32_t int_part, frac_part;
+  result.signedness = left.signedness;
+  
+  if (!!left.signedness == !!right.signedness)
+    {
+      int_part = left.int_part + right.int_part;
+      frac_part = left.frac_part + right.frac_part;
+      
+      if (fp_value_exceeds_bits(frac_part, _FP_T_FRAC_LEN))
+        ++int_part;
+      ASSERT (!fp_value_exceeds_bits (int_part, _FP_T_INT_LEN));
+        
+      result.int_part = int_part;
+      result.frac_part = frac_part;
+      return result;
+    }
+  
+  // From now on left and right differ in signedness ...
+  
+  if (left.int_part == right.int_part && left.frac_part == right.frac_part)
+    return fp_from_int (0);
+  
+  if (left.int_part < right.int_part || (left.int_part == right.int_part &&
+                                         left.frac_part < right.frac_part))
+    {
+      // if abs(left) < abs(right)
+      return fp_add (right, left);
+    }
+  else
+    {
+      // abs(left) > abs(right)
+      
+      int_part = left.int_part - right.int_part;
+      frac_part = left.frac_part - right.frac_part;
+      if (frac_part < 0)
+        {
+          frac_part = -frac_part;
+          --int_part;
+        }
+      
+      result.int_part = int_part;
+      result.frac_part = frac_part;
+      return result;
+    }
 }
 
 static inline fp_t
-mult (fp_t left, fp_t right)
+fp_sub (const fp_t left, const fp_t right)
 {
-  return 0; //TODO
+  struct fp_t neg_right = fp_negate (right);
+  return fp_add (left, neg_right);
 }
 
 static inline fp_t
-div (fp_t left, fp_t right)
+fp_mult (const fp_t left, const fp_t right)
 {
-  return 0; //TODO
+  struct fp_t result;
+  int32_t int_part, frac_part;
+  
+  int_part = left.int_part + right.int_part;
+  frac_part = left.frac_part + right.frac_part;
+  while (fp_value_exceeds_bits (frac_part, _FP_T_FRAC_LEN))
+    {
+      ++int_part;
+      frac_part -= 1 << _FP_T_FRAC_LEN;
+    }
+  
+  result.signedness = !!left.signedness != !!right.signedness;
+  result.int_part = int_part;
+  result.frac_part = frac_part;
+  return result;
 }
 
+static inline fp_t
+fp_div (const fp_t left, const fp_t right)
+{
+  ASSERT (right.int_part != 0 || right.frac_part != 0);
+  if (!!right.signedness)
+    return fp_div(fp_negate (left), fp_negate (right));
+  
+  union {
+    uint64_t value;
+    struct {
+      uint32_t int_part, frac_part;
+    } x;
+  } left_x, right_x, result_x;
+  
+  left_x.x.int_part   = left.int_part;
+  right_x.x.int_part  = right.int_part;
+  left_x.x.frac_part  = left.frac_part  << (32 - _FP_T_FRAC_LEN);
+  right_x.x.frac_part = right.frac_part << (32 - _FP_T_FRAC_LEN);
+  
+  result_x.value = left_x.value / right_x.value;
+  ASSERT (!fp_value_exceeds_bits (result_x.x.int_part, _FP_T_INT_LEN));
+  
+  fp_t result;
+  result.signedness = left.signedness;
+  result.int_part = result_x.x.int_part;
+  result.frac_part = result_x.x.frac_part >> (32 - _FP_T_FRAC_LEN);
+  return result;
+}
 
 #endif /* threads/fixed_point.h */
