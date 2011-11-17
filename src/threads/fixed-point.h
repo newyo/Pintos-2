@@ -127,8 +127,9 @@ fp_mult (const fp_t left, const fp_t right)
   struct fp_t result;
   int32_t int_part, frac_part;
   
-  int_part = left.int_part + right.int_part;
-  frac_part = left.frac_part + right.frac_part;
+  int_part = left.int_part*right.int_part;
+  frac_part = left.int_part*right.frac_part + left.frac_part*right.frac_part;
+  
   while (fp_value_exceeds_bits (frac_part, _FP_T_FRAC_LEN))
     {
       ++int_part;
@@ -143,31 +144,33 @@ fp_mult (const fp_t left, const fp_t right)
 
 static inline fp_t
 fp_div (const fp_t left, const fp_t right)
-{
-  ASSERT (right.int_part != 0 || right.frac_part != 0);
+{ 
   if (!!right.signedness)
-    return fp_div(fp_negate (left), fp_negate (right));
+    return fp_div (fp_negate (left), fp_negate (right));
+  if (!!left.signedness)
+    return fp_negate (fp_div (fp_negate (left), right));
+    
+  ASSERT (right.int_part != 0 || right.frac_part != 0);
   
-  union {
-    uint64_t value;
-    struct {
-      uint32_t int_part, frac_part;
-    } x;
-  } left_x, right_x, result_x;
+  // now we only have to handle positive numerators und denominators
   
-  left_x.x.int_part   = left.int_part;
-  right_x.x.int_part  = right.int_part;
-  left_x.x.frac_part  = left.frac_part  << (32 - _FP_T_FRAC_LEN);
-  right_x.x.frac_part = right.frac_part << (32 - _FP_T_FRAC_LEN);
+  struct fp_t result;
+  int64_t num, denom, frac;
   
-  result_x.value = left_x.value / right_x.value;
-  ASSERT (!fp_value_exceeds_bits (result_x.x.int_part, _FP_T_INT_LEN));
+  num = (int64_t)*(int32_t*)&left << 32;
+  denom = *(int32_t*)&right;
+  frac = num / denom;
   
-  fp_t result;
-  result.signedness = left.signedness;
-  result.int_part = result_x.x.int_part;
-  result.frac_part = result_x.x.frac_part >> (32 - _FP_T_FRAC_LEN);
+  *(int32_t*)&result = (int32_t)frac;
   return result;
+}
+
+static inline fp_t*
+fp_incr_inplace (fp_t *member)
+{
+  ASSERT (member->int_part < (1 << _FP_T_INT_LEN) - 1);
+  ++member->int_part;
+  return member;
 }
 
 #endif /* threads/fixed_point.h */
