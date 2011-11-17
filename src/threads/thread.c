@@ -75,13 +75,13 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static void thread_recalculate_priorities (void);
+static void thread_recalculate_priorities (struct thread *t, void *aux);
 static void thread_recalculate_load_avg (void);
 static int thread_get_ready_threads (void);
 
 static void sleep_wakeup (void);
 static int thread_get_priority_of (struct thread *t);
-static void thread_recalculate_recent_cpu (void);
+static void thread_recalculate_recent_cpu (struct thread *t, void *aux);
 
 static inline struct thread *
 thread_list_entry (const struct list_elem *e)
@@ -167,9 +167,12 @@ thread_tick (void)
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return ();
-    
-  if(thread_mlfqs && timer_ticks () % TIMER_FREQ == 0) {
+    {
+      if(thread_mlfqs)
+        thread_recalculate_priorities (thread_current(), NULL);
+      intr_yield_on_return ();
+    }
+  if(thread_mlfqs && (timer_ticks () % TIMER_FREQ == 0)) {
     /* Because of assumptions made by some of the tests, 
      *load_avg must be updated exactly when the system 
      * tick counter reaches a multiple of a second, that 
@@ -177,7 +180,8 @@ thread_tick (void)
      * not at any other time.
      */
     thread_recalculate_load_avg ();
-    thread_recalculate_priorities ();
+    thread_foreach(thread_recalculate_recent_cpu, NULL);
+    thread_foreach(thread_recalculate_priorities, NULL);
   }
 }
 
@@ -558,7 +562,7 @@ thread_set_nice (int nice)
   thread_current ()->nice = nice;
   
   enum intr_level old_level = intr_disable ();
-  thread_recalculate_priorities ();
+  thread_recalculate_priorities (thread_current (), NULL);
   intr_set_level (old_level);
 }
 
@@ -570,9 +574,15 @@ thread_get_nice (void)
 }
 
 static void
-thread_recalculate_recent_cpu (void)
+thread_recalculate_recent_cpu (struct thread *t, void *aux UNUSED)
 {
-  //TODO
+  /* (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice.*/
+  fp_t result = load_avg;
+  result = fp_mult (result, fp_from_int (2));  
+  result = fp_div  (result, fp_add (result, fp_from_int (1)));
+  result = fp_mult (result, t->recent_cpu);
+  result = fp_add  (result, fp_from_int (t->nice));
+  t->recent_cpu = result;
 }
 
 
@@ -589,13 +599,7 @@ thread_get_load_avg (void)
 static int
 thread_get_new_recent_cpu_of (struct thread *t)
 {
-  fp_t result = load_avg;
-  result = fp_mult (result, fp_from_int (2));  
-  result = fp_div  (result, fp_add (result, fp_from_int (1)));
-  result = fp_mult (result, t->recent_cpu);
-  result = fp_add  (result, fp_from_int (t->nice));
-  result = fp_mult (result, fp_from_int (100));
-  return fp_round (result);
+  return fp_round (fp_mult (t->recent_cpu, fp_from_int (100)));
 }
 
 int
@@ -605,24 +609,21 @@ thread_get_recent_cpu (void)
 }
 
 static void
-thread_recalculate_priorities (void)
+thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
 {
   ASSERT (intr_get_level () == INTR_OFF);
-  // TODO
+  t->priority = PRI_MAX - fp_round(fp_div(t->recent_cpu, fp_from_int(4))) - (t->nice * 2);
 }
 
 static void
 thread_recalculate_load_avg (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
-  
-  thread_recalculate_recent_cpu ();
-  
-  const fp_t fp_sixty = fp_from_int (60);
-  const fp_t fp_fifty_nine = fp_div (fp_from_int (59), fp_sixty);
-  load_avg = fp_add (fp_mult (fp_fifty_nine, load_avg),
-                     fp_div (fp_from_int (thread_get_ready_threads ()),
-                             fp_sixty));
+
+  /* (59/60)*load_avg + (1/60)*ready_threads */
+  fp_t prefix = fp_mult(fp_div (fp_from_int (59), fp_from_int (60)), load_avg);
+  fp_t suffix = fp_div (fp_from_int(1), fp_from_int (thread_get_ready_threads ()));
+  load_avg = fp_add (prefix, suffix);
 }
 
 static int
