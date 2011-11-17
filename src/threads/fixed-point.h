@@ -43,8 +43,9 @@ fp_from_int (int32_t val)
   return result;
 }
 
+/** rounds to nearest integer */
 static inline int32_t
-fp_to_int (const fp_t val)
+fp_round (const fp_t val)
 {
   int result = val.int_part;
   if (val.frac_part >> (_FP_T_FRAC_LEN-1))
@@ -52,6 +53,12 @@ fp_to_int (const fp_t val)
   if (val.signedness)
     result = -result;
   return result;
+}
+
+static inline int32_t
+fp_truncate (const fp_t val)
+{
+  return val.int_part;
 }
 
 static inline fp_t
@@ -171,6 +178,18 @@ fp_incr_inplace (fp_t *member)
   ASSERT (member->int_part < (1 << _FP_T_INT_LEN) - 1);
   ++member->int_part;
   return member;
+}
+
+static inline fp_t
+fp_pow_int (const fp_t base, int expo)
+{
+  if (expo < 0)
+    return fp_div (fp_from_int (1), fp_pow_int (base, -expo));
+  
+  fp_t result;
+  while (--expo >= 0)
+    result = fp_mult (result, base);
+  return result;
 }
 
 #endif /* threads/fixed_point.h */
