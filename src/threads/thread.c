@@ -169,7 +169,7 @@ thread_tick (void)
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
     
-  if(mlfqs && timer_ticks () % TIMER_FREQ == 0) {
+  if(thread_mlfqs && timer_ticks () % TIMER_FREQ == 0) {
     /* Because of assumptions made by some of the tests, 
      *load_avg must be updated exactly when the system 
      * tick counter reaches a multiple of a second, that 
