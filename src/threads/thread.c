@@ -165,24 +165,28 @@ thread_tick (void)
         kernel_ticks++;
     }
 
+  if(thread_mlfqs && (timer_ticks () % TIMER_FREQ == 0))
+    {
+      /* Because of assumptions made by some of the tests, 
+       *load_avg must be updated exactly when the system 
+       * tick counter reaches a multiple of a second, that 
+       * is, when timer_ticks () % TIMER_FREQ == 0, and 
+       * not at any other time.
+       */
+      thread_recalculate_load_avg ();
+      thread_foreach(thread_recalculate_recent_cpu, NULL);
+      thread_foreach(thread_recalculate_priorities, NULL);
+    }
+
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     {
-      if(thread_mlfqs)
-        thread_recalculate_priorities (thread_current(), NULL);
+      if(thread_mlfqs && t != idle_thread)
+        {
+          thread_recalculate_priorities (thread_current(), NULL);
+        }
       intr_yield_on_return ();
     }
-  if(thread_mlfqs && (timer_ticks () % TIMER_FREQ == 0)) {
-    /* Because of assumptions made by some of the tests, 
-     *load_avg must be updated exactly when the system 
-     * tick counter reaches a multiple of a second, that 
-     * is, when timer_ticks () % TIMER_FREQ == 0, and 
-     * not at any other time.
-     */
-    thread_recalculate_load_avg ();
-    thread_foreach(thread_recalculate_recent_cpu, NULL);
-    thread_foreach(thread_recalculate_priorities, NULL);
-  }
 }
 
 /* Prints thread statistics. */
@@ -619,6 +623,12 @@ static void
 thread_recalculate_load_avg (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
+
+  if(0 == thread_get_ready_threads ())
+    {
+      load_avg = fp_from_int(0);
+      return;
+    }
 
   /* (59/60)*load_avg + (1/60)*ready_threads */
   fp_t prefix = fp_mult(fp_div (fp_from_int (59), fp_from_int (60)), load_avg);
