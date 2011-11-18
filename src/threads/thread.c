@@ -165,7 +165,7 @@ thread_tick (void)
         kernel_ticks++;
     }
 
-  if(thread_mlfqs && (timer_ticks () % TIMER_FREQ == 0))
+  if(thread_mlfqs && ((timer_ticks () % TIMER_FREQ) == 0))
     {
       /* Because of assumptions made by some of the tests, 
        *load_avg must be updated exactly when the system 
@@ -411,9 +411,7 @@ thread_cmp_wakeup (const struct list_elem *a,
   
   struct thread *aa = thread_list_entry (a);
   struct thread *bb = thread_list_entry (b);
-  ASSERT(is_thread(aa));
-  ASSERT(is_thread(bb));
-  
+
   return aa->wakeup < bb->wakeup;
 }
 
@@ -426,9 +424,7 @@ thread_cmp_priority (const struct list_elem *a,
   
   struct thread *aa = thread_list_entry (a);
   struct thread *bb = thread_list_entry (b);
-  ASSERT(is_thread(aa));
-  ASSERT(is_thread(bb));
-  
+
   return thread_get_priority_of (aa) < thread_get_priority_of (bb);
 }
 
@@ -496,6 +492,7 @@ thread_get_priority_of_real (struct thread *t)
   // Deadlocked threads would render a stackover currently.
   
   ASSERT (is_thread (t));
+  ASSERT (intr_get_level () == INTR_OFF);
   
   int result = t->priority;
   
@@ -531,13 +528,7 @@ thread_get_priority_of (struct thread *t)
 
   int result;
   if(thread_mlfqs)
-    {
-      result = PRI_MAX - (thread_get_recent_cpu ()/4) - (thread_get_nice ()*2);
-      if (result > PRI_MAX)
-        result = PRI_MAX;
-      else if (result < PRI_MIN)
-        result = PRI_MIN;
-    }
+    result = t->priority;
   else
     result = thread_get_priority_of_real (t);
 
@@ -552,7 +543,6 @@ thread_get_priority (void)
   return thread_get_priority_of (thread_current ());
 }
 
-
 /* Sets the current thread's nice value to new_nice and 
  * recalculates the thread's priority based on the new 
  * value (see section B.2 Calculating Priority). If the 
@@ -564,7 +554,7 @@ thread_set_nice (int nice)
 {
   ASSERT(-20 <= nice && nice <= 20);
   thread_current ()->nice = nice;
-  
+
   enum intr_level old_level = intr_disable ();
   thread_recalculate_priorities (thread_current (), NULL);
   intr_set_level (old_level);
@@ -580,43 +570,63 @@ thread_get_nice (void)
 static void
 thread_recalculate_recent_cpu (struct thread *t, void *aux UNUSED)
 {
+  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (is_thread (t));
+
   /* (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice.*/
   fp_t result = load_avg;
-  result = fp_mult (result, fp_from_int (2));  
-  result = fp_div  (result, fp_add (result, fp_from_int (1)));
+  result = fp_mult (result, fp_from_int (2));
+  result = fp_div  (result, fp_add (fp_mult (load_avg, fp_from_int (2)), fp_from_int (1)));
   result = fp_mult (result, t->recent_cpu);
   result = fp_add  (result, fp_from_int (t->nice));
   t->recent_cpu = result;
 }
 
-
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  return fp_round (fp_mult (load_avg, fp_from_int (100)));
+  int result = fp_round (fp_mult (load_avg, fp_from_int (100)));
+  ASSERT (0 <= result && result <=100);
+
+  return result;
 }
 
 /* Returns 100 times the current thread's recent_cpu value, 
  * rounded to the nearest integer.
  */
 static int
-thread_get_new_recent_cpu_of (struct thread *t)
+thread_get_recent_cpu_of (struct thread *t)
 {
+  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (is_thread (t));
   return fp_round (fp_mult (t->recent_cpu, fp_from_int (100)));
 }
 
+/* Returns 100 times the current thread's recent_cpu value, 
+ * rounded to the nearest integer.
+ */
 int
 thread_get_recent_cpu (void)
 {
-  return thread_get_new_recent_cpu_of (thread_current ());
+  ASSERT (intr_get_level () == INTR_OFF);
+  return thread_get_recent_cpu_of (thread_current ());
 }
 
 static void
 thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
 {
   ASSERT (intr_get_level () == INTR_OFF);
-  t->priority = PRI_MAX - fp_round(fp_div(t->recent_cpu, fp_from_int(4))) - (t->nice * 2);
+  ASSERT (is_thread (t));
+
+  /* PRI_MAX - (recent_cpu / 4) - (nice * 2) */
+  int result = PRI_MAX - fp_round(fp_sub(fp_div(t->recent_cpu, fp_from_int(4)), fp_from_int(t->nice * 2)));
+  if (result > PRI_MAX)
+    result = PRI_MAX;
+  else if (result < PRI_MIN)
+    result = PRI_MIN;
+
+  t->priority = result;
 }
 
 static void
@@ -624,16 +634,16 @@ thread_recalculate_load_avg (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
-  if(0 == thread_get_ready_threads ())
-    {
-      load_avg = fp_from_int(0);
-      return;
-    }
+  int ready_threads = thread_get_ready_threads ();
+//  ASSERT (ready_threads < 2); /* DEBUG FIXME */
 
   /* (59/60)*load_avg + (1/60)*ready_threads */
   fp_t prefix = fp_mult(fp_div (fp_from_int (59), fp_from_int (60)), load_avg);
-  fp_t suffix = fp_div (fp_from_int(1), fp_from_int (thread_get_ready_threads ()));
+  fp_t suffix = fp_mult(fp_div (fp_from_int(1), fp_from_int (60)), fp_from_int (ready_threads));
+
   load_avg = fp_add (prefix, suffix);
+//  ASSERT (0 == thread_get_load_avg()); /* DEBUG FIXME */
+  ASSERT (0 <= fp_round(load_avg) && fp_round(load_avg) <= 1);
 }
 
 static int
