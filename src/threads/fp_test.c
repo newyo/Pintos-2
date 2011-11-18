@@ -5,8 +5,8 @@
 
 #include "fixed-point.h"
 
-#define S "%c%d.(%x)"
-#define P(fp) (fp).signedness ? '-' : '+', (fp).int_part, (fp).frac_part
+#define S "%c%d.(%.4x)"
+#define P(fp) (fp).signedness ? '-' : '+', (fp).int_part, 4*(fp).frac_part
 
 int main ()
 {
@@ -25,9 +25,24 @@ int main ()
       fp_t n = fp_negate (fp);
       fprintf (stdout, S " = -(" S ")\n", P(fp), P(n));
     }
-  fprintf(stdout, "\n");
+  fprintf(stdout, "\n\n-------------------------------------------\n\n");
   
-  fprintf(stdout, S "\n", P(fp_div(fp_from_int(1), fp_from_int(2))));
+  for (i = -4; i < 4; ++i)
+    for (j = -4; j < 4; ++j)
+      {
+        if(j == 0)
+          continue;
+        #define ABS(x) ({ __typeof__(x) _y = (x); _y >= 0 ? _y : -_y; })
+        #define SGN(x) ({ __typeof__(x) _y = (x); _y > 0 ? +1 : _y < 0 ? -1 : 0; })
+        fp_t num = fp_from_int (i);
+        fp_t denom = fp_from_int (j);
+        fp_t frac = fp_div (num, denom);
+        fprintf(stdout, S "/" S " = " S "\n", P(num), P(denom), P(frac));
+        fprintf(stdout, "trunc(" S "/" S ") = %d\n", P(num), P(denom), fp_truncate(frac));
+        fprintf(stdout, "round(" S "/" S ") = %d\n", P(num), P(denom), fp_round(frac));
+        fprintf(stdout, "\n");
+      }
+  fprintf(stdout, "\n-------------------------------------------\n\n");
   
   for (i = -5; i <= 5; i += 2)
     {

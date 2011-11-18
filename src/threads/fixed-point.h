@@ -17,11 +17,19 @@ struct fp_t
 } __attribute__ ((packed));
 
 static inline uint32_t
-ABS(int32_t val)
+int_abs (int32_t val)
 {
   if (val >= 0)
     return val;
   return -val;
+}
+
+static inline fp_t
+fp_abs (const fp_t val)
+{
+  fp_t result = val;
+  result.signedness = 0;
+  return result;
 }
 
 static inline int
@@ -34,11 +42,11 @@ static inline fp_t
 fp_from_int (int32_t val)
 {
   // ensure abs(val) does not consume more than _FP_T_INT_LEN bits.
-  ASSERT (!fp_value_exceeds_bits (ABS (val), _FP_T_INT_LEN));
+  ASSERT (!fp_value_exceeds_bits (int_abs (val), _FP_T_INT_LEN));
   
   struct fp_t result;
   result.signedness = val < 0 ? 1 : 0;
-  result.int_part = ABS (val);
+  result.int_part = int_abs (val);
   result.frac_part = 0;
   return result;
 }
@@ -58,7 +66,10 @@ fp_round (const fp_t val)
 static inline int32_t
 fp_truncate (const fp_t val)
 {
-  return val.int_part;
+  if (!val.signedness)
+    return +val.int_part;
+  else
+    return -val.int_part;
 }
 
 static inline fp_t
@@ -175,8 +186,18 @@ fp_div (const fp_t left, const fp_t right)
 static inline fp_t*
 fp_incr_inplace (fp_t *member)
 {
-  ASSERT (member->int_part < (1 << _FP_T_INT_LEN) - 1);
-  ++member->int_part;
+  if (!member->signedness)
+    {
+      ASSERT (member->int_part < (1 << _FP_T_INT_LEN) - 1);
+      ++member->int_part;
+    }
+  else if (member->int_part > 0)
+    --member->int_part;
+  else
+    {
+      fp_t tmp = fp_add (fp_from_int (1), *member);
+      *member = tmp;
+    }
   return member;
 }
 
