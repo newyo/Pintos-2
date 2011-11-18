@@ -32,11 +32,11 @@ int main ()
       {
         if(j == 0)
           continue;
-        #define ABS(x) ({ __typeof__(x) _y = (x); _y >= 0 ? _y : -_y; })
-        #define SGN(x) ({ __typeof__(x) _y = (x); _y > 0 ? +1 : _y < 0 ? -1 : 0; })
+          
         fp_t num = fp_from_int (i);
-        fp_t denom = fp_from_int (j);
+        fp_t denom = fp_from_int(j);
         fp_t frac = fp_div (num, denom);
+        
         fprintf(stdout, S "/" S " = " S "\n", P(num), P(denom), P(frac));
         fprintf(stdout, "trunc(" S "/" S ") = %d\n", P(num), P(denom), fp_truncate(frac));
         fprintf(stdout, "round(" S "/" S ") = %d\n", P(num), P(denom), fp_round(frac));

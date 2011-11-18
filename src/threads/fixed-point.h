@@ -11,9 +11,9 @@ typedef struct fp_t fp_t;
 
 struct fp_t
 {
-  int8_t   signedness : _FP_T_SGN_LEN;
-  uint32_t int_part   : _FP_T_INT_LEN;
   uint16_t frac_part  : _FP_T_FRAC_LEN;
+  uint32_t int_part   : _FP_T_INT_LEN;
+  int8_t   signedness : _FP_T_SGN_LEN;
 } __attribute__ ((packed));
 
 static inline uint32_t
@@ -161,25 +161,40 @@ fp_mult (const fp_t left, const fp_t right)
 }
 
 static inline fp_t
+fp_reciproc (const fp_t val)
+{
+  uint32_t bits = (val.int_part << _FP_T_FRAC_LEN) | val.frac_part;
+  ASSERT (bits != 0);
+  uint32_t frac = (1ull << 31) / bits;
+  frac >>= 3; // number is magic, found by thorough testing
+  
+  ASSERT (!fp_value_exceeds_bits (frac >> _FP_T_FRAC_LEN, _FP_T_INT_LEN));
+  
+  fp_t result;
+  result.signedness = val.signedness;
+  result.int_part = frac >> _FP_T_FRAC_LEN;
+  result.frac_part = frac & ((1<<_FP_T_FRAC_LEN)-1);
+  return result;
+}
+
+static inline fp_t
 fp_div (const fp_t left, const fp_t right)
-{ 
-  if (!!right.signedness)
-    return fp_div (fp_negate (left), fp_negate (right));
-  if (!!left.signedness)
-    return fp_negate (fp_div (fp_negate (left), right));
-    
-  ASSERT (right.int_part != 0 || right.frac_part != 0);
+{
+  uint64_t r_bits = (right.int_part << _FP_T_FRAC_LEN) | right.frac_part;
+  ASSERT (r_bits != 0);
   
-  // now we only have to handle positive numerators und denominators
+  uint64_t l_bits = (left.int_part  << _FP_T_FRAC_LEN) |  left.frac_part;
+  l_bits <<= 63 - _FP_T_FRAC_LEN - _FP_T_INT_LEN;
   
-  struct fp_t result;
-  int64_t num, denom, frac;
+  uint64_t frac = l_bits / r_bits;
+  frac >>= 18; // number is magic, found by thorough testing
   
-  num = (int64_t)*(int32_t*)&left << 32;
-  denom = *(int32_t*)&right;
-  frac = num / denom;
+  ASSERT (!fp_value_exceeds_bits (frac >> _FP_T_FRAC_LEN, _FP_T_INT_LEN));
   
-  *(int32_t*)&result = (int32_t)frac;
+  fp_t result;
+  result.signedness = !!left.signedness != !!right.signedness;
+  result.int_part = frac >> _FP_T_FRAC_LEN;
+  result.frac_part = frac & ((1<<_FP_T_FRAC_LEN)-1);
   return result;
 }
 
