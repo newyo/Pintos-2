@@ -529,7 +529,9 @@ list_foldl (struct list *list,
             void *initial_accu)
 {
   struct list_elem *e;
-  for (e = list_begin (list); e != list_end (list); e = list_next (e))
+  for (e = list_begin (list);
+       e != list_end (list);
+       e = list_next (e))
     {
       initial_accu = fun (e, initial_accu);
     }

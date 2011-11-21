@@ -91,6 +91,21 @@ thread_list_entry (const struct list_elem *e)
   return result;
 }
 
+static void
+priority_lists_arent_messed_up_sub (struct thread *t, void *aux)
+{
+  (void) t;
+  (void) aux;
+}
+
+static bool
+priority_lists_arent_messed_up ()
+{
+  ASSERT (intr_get_level () == INTR_OFF);
+  thread_foreach (priority_lists_arent_messed_up_sub, NULL);
+  return true;
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -306,6 +321,8 @@ thread_unblock (struct thread *t)
   int priority = thread_get_priority_of (t);
   list_push_back (&ready_list[priority], &t->elem);
   t->status = THREAD_READY;
+  
+  ASSERT (priority_lists_arent_messed_up ());
   intr_set_level (old_level);
 }
 
@@ -398,6 +415,7 @@ thread_foreach (thread_action_func *func, void *aux)
        e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, allelem);
+      ASSERT (is_thread (t));
       func (t, aux);
     }
 }
@@ -627,7 +645,16 @@ thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
   else if (result < PRI_MIN)
     result = PRI_MIN;
 
+/*
   t->priority = result;
+  if (t == running_thread ())
+    return;
+  
+  ASSERT (priority_lists_arent_messed_up ());
+  list_remove (&t->elem);
+  list_push_back (&ready_list[result], &t->elem);
+  ASSERT (priority_lists_arent_messed_up ());
+  * */
 }
 
 static void
@@ -656,6 +683,7 @@ thread_get_ready_threads (void)
     result += list_size (&ready_list[prio]);
   if (thread_current () != idle_thread)
     ++result;
+  ASSERT (priority_lists_arent_messed_up ());
   return result;
 }
 
@@ -780,6 +808,8 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+  ASSERT (intr_get_level () == INTR_OFF);
+  
   int i;
   for (i = PRI_MAX; PRI_MIN <= i; --i)
     {
