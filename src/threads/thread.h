@@ -154,4 +154,6 @@ bool thread_cmp_priority (const struct list_elem *a,
                           const struct list_elem *b,
                           void *aux);
 
+extern const uint32_t thread_stack_ofs;
+
 #endif /* threads/thread.h */

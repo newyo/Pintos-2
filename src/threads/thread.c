@@ -99,7 +99,7 @@ priority_lists_arent_messed_up_sub (struct thread *t, void *aux)
 }
 
 static bool
-priority_lists_arent_messed_up ()
+priority_lists_arent_messed_up (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
   thread_foreach (priority_lists_arent_messed_up_sub, NULL);
@@ -499,7 +499,9 @@ thread_set_priority (int new_priority)
 static int
 thread_get_priority_of_real (struct thread *t)
 {
-  /* result = t->priority
+  /* Idea:
+   * 
+   * result = t->priority
    * for each lock_iter in t->lock_list:
    *   for each thread_iter in lock->semaphore.waiters:
    *     result = max(result, thread_get_priority_of_real(thread_iter))
@@ -645,12 +647,13 @@ thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
   else if (result < PRI_MIN)
     result = PRI_MIN;
 
-/*
   t->priority = result;
   if (t == running_thread ())
     return;
   
+  
   ASSERT (priority_lists_arent_messed_up ());
+  /*
   list_remove (&t->elem);
   list_push_back (&ready_list[result], &t->elem);
   ASSERT (priority_lists_arent_messed_up ());
@@ -907,4 +910,4 @@ allocate_tid (void)
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
-uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+const uint32_t thread_stack_ofs = offsetof (struct thread, stack);

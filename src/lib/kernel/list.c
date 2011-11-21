@@ -38,22 +38,20 @@ static bool is_sorted (struct list_elem *a, struct list_elem *b,
 static inline bool
 is_head (struct list_elem *elem)
 {
-  return elem != NULL && elem->prev == NULL && elem->next != NULL;
-}
-
-/* Returns true if ELEM is an interior element,
-   false otherwise. */
-inline bool
-list_is_interior (const struct list_elem *elem)
-{
-  return elem != NULL && elem->prev != NULL && elem->next != NULL;
+  if (elem == NULL)
+    return false;
+  ASSERT (is_list_elem (elem));
+  return elem->prev == NULL && elem->next != NULL;
 }
 
 /* Returns true if ELEM is a tail, false otherwise. */
 static inline bool
 is_tail (struct list_elem *elem)
 {
-  return elem != NULL && elem->prev != NULL && elem->next == NULL;
+  if (elem == NULL)
+    return false;
+  ASSERT (is_list_elem (elem));
+  return elem->prev != NULL && elem->next == NULL;
 }
 
 /* Initializes LIST as an empty list. */
@@ -63,8 +61,10 @@ list_init (struct list *list)
   ASSERT (list != NULL);
   list->head.prev = NULL;
   list->head.next = &list->tail;
+  list->head.magic = LIST_ELEM_MAGIC__;
   list->tail.prev = &list->head;
   list->tail.next = NULL;
+  list->tail.magic = LIST_ELEM_MAGIC__;
 }
 
 /* Returns the beginning of LIST.  */
@@ -72,6 +72,7 @@ struct list_elem *
 list_begin (struct list *list)
 {
   ASSERT (list != NULL);
+  ASSERT (is_list_elem (list->head.next));
   return list->head.next;
 }
 
@@ -82,6 +83,7 @@ struct list_elem *
 list_next (struct list_elem *elem)
 {
   ASSERT (is_head (elem) || list_is_interior (elem));
+  ASSERT (is_list_elem (elem->next));
   return elem->next;
 }
 
@@ -94,6 +96,7 @@ struct list_elem *
 list_end (struct list *list)
 {
   ASSERT (list != NULL);
+  ASSERT (is_list_elem (&list->tail));
   return &list->tail;
 }
 
@@ -103,6 +106,7 @@ struct list_elem *
 list_rbegin (struct list *list) 
 {
   ASSERT (list != NULL);
+  ASSERT (is_list_elem (list->tail.prev));
   return list->tail.prev;
 }
 
@@ -113,6 +117,7 @@ struct list_elem *
 list_prev (struct list_elem *elem)
 {
   ASSERT (list_is_interior (elem) || is_tail (elem));
+  ASSERT (is_list_elem (elem->prev));
   return elem->prev;
 }
 
@@ -133,6 +138,7 @@ struct list_elem *
 list_rend (struct list *list) 
 {
   ASSERT (list != NULL);
+  ASSERT (is_list_elem (&list->head));
   return &list->head;
 }
 
@@ -151,6 +157,7 @@ struct list_elem *
 list_head (struct list *list) 
 {
   ASSERT (list != NULL);
+  ASSERT (is_list_elem (&list->head));
   return &list->head;
 }
 
@@ -159,6 +166,7 @@ struct list_elem *
 list_tail (struct list *list) 
 {
   ASSERT (list != NULL);
+  ASSERT (is_list_elem (&list->tail));
   return &list->tail;
 }
 
@@ -168,9 +176,10 @@ list_tail (struct list *list)
 void
 list_insert (struct list_elem *before, struct list_elem *elem)
 {
+  ASSERT (before != NULL && elem != NULL);
   ASSERT (list_is_interior (before) || is_tail (before));
-  ASSERT (elem != NULL);
 
+  elem->magic = LIST_ELEM_MAGIC__;
   elem->prev = before->prev;
   elem->next = before;
   before->prev->next = elem;
@@ -316,6 +325,8 @@ list_empty (struct list *list)
 static void
 swap (struct list_elem **a, struct list_elem **b) 
 {
+  ASSERT (is_list_elem (*a));
+  ASSERT (is_list_elem (*b));
   struct list_elem *t = *a;
   *a = *b;
   *b = t;
@@ -358,8 +369,8 @@ static struct list_elem *
 find_end_of_run (struct list_elem *a, struct list_elem *b,
                  list_less_func *less, void *aux)
 {
-  ASSERT (a != NULL);
-  ASSERT (b != NULL);
+  ASSERT (is_list_elem (a));
+  ASSERT (is_list_elem (b));
   ASSERT (less != NULL);
   ASSERT (a != b);
   
@@ -381,9 +392,9 @@ inplace_merge (struct list_elem *a0, struct list_elem *a1b0,
                struct list_elem *b1,
                list_less_func *less, void *aux)
 {
-  ASSERT (a0 != NULL);
-  ASSERT (a1b0 != NULL);
-  ASSERT (b1 != NULL);
+  ASSERT (is_list_elem (a0));
+  ASSERT (is_list_elem (a1b0));
+  ASSERT (is_list_elem (b1));
   ASSERT (less != NULL);
   ASSERT (is_sorted (a0, a1b0, less, aux));
   ASSERT (is_sorted (a1b0, b1, less, aux));
@@ -451,7 +462,8 @@ list_insert_ordered (struct list *list, struct list_elem *elem,
   ASSERT (list != NULL);
   ASSERT (elem != NULL);
   ASSERT (less != NULL);
-
+  
+  elem->magic = LIST_ELEM_MAGIC__;
   for (e = list_begin (list); e != list_end (list); e = list_next (e))
     if (less (elem, e, aux))
       break;

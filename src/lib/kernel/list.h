@@ -86,11 +86,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define LIST_ELEM_MAGIC__ (0xC0FFEE)
+
 /* List element. */
 struct list_elem 
   {
     struct list_elem *prev;     /* Previous list element. */
     struct list_elem *next;     /* Next list element. */
+    
+    unsigned int magic;
+    char end[0];
   };
 
 /* List. */
@@ -100,14 +105,26 @@ struct list
     struct list_elem tail;      /* List tail. */
   };
 
+static inline bool
+is_list_elem(const struct list_elem *elem) {
+  if(!elem) {
+    return false;
+  }
+  return elem->magic == LIST_ELEM_MAGIC__;
+}
+
 /* Converts pointer to list element LIST_ELEM into a pointer to
    the structure that LIST_ELEM is embedded inside.  Supply the
    name of the outer structure STRUCT and the member name MEMBER
    of the list element.  See the big comment at the top of the
    file for an example. */
-#define list_entry(LIST_ELEM, STRUCT, MEMBER)           \
-        ((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
-                     - offsetof (STRUCT, MEMBER.next)))
+#define list_entry(LIST_ELEM, STRUCT, MEMBER) \
+  ({ \
+    __typeof (LIST_ELEM) _list_elem = (LIST_ELEM); \
+    ASSERT (_list_elem != NULL); \
+    ASSERT (is_list_elem (_list_elem)); \
+    (STRUCT*) ((uint8_t*)&_list_elem->end - offsetof (__typeof (STRUCT), MEMBER.end)); \
+  })
 
 /* List initialization.
 
@@ -119,14 +136,29 @@ struct list
    or with an initializer using LIST_INITIALIZER:
 
        struct list my_list = LIST_INITIALIZER (my_list); */
-#define LIST_INITIALIZER(NAME) { { NULL, &(NAME).tail }, \
-                                 { &(NAME).head, NULL } }
+#define LIST_INITIALIZER(NAME) { { NULL, &(NAME).tail, LIST_ELEM_MAGIC__ }, \
+                                 { &(NAME).head, NULL, LIST_ELEM_MAGIC__ } }
 
 void list_init (struct list *);
 
-#define list_elem_init(elem) ((elem)->prev = (elem)->next = NULL)
+#define list_elem_init(E) \
+  ({ \
+    struct list_elem *_elem = (E); \
+    _elem->prev = NULL; \
+    _elem->next = NULL; \
+    _elem->magic = LIST_ELEM_MAGIC__; \
+    _elem; \
+  })
 
-bool list_is_interior (const struct list_elem *elem);
+/* Returns true if ELEM is an interior element,
+   false otherwise. */
+#define list_is_interior(E) \
+  ({ \
+    const struct list_elem *_elem = (E); \
+    ASSERT (_elem == NULL || is_list_elem (_elem)); \
+    int _r = _elem != NULL && _elem->prev != NULL && _elem->next != NULL; \
+    _r; \
+  })
 
 /* List traversal. */
 struct list_elem *list_begin (struct list *);
