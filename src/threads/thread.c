@@ -174,8 +174,8 @@ thread_tick (void)
        * not at any other time.
        */
       thread_recalculate_load_avg ();
-      thread_foreach(thread_recalculate_recent_cpu, NULL);
-      thread_foreach(thread_recalculate_priorities, NULL);
+      thread_foreach (thread_recalculate_recent_cpu, NULL);
+      thread_foreach (thread_recalculate_priorities, NULL);
     }
 
   /* Enforce preemption. */
@@ -183,7 +183,7 @@ thread_tick (void)
     {
       if(thread_mlfqs && t != idle_thread)
         {
-          thread_recalculate_priorities (thread_current(), NULL);
+          thread_recalculate_priorities (thread_current (), NULL);
         }
       intr_yield_on_return ();
     }
@@ -620,7 +620,7 @@ thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
   ASSERT (is_thread (t));
 
   /* PRI_MAX - (recent_cpu / 4) - (nice * 2) */
-  int result = PRI_MAX - fp_round(fp_sub(fp_div(t->recent_cpu, fp_from_int(4)), fp_from_int(t->nice * 2)));
+  int result = PRI_MAX - fp_round (fp_sub (fp_div (t->recent_cpu, fp_from_int(4)), fp_from_int(t->nice * 2)));
   if (result > PRI_MAX)
     result = PRI_MAX;
   else if (result < PRI_MIN)
@@ -635,15 +635,13 @@ thread_recalculate_load_avg (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   int ready_threads = thread_get_ready_threads ();
-//  ASSERT (ready_threads < 2); /* DEBUG FIXME */
-
+  
   /* (59/60)*load_avg + (1/60)*ready_threads */
-  fp_t prefix = fp_mult(fp_div (fp_from_int (59), fp_from_int (60)), load_avg);
-  fp_t suffix = fp_mult(fp_div (fp_from_int(1), fp_from_int (60)), fp_from_int (ready_threads));
+  fp_t summand1 = fp_mult (fp_div (fp_from_int (59), fp_from_int (60)), load_avg);
+  fp_t summand2 = fp_mult (fp_div (fp_from_int (1),  fp_from_int (60)), fp_from_int (ready_threads));
 
-  load_avg = fp_add (prefix, suffix);
-//  ASSERT (0 == thread_get_load_avg()); /* DEBUG FIXME */
-  ASSERT (0 <= fp_round(load_avg) && fp_round(load_avg) <= 1);
+  load_avg = fp_add (summand1, summand2);
+  ASSERT (0 <= fp_round (load_avg));
 }
 
 static int
