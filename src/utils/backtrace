@@ -97,7 +97,8 @@ for my $loc (@locs) {
 	my ($function) = $loc->{FUNCTION};
 	my ($line) = $loc->{LINE};
 	$line =~ s/^(\.\.\/)*//;
-	$line = "..." . substr ($line, -25) if length ($line) > 28;
+	$line =~ s/^.*?(?=(\.\.\/){2})//;
+	$line = "..." . substr ($line, -45) if length ($line) > 50;
 	print "$function ($line)";
     } else {
 	print "(unknown)";
