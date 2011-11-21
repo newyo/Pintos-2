@@ -91,18 +91,20 @@ thread_list_entry (const struct list_elem *e)
   return result;
 }
 
-static void
-priority_lists_arent_messed_up_sub (struct thread *t, void *aux)
+static void*
+ready_lists_arent_messed_up_sub (struct list_elem *e, void *aux)
 {
-  (void) t;
-  (void) aux;
+  ASSERT (thread_list_entry (e) != NULL);
+  return aux;
 }
 
 static bool
-priority_lists_arent_messed_up (void)
+ready_lists_arent_messed_up (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
-  thread_foreach (priority_lists_arent_messed_up_sub, NULL);
+  int prio;
+  for (prio = PRI_MIN; prio <= PRI_MAX; ++prio)
+    list_foldl (&ready_list[prio], ready_lists_arent_messed_up_sub, NULL);
   return true;
 }
 
@@ -322,7 +324,7 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list[priority], &t->elem);
   t->status = THREAD_READY;
   
-  ASSERT (priority_lists_arent_messed_up ());
+  ASSERT (ready_lists_arent_messed_up ());
   intr_set_level (old_level);
 }
 
@@ -686,7 +688,7 @@ thread_get_ready_threads (void)
     result += list_size (&ready_list[prio]);
   if (thread_current () != idle_thread)
     ++result;
-  ASSERT (priority_lists_arent_messed_up ());
+  ASSERT (ready_lists_arent_messed_up ());
   return result;
 }
 
@@ -907,7 +909,7 @@ allocate_tid (void)
 
   return tid;
 }
-
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 const uint32_t thread_stack_ofs = offsetof (struct thread, stack);
