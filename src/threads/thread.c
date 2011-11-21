@@ -747,13 +747,15 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->lock_list);
   list_push_back (&all_list, &t->allelem);
   
-  if(!thread_mlfqs)
+  if (!thread_mlfqs)
     {
       t->priority = priority;
     }
   else if (t != idle_thread)
     {
-      t->nice = running_thread ()->nice;
+      struct thread *current_thread = running_thread ();
+      t->priority = current_thread->priority;
+      t->nice = current_thread->nice;
     }
 }
 
