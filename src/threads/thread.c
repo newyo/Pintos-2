@@ -587,8 +587,7 @@ int
 thread_get_load_avg (void) 
 {
   int result = fp_round (fp_mult (load_avg, fp_from_int (100)));
-  ASSERT (0 <= result && result <=100);
-
+  ASSERT (0 <= result);
   return result;
 }
 
@@ -609,8 +608,10 @@ thread_get_recent_cpu_of (struct thread *t)
 int
 thread_get_recent_cpu (void)
 {
-  ASSERT (intr_get_level () == INTR_OFF);
-  return thread_get_recent_cpu_of (thread_current ());
+  enum intr_level old_level = intr_disable ();
+  int result = thread_get_recent_cpu_of (thread_current ());
+  intr_set_level (old_level);
+  return result;
 }
 
 static void
