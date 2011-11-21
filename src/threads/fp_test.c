@@ -56,5 +56,20 @@ int main ()
         }
       fprintf(stdout, "\n");
     }
+  fprintf(stdout, "\n-------------------------------------------\n\n");
+  
+  for (i = -5; i <= 5; i += 2)
+    {
+      for (j = -5; j <= 5; j += 3)
+        {
+          fp_t left = fp_from_int (i);
+          fp_t right = fp_div (fp_from_int (j), fp_from_int (60));
+          fp_t result = fp_mult (left, right);
+          fprintf (stdout, S " * " S " = " S "\n",
+                   P(left), P(right), P(result));
+        }
+      fprintf(stdout, "\n");
+    };
+    
   return 0;
 }

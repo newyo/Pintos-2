@@ -142,21 +142,16 @@ fp_sub (const fp_t left, const fp_t right)
 static inline fp_t
 fp_mult (const fp_t left, const fp_t right)
 {
+  uint64_t l_bits = (left.int_part  << _FP_T_FRAC_LEN) |  left.frac_part;
+  uint64_t r_bits = (right.int_part << _FP_T_FRAC_LEN) | right.frac_part;
+  uint64_t m_bits = l_bits * r_bits;
+  
+  ASSERT (!fp_value_exceeds_bits (m_bits >> (2*_FP_T_FRAC_LEN), _FP_T_INT_LEN));
+  
   struct fp_t result;
-  int32_t int_part, frac_part;
-  
-  int_part = left.int_part*right.int_part;
-  frac_part = left.int_part*right.frac_part + left.frac_part*right.frac_part;
-  
-  while (fp_value_exceeds_bits (frac_part, _FP_T_FRAC_LEN))
-    {
-      ++int_part;
-      frac_part -= 1 << _FP_T_FRAC_LEN;
-    }
-  
   result.signedness = !!left.signedness != !!right.signedness;
-  result.int_part = int_part;
-  result.frac_part = frac_part;
+  result.int_part  = m_bits >> (2*_FP_T_FRAC_LEN);
+  result.frac_part = m_bits >>    _FP_T_FRAC_LEN;
   return result;
 }
 
