@@ -653,13 +653,14 @@ thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
   if (t == running_thread ())
     return;
   
+  ASSERT (ready_lists_arent_messed_up ());
+  if (t->status == THREAD_RUNNING)
+    {
+      list_remove (&t->elem);
+      list_push_back (&ready_list[result], &t->elem);
+    }
+  ASSERT (ready_lists_arent_messed_up ());
   
-  ASSERT (priority_lists_arent_messed_up ());
-  /*
-  list_remove (&t->elem);
-  list_push_back (&ready_list[result], &t->elem);
-  ASSERT (priority_lists_arent_messed_up ());
-  * */
 }
 
 static void

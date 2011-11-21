@@ -260,6 +260,7 @@ list_remove (struct list_elem *elem)
   ASSERT (list_is_interior (elem));
   elem->prev->next = elem->next;
   elem->next->prev = elem->prev;
+  elem->magic = BAD_LIST_ELEM_MAGIC__;
   return elem->next;
 }
 
@@ -270,6 +271,7 @@ list_pop_front (struct list *list)
 {
   struct list_elem *front = list_front (list);
   list_remove (front);
+  front->magic = BAD_LIST_ELEM_MAGIC__;
   return front;
 }
 
@@ -280,6 +282,7 @@ list_pop_back (struct list *list)
 {
   struct list_elem *back = list_back (list);
   list_remove (back);
+  back->magic = BAD_LIST_ELEM_MAGIC__;
   return back;
 }
 

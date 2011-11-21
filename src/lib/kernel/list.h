@@ -88,6 +88,7 @@
 
 #define LIST_ELEM_MAGIC__ (0xC0FFEE)
 
+#define BAD_LIST_ELEM_MAGIC__ (0xBADC0FFE)
 /* List element. */
 struct list_elem 
   {
@@ -110,7 +111,8 @@ is_list_elem(const struct list_elem *elem) {
   if(!elem) {
     return false;
   }
-  return elem->magic == LIST_ELEM_MAGIC__;
+  return elem->magic == LIST_ELEM_MAGIC__ ||
+         elem->magic == BAD_LIST_ELEM_MAGIC__;
 }
 
 /* Converts pointer to list element LIST_ELEM into a pointer to
