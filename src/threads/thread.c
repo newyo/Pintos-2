@@ -494,6 +494,10 @@ void
 thread_set_priority (int new_priority)
 {
   ASSERT (PRI_MIN <= new_priority && new_priority <= PRI_MAX);
+
+  if (thread_mlfqs)
+    return;
+
   thread_current ()->priority = new_priority;
   thread_yield ();
 }
