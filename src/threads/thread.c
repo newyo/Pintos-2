@@ -818,11 +818,8 @@ next_thread_to_run (void)
   
   int i;
   for (i = PRI_MAX; PRI_MIN <= i; --i)
-    {
-      if (list_empty (&ready_list[i]))
-        continue;
-      return list_entry (list_pop_front (&ready_list[i]), struct thread, elem);
-    }
+    if (!list_empty (&ready_list[i]))
+      return thread_list_entry (list_pop_front (&ready_list[i]));
   return idle_thread;
 }
 
@@ -872,6 +869,41 @@ thread_schedule_tail (struct thread *prev)
     }
 }
 
+static void reschedule_ready_lists (void)
+{
+  ASSERT (intr_get_level () == INTR_OFF);
+  
+  int prio;
+  struct list reschedule[PRI_MAX-PRI_MIN+1];
+  for(prio = PRI_MIN; prio <= PRI_MAX; ++prio)
+    list_init (&reschedule[prio]);
+    
+  struct list_elem *e, *end, *next;
+  for (prio = PRI_MAX; prio >= PRI_MIN; --prio)
+    {
+      end = list_end (&ready_list[prio]);
+      for (e = list_begin (&ready_list[prio]); e != end; e = next)
+        {
+          next = list_next (e);
+          int actual_prio = thread_get_priority_of (thread_list_entry (e));
+          if (actual_prio == prio)
+            continue;
+          list_remove (e);
+          list_push_back (&reschedule[actual_prio], e);
+        }
+    }
+      
+  for(prio = PRI_MIN; prio <= PRI_MAX; ++prio)
+    {
+      end = list_end (&reschedule[prio]);
+      for (e = list_begin (&reschedule[prio]); e != end; e = next)
+        {
+          next = list_remove (e);
+          list_push_back (&ready_list[prio], e);
+        }
+    }
+}
+
 /* Schedules a new process.  At entry, interrupts must be off and
    the running process's state must have been changed from
    running to some other state.  This function finds another
@@ -883,12 +915,13 @@ static void
 schedule (void) 
 {
   sleep_wakeup ();
+  ASSERT (intr_get_level () == INTR_OFF);
   
+  reschedule_ready_lists();
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
 
-  ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
 
