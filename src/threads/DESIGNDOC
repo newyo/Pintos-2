@@ -1,0 +1,174 @@
+			+--------------------+
+			|        CS 140      |
+			| PROJECT 1: THREADS |
+			|   DESIGN DOCUMENT  |
+			+--------------------+
+				   
+---- GROUP ----
+
+René Kijewski <kijewski@inf.fu-berlin.de>
+Christian Mehlis <mehlis@inf.fu-berlin.de>
+
+---- PRELIMINARIES ----
+
+			     ALARM CLOCK
+			     ===========
+
+---- DATA STRUCTURES ----
+
+in struct thread:
+int64_t wakeup;                     /* only used for sleep */
+Variable gibt den Zeitpunkt des aufwachens in ticks an.
+
+global:
+static struct list sleep_list;
+Liste in der die schlafenden Threads gespeichert sind.
+Diese sind dann nicht mehr in der Runningliste.
+
+---- ALGORITHMS ----
+
+In timer_sleep fügen wir den thread mit Hilfe der "sleep_add (ticks)"-Funktion 
+in die sleep_list ein. Diese ist sortiert: Wir verwenden "list_insert_ordered", 
+um das nächste Element in O(1) bekommen zu können.
+Jeden tick wird überprüft ob der HEAD von sleep_list aufgewäckt werden muss.
+
+---- SYNCHRONIZATION ----
+
+Wir deaktivieren die Interupts für die Zeit der Listenoperation und stellen 
+nach der Operation den Status wieder her.
+
+---- RATIONALE ----
+
+Dies erschien uns als die einzig Wahre Lösung.
+Dies ist die intuitiv beste Lösung.
+
+			 PRIORITY SCHEDULING
+			 ===================
+
+---- DATA STRUCTURES ----
+Aus einer ready_list werden 64 ready_listen. Jede Priorität hat eine eigene 
+Liste  (thread.h)
+static struct list ready_list[PRI_MAX + 1];
+
+Die Liste aller Locks, die ein Thread besitzt, eingefügt in struct_thread.
+struct list lock_list;              /* list of held locks */
+
+In "thread_get_priority_of":
+Zuerst werden Interupts disabled.
+Ein Thread weiß welche locks er hält. Ein lock weiß wiederunm welche Threads 
+durch ihn blockiert werden. Die priorität eines Threads ist das max aus seiner 
+basispriorität und den Priorität der Threads die durch ihn blockiert werden.
+Woduch auch transitive Vererbung ermöglicht wird.
+
+---- ALGORITHMS ----
+
+>> B3: How do you ensure that the highest priority thread waiting for
+>> a lock, semaphore, or condition variable wakes up first?
+
+//TODO
+
+>> B4: Describe the sequence of events when a call to lock_acquire()
+>> causes a priority donation.  How is nested donation handled?
+
+//TODO
+
+>> B5: Describe the sequence of events when lock_release() is called
+>> on a lock that a higher-priority thread is waiting for.
+
+//TODO
+
+---- SYNCHRONIZATION ----
+
+>> B6: Describe a potential race in thread_set_priority() and explain
+>> how your implementation avoids it.  Can you use a lock to avoid
+>> this race?
+
+//TODO
+
+---- RATIONALE ----
+
+>> B7: Why did you choose this design?  In what ways is it superior to
+>> another design you considered?
+
+//TODO
+
+			  ADVANCED SCHEDULER
+			  ==================
+
+---- DATA STRUCTURES ----
+
+in "struct thread":
+
+Der "nice"-Wert wird für jeden thread in struct_trhead abgelegt:
+    int nice;                           /* Niceness of the thread: bigger is nicer */
+
+Jeder Thread kennt seine recet_cpu:
+    fp_t recent_cpu;                    /* Recent CPU of this thread */
+
+Globale Variable:
+static fp_t load_avg
+
+Unsere fixed-point implementierung basiert auf:
+
+#define _FP_T_SGN_LEN  (1)
+#define _FP_T_INT_LEN  (17)
+#define _FP_T_FRAC_LEN (14)
+
+typedef struct fp_t fp_t;
+struct fp_t
+{
+  uint16_t frac_part  : _FP_T_FRAC_LEN;
+  uint32_t int_part   : _FP_T_INT_LEN;
+  int8_t   signedness : _FP_T_SGN_LEN;
+} __attribute__ ((packed));
+
+Die Form wurde in der Aufgabe vorgegeben.
+
+---- ALGORITHMS ----
+
+>> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
+>> has a recent_cpu value of 0.  Fill in the table below showing the
+>> scheduling decision and the priority and recent_cpu values for each
+>> thread after each given number of timer ticks:
+
+timer  recent_cpu    priority   thread
+ticks   A   B   C   A   B   C   to run
+-----  --  --  --  --  --  --   ------
+ 0
+ 4
+ 8
+12
+16
+20
+24
+28
+32
+36
+
+>> C3: Did any ambiguities in the scheduler specification make values
+>> in the table uncertain?  If so, what rule did you use to resolve
+>> them?  Does this match the behavior of your scheduler?
+
+//TODO
+
+Im Interuptkontext wird nur rekalkuliert, alle anderen Operationen finden 
+außerhalb von Interupts statt.
+
+---- RATIONALE ----
+
+>> C5: Briefly critique your design, pointing out advantages and
+>> disadvantages in your design choices.  If you were to have extra
+>> time to work on this part of the project, how might you choose to
+>> refine or improve your design?
+
+//TODO
+
+>> C6: The assignment explains arithmetic for fixed-point math in
+>> detail, but it leaves it open to you to implement it.  Why did you
+>> decide to implement it the way you did?  If you created an
+>> abstraction layer for fixed-point math, that is, an abstract data
+>> type and/or a set of functions or macros to manipulate fixed-point
+>> numbers, why did you do so?  If not, why not?
+
+//TODO
+
