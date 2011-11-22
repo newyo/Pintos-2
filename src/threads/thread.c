@@ -53,7 +53,7 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
-static fp_t load_avg;
+fp_t thread_load_avg;
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -596,9 +596,10 @@ thread_recalculate_recent_cpu (struct thread *t, void *aux UNUSED)
   ASSERT (is_thread (t));
 
   /* (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice.*/
-  fp_t result = load_avg;
+  fp_t result = thread_load_avg;
   result = fp_mult (result, fp_from_int (2));
-  result = fp_div  (result, fp_add (fp_mult (load_avg, fp_from_int (2)), fp_from_int (1)));
+  result = fp_div  (result, fp_add (fp_mult (thread_load_avg, fp_from_int (2)),
+                                    fp_from_int (1)));
   result = fp_mult (result, t->recent_cpu);
   result = fp_add  (result, fp_from_int (t->nice));
   t->recent_cpu = result;
@@ -608,7 +609,7 @@ thread_recalculate_recent_cpu (struct thread *t, void *aux UNUSED)
 int
 thread_get_load_avg (void) 
 {
-  int result = fp_round (fp_mult (load_avg, fp_from_int (100)));
+  int result = fp_round (fp_mult (thread_load_avg, fp_from_int (100)));
   ASSERT (0 <= result);
   return result;
 }
@@ -673,11 +674,11 @@ thread_recalculate_load_avg (void)
   int ready_threads = thread_get_ready_threads ();
   
   /* (59/60)*load_avg + (1/60)*ready_threads */
-  fp_t summand1 = fp_mult (fp_div (fp_from_int (59), fp_from_int (60)), load_avg);
+  fp_t summand1 = fp_mult (fp_div (fp_from_int (59), fp_from_int (60)), thread_load_avg);
   fp_t summand2 = fp_mult (fp_div (fp_from_int (1),  fp_from_int (60)), fp_from_int (ready_threads));
 
-  load_avg = fp_add (summand1, summand2);
-  ASSERT (0 <= fp_round (load_avg));
+  thread_load_avg = fp_add (summand1, summand2);
+  ASSERT (0 <= fp_round (thread_load_avg));
 }
 
 static int
