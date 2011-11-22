@@ -17,8 +17,8 @@ void debug_panic (const char *file, int line, const char *function,
                   const char *message, ...) PRINTF_FORMAT (4, 5) NO_RETURN;
 void debug_backtrace (void);
 void debug_backtrace_all (void);
-
-#endif
+ 
+#endif // ifndef __LIB_DEBUG_H
 
 
 
@@ -28,12 +28,24 @@ void debug_backtrace_all (void);
 #undef NOT_REACHED
 
 #ifndef NDEBUG
-#define ASSERT(CONDITION)                                       \
+# define ASSERT(CONDITION)                                      \
         if (CONDITION) { } else {                               \
                 PANIC ("assertion `%s' failed.", #CONDITION);   \
         }
-#define NOT_REACHED() PANIC ("executed an unreachable statement");
+# define NOT_REACHED() PANIC ("executed an unreachable statement");
+# define UNSAFE_PRINTF(...) \
+  ({ \
+    enum intr_level _old_level = intr_disable (); \
+    struct thread *_current_thread = running_thread (); \
+    enum thread_status _old_status =  _current_thread->status; \
+    _current_thread->status = THREAD_RUNNING; \
+    printf (__VA_ARGS__); \
+    _current_thread->status = _old_status; \
+    intr_set_level (_old_level); \
+    (void)0; \
+  })
 #else
-#define ASSERT(CONDITION) ((void) 0)
-#define NOT_REACHED() for (;;)
-#endif /* lib/debug.h */
+# define ASSERT(CONDITION) ((void) 0)
+# define NOT_REACHED() for (;;)
+# define UNSAFE_PRINTF(...) ((void) 0)
+#endif // ifndef NDEBUG
