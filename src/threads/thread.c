@@ -642,8 +642,10 @@ thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (is_thread (t));
 
-  /* PRI_MAX - (recent_cpu / 4) - (nice * 2) */
-  int result = PRI_MAX - fp_round (fp_sub (fp_div (t->recent_cpu, fp_from_int(4)), fp_from_int(t->nice * 2)));
+  /*     PRI_MAX -  (recent_cpu / 4) - (nice * 2) */
+  /* <=> PRI_MAX - ((recent_cpu / 4) + (nice * 2)) */
+  int result = PRI_MAX - fp_round (fp_add (fp_div (t->recent_cpu, fp_from_int(4)),
+                                           fp_from_int(t->nice * 2)));
   if (result > PRI_MAX)
     result = PRI_MAX;
   else if (result < PRI_MIN)
