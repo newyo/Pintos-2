@@ -340,19 +340,35 @@ cond_init (struct condition *cond)
 void
 cond_wait (struct condition *cond, struct lock *lock) 
 {
-  struct semaphore_elem waiter;
-
   ASSERT (cond != NULL);
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
   
+  struct semaphore_elem waiter;
   sema_init (&waiter.semaphore, 0);
-  list_insert_ordered (&cond->waiters, &waiter.elem, sema_cmp_priority,
-                       &thread_current ()->priority);
+  list_push_back (&cond->waiters, &waiter.elem);
+  
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
+}
+
+static bool
+cond_cmp_waiters (const struct list_elem *a,
+                  const struct list_elem *b,
+                  void *aux UNUSED)
+{
+  struct semaphore_elem *aa, *bb;
+  struct list_elem      *ae, *be;
+  
+  aa = list_entry (a, struct semaphore_elem, elem);
+  ae = list_max (&aa->semaphore.waiters, thread_cmp_priority, NULL);
+  
+  bb = list_entry (b, struct semaphore_elem, elem);
+  be = list_max (&bb->semaphore.waiters, thread_cmp_priority, NULL);
+  
+  return thread_cmp_priority (ae, be, NULL);
 }
 
 /* If any threads are waiting on COND (protected by LOCK), then
@@ -370,9 +386,15 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  enum intr_level old_level = intr_disable ();
+  if (!list_empty (&cond->waiters))
+    {
+      struct list_elem *e = list_max (&cond->waiters, cond_cmp_waiters, NULL);
+      list_remove (e);
+      struct semaphore_elem *s = list_entry (e, struct semaphore_elem, elem);
+      sema_up (&s->semaphore);
+    }
+  intr_set_level (old_level);
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -386,7 +408,15 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 {
   ASSERT (cond != NULL);
   ASSERT (lock != NULL);
+  ASSERT (!intr_context ());
+  ASSERT (lock_held_by_current_thread (lock));
 
+  enum intr_level old_level = intr_disable ();
   while (!list_empty (&cond->waiters))
-    cond_signal (cond, lock);
+    {
+      struct list_elem *e = list_pop_front (&cond->waiters);
+      struct semaphore_elem *s = list_entry (e, struct semaphore_elem, elem);
+      sema_up (&s->semaphore);
+    }
+  intr_set_level (old_level);
 }

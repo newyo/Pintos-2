@@ -87,8 +87,8 @@
 #include <stdint.h>
 
 #define LIST_ELEM_MAGIC__ (0xC0FFEE)
-
 #define BAD_LIST_ELEM_MAGIC__ (0xBADC0FFE)
+
 /* List element. */
 struct list_elem 
   {
@@ -123,7 +123,6 @@ is_list_elem(const struct list_elem *elem) {
 #define list_entry(LIST_ELEM, STRUCT, MEMBER) \
   ({ \
     __typeof (LIST_ELEM) _list_elem = (LIST_ELEM); \
-    ASSERT (_list_elem != NULL); \
     ASSERT (is_list_elem (_list_elem)); \
     (STRUCT*) ((uint8_t*)&_list_elem->end - offsetof (__typeof (STRUCT), MEMBER.end)); \
   })
