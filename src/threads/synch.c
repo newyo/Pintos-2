@@ -124,10 +124,14 @@ sema_up (struct semaphore *sema)
       list_remove (max);
       thread_unblock (list_entry (max, struct thread, elem));
     }
-  intr_set_level (old_level);
   
-  if (max)
-    thread_yield ();
+  if (max && thread_cmp_priority (&thread_current ()->elem, max, NULL))
+    {
+      intr_set_level (old_level);
+      thread_yield ();
+    }
+  else
+    intr_set_level (old_level);
 }
 
 static void sema_test_helper (void *sema_);
@@ -225,12 +229,11 @@ lock_acquire (struct lock *lock)
 bool
 lock_try_acquire (struct lock *lock)
 {
-  bool success;
-
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
+  ASSERT (!intr_context ());
 
-  success = sema_try_down (&lock->semaphore);
+  bool success = sema_try_down (&lock->semaphore);
   if (success)
     {
       enum intr_level old_level = intr_disable ();
@@ -252,6 +255,7 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+  ASSERT (!intr_context ());
   
   enum intr_level old_level = intr_disable ();
   list_remove_properly (&lock->holder_elem);

@@ -876,6 +876,7 @@ thread_schedule_tail (struct thread *prev)
     }
 }
 
+// TODO: we don't need 64 lists ...
 static void reschedule_ready_lists (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
