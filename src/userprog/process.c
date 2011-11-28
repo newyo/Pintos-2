@@ -45,6 +45,60 @@ process_execute (const char *file_name)
   return tid;
 }
 
+static void
+elf_stack_push_int (void **sp, int i, void *end)
+{
+  ASSERT(*sp != NULL && end != NULL);
+
+  int size = sizeof (i);
+  if (end - *sp < size)
+    {
+      *sp = NULL;
+      return;
+    };
+  *sp -= size;
+  memcpy (*sp, &i, size);
+}
+
+static void
+elf_stack_push_ptr (void **sp, void *p, void *end)
+{
+  ASSERT(*sp != NULL && end != NULL);
+
+  int size = sizeof (p);
+  if (end - *sp < size)
+    {
+      *sp = NULL;
+      return;
+    }
+  *sp -= size;
+
+  if (p == NULL)
+    {
+      // avoid: assertion `src != NULL || size == 0' in memcpy
+      void *null = 0;
+      memcpy (*sp, null, sizeof(null));
+    }
+  else
+    memcpy (*sp, p, size);
+}
+
+static void
+elf_stack_push_str (void **sp, char *str, void *end)
+{
+  ASSERT(*sp != NULL && end != NULL);
+  ASSERT ((intptr_t) sp % sizeof (int) == 0);
+  int size = strlen (str) + 1;
+  if (end - *sp < size)
+    {
+      *sp = NULL;
+      return;
+    }
+  *sp -= size;
+  *sp -= (intptr_t) sp % sizeof (int);
+  memcpy (*sp, str, size);
+}
+
 /* A thread function that loads a user process and starts it
    running. */
 static void
@@ -59,11 +113,41 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+
+  char *save_ptr = NULL;
+  char *exe = strtok_r (file_name, " ", &save_ptr);
+  success = load (exe, &if_.eip, &if_.esp);
+  char *end = if_.esp + PGSIZE;
+  exe = if_.esp;
+  elf_stack_push_str (&if_.esp, save_ptr, end);
+  char *argv1 = if_.esp;
+  elf_stack_push_str (&if_.esp, exe, end);
+  elf_stack_push_ptr (&if_.esp, NULL, end);
+
+  char *argv_end = if_.esp;
+  int argc = 0;
+  char *arg;
+  for (arg = exe; arg; arg = strtok_r (argv1, " ", &save_ptr))
+    {
+      ++argc;
+      elf_stack_push_ptr (&if_.esp, arg, end);
+    }
+  //swap reverse ordered argv pointers in place
+  char *a = if_.esp;
+  char *b = argv_end - 1;
+  for (; a < b; ++a, ++b)
+    {
+      char *tmp = a;
+      a = b;
+      b = tmp;
+    }
+  elf_stack_push_ptr (&if_.esp, if_.esp, end);
+  elf_stack_push_int (&if_.esp, argc, end);
+  elf_stack_push_ptr (&if_.esp, NULL, end);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success)
     thread_exit ();
 
   /* Start the user process by simulating a return from an
