@@ -166,6 +166,14 @@ debug_hexdump (void *from, void *to)
 static void
 start_process (void *const file_name_)
 {
+  /* Initialize interrupt frame */
+  struct intr_frame if_;
+  memset (&if_, 0, sizeof (if_));
+  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
+  if_.cs = SEL_UCSEG;
+  if_.eflags = FLAG_IF | FLAG_MBS;
+  
+  /* Trim leading spaces */
   char *arguments = file_name_;
   if (!arguments)
     goto failure;
@@ -173,14 +181,8 @@ start_process (void *const file_name_)
     ++arguments;
   if (!*arguments)
     goto failure;
-
-  /* Initialize interrupt frame and load executable. */
-  struct intr_frame if_;
-  memset (&if_, 0, sizeof (if_));
-  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
-  if_.cs = SEL_UCSEG;
-  if_.eflags = FLAG_IF | FLAG_MBS;
     
+  /* Extract executable file name */
   char *exe = arguments;
   do {
     char *c = strchr (arguments, ' ');
@@ -189,8 +191,11 @@ start_process (void *const file_name_)
         *c = '\0';
         arguments = c+1;
       }
+    else
+      arguments = "";
   } while (0);
 
+  /* load exe, allocating stack */
   if (!load (exe, &if_.eip, &if_.esp))
     goto failure;
   

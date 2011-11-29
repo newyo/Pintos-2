@@ -72,7 +72,7 @@ struct list_elem *
 list_begin (struct list *list)
 {
   ASSERT (list != NULL);
-  ASSERT (is_list_elem (list->head.next));
+  // ASSERT (is_list_elem (list->head.next));
   return list->head.next;
 }
 
