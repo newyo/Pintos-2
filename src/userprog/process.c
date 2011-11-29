@@ -242,8 +242,8 @@ start_process (void *const file_name_)
     
   //swap reverse ordered argv pointers in place
   char *a, *b;
-  for (a = argv_start, b = argv_end - 1; a < b; ++a, --b)
-    _SWAP (a, b);
+  for (a = argv_start, b = argv_end; a > b; --a, ++b)
+    _SWAP (*a, *b);
   //**************** END OF ARGV ARRAY ***************************************
   
   // pushing current esp == pushing a pointer to argv
@@ -251,7 +251,7 @@ start_process (void *const file_name_)
   // pushing a pseudo callback address
   if (!elf_stack_push_ptr (&if_.esp, if_.esp, end) ||
       !elf_stack_push_int (&if_.esp, argc, end) ||
-      !elf_stack_push_ptr (&if_.esp, if_.eip, end))
+      !elf_stack_push_ptr (&if_.esp, NULL, end))
     goto failure;
 
   palloc_free_page (file_name_);
