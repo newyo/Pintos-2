@@ -45,110 +45,213 @@ process_execute (const char *file_name)
   return tid;
 }
 
-static void
+// per definitionem:
+typedef char _CASSERT_SIZEOF_INTPRT_EQ_SIZEOF_PRT[0 - !(sizeof (void *) ==
+                                                        sizeof (intptr_t))];
+// true for x86:
+typedef char _CASSERT_SIZEOF_INT_EQ_SIZEOF_PRT[0 - !(sizeof (int) ==
+                                                     sizeof (intptr_t))];
+
+static void *
+elf_stack_push_data (char **sp, void *data, off_t data_len, char *end)
+{
+  ASSERT (sp != NULL);
+  ASSERT (*sp != NULL);
+  ASSERT ((intptr_t) *sp % sizeof (int) == 0); // assert sp is aligned
+  ASSERT (end != NULL);
+  ASSERT (data_len >= 0);
+  ASSERT (*sp >= end); // assert not already exceeded
+  ASSERT (*sp <= (char *) PHYS_BASE &&
+          end <  (char *) PHYS_BASE); // assert being in userspace
+  
+  if (data_len == 0)
+    return *sp;
+
+  if (*sp - end < data_len)
+    {
+      // memory exceeded
+      ASSERT (0);
+      *sp = NULL;
+      return NULL;
+    };
+  
+  // growing backwards
+  *sp -= data_len;
+  *sp -= (intptr_t) *sp % sizeof (int); // ensure alignment
+  memcpy (*sp, data, data_len);
+  return *sp;
+}
+
+static void *
 elf_stack_push_int (void **sp, int i, void *end)
 {
-  ASSERT(*sp != NULL && end != NULL);
-
-  int size = sizeof (i);
-  if (end - *sp < size)
-    {
-      *sp = NULL;
-      return;
-    };
-  *sp -= size;
-  memcpy (*sp, &i, size);
+  return elf_stack_push_data ((char **) sp, &i, sizeof (i), (char *) end);
 }
 
-static void
+static void *
 elf_stack_push_ptr (void **sp, void *p, void *end)
 {
-  ASSERT(*sp != NULL && end != NULL);
-
-  int size = sizeof (p);
-  if (end - *sp < size)
-    {
-      *sp = NULL;
-      return;
-    }
-  *sp -= size;
-
-  if (p == NULL)
-    {
-      // avoid: assertion `src != NULL || size == 0' in memcpy
-      void *null = 0;
-      memcpy (*sp, null, sizeof(null));
-    }
-  else
-    memcpy (*sp, p, size);
+  return elf_stack_push_data ((char **) sp, &p, sizeof (p), (char *) end);
 }
 
-static void
+static void *
 elf_stack_push_str (void **sp, char *str, void *end)
 {
-  ASSERT(*sp != NULL && end != NULL);
-  ASSERT ((intptr_t) sp % sizeof (int) == 0);
-  int size = strlen (str) + 1;
-  if (end - *sp < size)
+  ASSERT (str != NULL);
+  off_t len = strlen (str) + 1; // add 1 for terminator
+  return elf_stack_push_data ((char **) sp, str, len, (char *) end);
+}
+
+/** Swaps X and Y inplace, returning lvalue of X. */
+#define _SWAP(X,Y) \
+({ \
+  __typeof (X)             *_x = &(X); \
+  __typeof (Y)             *_y = &(Y); \
+  __typeof (0 ? *_x : *_y)  _t = *_x; \
+  *_x = *_y; \
+  *_y =  _t; \
+  *_x; \
+});
+
+static inline void
+debug_hexdump (void *from, void *to)
+{
+  printf ("\n");
+  printf ("  HEXDUMP:    0x%08x - 0x%08x\n", (intptr_t) from, (intptr_t) to);
+  printf ("  0x0000000X  0 1 2 3  4 5 6 7  8 9 A B  C D E F\n");
+  
+  intptr_t bottom = ((((intptr_t) (from))     ) & ~0x0F);
+  intptr_t top    = ((((intptr_t) (to  ))+0x0F) & ~0x0F);
+  intptr_t cur;
+  for (cur = bottom; cur < top; cur += 0x10)
     {
-      *sp = NULL;
-      return;
+      printf ("  0x%08x", cur);
+      intptr_t h;
+      for (h = 0; h < 0x04; ++h)
+        {
+          printf (" ");
+          int i;
+          for (i = 0; i < 0x04; ++i)
+            {
+              uint8_t *p = (uint8_t *) (cur + 4*h + i);
+              if ((void *) p >= from && (void *) p < to)
+                printf ("%02hhx", *p);
+              else
+                printf ("  ");
+            }
+        }
+      printf ("   ");
+      for (h = 0; h < 0x04; ++h)
+        {
+          char s[4] = "....";
+          int i;
+          for (i = 0; i < 0x04; ++i)
+            {
+              uint8_t *p = (uint8_t *) (cur + 4*h + i);
+              // ASCII 0x7F  is non-printable
+              if ((void *) p < from || (void *) p >= to)
+                s[i] = ' ';
+              else if(*p >= ' ' && *p < 0x7F)
+                s[i] = *p;
+            }
+          printf (" %.4s", s);
+        }
+      printf("\n");
     }
-  *sp -= size;
-  *sp -= (intptr_t) sp % sizeof (int);
-  memcpy (*sp, str, size);
+  printf ("\n");
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *const file_name_)
 {
-  char *file_name = file_name_;
-  struct intr_frame if_;
-  bool success;
+  char *arguments = file_name_;
+  if (!arguments)
+    goto failure;
+  while (*arguments == ' ')
+    ++arguments;
+  if (!*arguments)
+    goto failure;
 
   /* Initialize interrupt frame and load executable. */
-  memset (&if_, 0, sizeof if_);
+  struct intr_frame if_;
+  memset (&if_, 0, sizeof (if_));
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+    
+  char *exe = arguments;
+  do {
+    char *c = strchr (arguments, ' ');
+    if (c)
+      {
+        *c = '\0';
+        arguments = c+1;
+      }
+  } while (0);
 
-  char *save_ptr = NULL;
-  char *exe = strtok_r (file_name, " ", &save_ptr);
-  success = load (exe, &if_.eip, &if_.esp);
-  char *end = if_.esp + PGSIZE;
-  exe = if_.esp;
-  elf_stack_push_str (&if_.esp, save_ptr, end);
-  char *argv1 = if_.esp;
-  elf_stack_push_str (&if_.esp, exe, end);
-  elf_stack_push_ptr (&if_.esp, NULL, end);
-
-  char *argv_end = if_.esp;
-  int argc = 0;
-  char *arg;
-  for (arg = exe; arg; arg = strtok_r (argv1, " ", &save_ptr))
+  if (!load (exe, &if_.eip, &if_.esp))
+    goto failure;
+  
+  char *const start = if_.esp;
+  char *const end = if_.esp - PGSIZE;
+  
+  // pushing an empty string not to crash if argv[argc] was referenced
+  if (!elf_stack_push_str (&if_.esp, "", end))
+    goto failure;
+  char *const arg_ptr_terminator = if_.esp;
+  
+  // pushing the untokenized arguments
+  if (!elf_stack_push_str (&if_.esp, arguments, end))
+    goto failure;
+  char *const arg_ptr_arguments = if_.esp;
+  
+  // pushing the exe name
+  if (!elf_stack_push_str (&if_.esp, exe, end))
+    goto failure;
+  char *const arg_ptr_exe = if_.esp;
+    
+  //**************** STARTING ARGV ARRAY: *************************************
+  // Pushing pointers to the terminator and the executable.
+  // Further on exe and the argument pointers will be push in reverse order.
+  // After everything was pushed the arvs items will be reversed inplace.
+  if (!elf_stack_push_ptr (&if_.esp, arg_ptr_terminator, end) ||
+      !elf_stack_push_ptr (&if_.esp, arg_ptr_exe, end))
+    goto failure;
+  char *const argv_start = if_.esp;
+  
+  // tokenizing, pushing and counting arguments
+  int argc = 1;
+  char *arg, *save_ptr;
+  for (arg = strtok_r (arg_ptr_arguments, " ", &save_ptr);
+       arg;
+       arg = strtok_r (NULL, " ", &save_ptr))
     {
+      printf ("ARG: %8p\n", arg);
       ++argc;
-      elf_stack_push_ptr (&if_.esp, arg, end);
+      if (!elf_stack_push_ptr (&if_.esp, arg, end))
+        goto failure;
     }
+  char *argv_end = if_.esp;
+    
   //swap reverse ordered argv pointers in place
-  char *a = if_.esp;
-  char *b = argv_end - 1;
-  for (; a < b; ++a, ++b)
-    {
-      char *tmp = a;
-      a = b;
-      b = tmp;
-    }
-  elf_stack_push_ptr (&if_.esp, if_.esp, end);
-  elf_stack_push_int (&if_.esp, argc, end);
-  elf_stack_push_ptr (&if_.esp, NULL, end);
+  char *a, *b;
+  for (a = argv_start, b = argv_end - 1; a < b; ++a, --b)
+    _SWAP (a, b);
+  //**************** END OF ARGV ARRAY ***************************************
+  
+  // pushing current esp == pushing a pointer to argv
+  // pushing argc == length(argv) == 1 [for exe] + count(tokenized arguments)
+  // pushing a pseudo callback address
+  if (!elf_stack_push_ptr (&if_.esp, if_.esp, end) ||
+      !elf_stack_push_int (&if_.esp, argc, end) ||
+      !elf_stack_push_ptr (&if_.esp, if_.eip, end))
+    goto failure;
 
-  /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success)
-    thread_exit ();
+  palloc_free_page (file_name_);
+  
+  debug_hexdump (if_.esp, start);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -158,6 +261,10 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+  
+failure:
+  palloc_free_page (file_name_);
+  thread_exit ();
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
@@ -217,7 +324,7 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
-
+
 /* We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
 
@@ -401,7 +508,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file_close (file);
   return success;
 }
-
+
 /* load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);
