@@ -224,7 +224,7 @@ start_process (void *const file_name_)
   if (!elf_stack_push_ptr (&if_.esp, arg_ptr_terminator, end) ||
       !elf_stack_push_ptr (&if_.esp, arg_ptr_exe, end))
     goto failure;
-  char *const argv_start = if_.esp;
+  char **const argv_start = if_.esp;
   
   // tokenizing, pushing and counting arguments
   int argc = 1;
@@ -233,15 +233,14 @@ start_process (void *const file_name_)
        arg;
        arg = strtok_r (NULL, " ", &save_ptr))
     {
-      printf ("ARG: %8p\n", arg);
       ++argc;
       if (!elf_stack_push_ptr (&if_.esp, arg, end))
         goto failure;
     }
-  char *argv_end = if_.esp;
+  char **argv_end = if_.esp;
     
   //swap reverse ordered argv pointers in place
-  char *a, *b;
+  char **a, **b;
   for (a = argv_start, b = argv_end; a > b; --a, ++b)
     _SWAP (*a, *b);
   //**************** END OF ARGV ARRAY ***************************************
@@ -256,7 +255,7 @@ start_process (void *const file_name_)
 
   palloc_free_page (file_name_);
   
-  debug_hexdump (if_.esp, start);
+  // debug_hexdump (if_.esp, start);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in

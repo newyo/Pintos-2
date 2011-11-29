@@ -3,6 +3,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "devices/shutdown.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -20,13 +21,14 @@ syscall_init (void)
 static void
 syscall_handler_SYS_HALT (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  shutdown_power_off ();
 }
 
 static void
 syscall_handler_SYS_EXIT (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // TODO
+  thread_exit ();
 }
 
 static void
@@ -74,7 +76,9 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
 static void
 syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // write (*(int *) arg1, *(void **) arg2, *(size_t *) arg3);
+  // TODO
+  putbuf (*(void **) arg2, *(size_t *) arg3);
 }
 
 static void
@@ -141,18 +145,16 @@ static void
 syscall_handler (struct intr_frame *if_) 
 {
   // TODO: ensure readability
-  void *callback = &(*(void ***) &if_->esp)[0];
-  void *nr       = &(*(void ***) &if_->esp)[1];
-  void *arg1     = &(*(void ***) &if_->esp)[2];
-  void *arg2     = &(*(void ***) &if_->esp)[3];
-  void *arg3     = &(*(void ***) &if_->esp)[4];
-  (void) callback;
+  int  *nr       = &((int   *) if_->esp)[0];
+  void *arg1     = &((void **) if_->esp)[1];
+  void *arg2     = &((void **) if_->esp)[2];
+  void *arg3     = &((void **) if_->esp)[3];
   
   #define _HANDLE(NAME) case NAME: \
                           syscall_handler_##NAME (arg1, arg2, arg3, if_); \
                           break;
   
-  switch (*(int *) nr) {
+  switch (*nr) {
     _HANDLE (SYS_HALT);
     _HANDLE (SYS_EXIT);
     _HANDLE (SYS_EXEC);
