@@ -277,8 +277,10 @@ start_process (void *const file_name_)
     goto failure;
 
   palloc_free_page (file_name_);
+  
   struct thread *t = thread_current ();
   hash_init (&t->fds, fd_hash, fd_less, t);
+  t->exit_code = -1;
   
   // debug_hexdump (if_.esp, start);
 
@@ -318,11 +320,11 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  uint32_t *pd;
+  printf ("%.*s: exit(%d)\n", sizeof (cur->name), cur->name, cur->exit_code);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
-  pd = cur->pagedir;
+  uint32_t *pd = cur->pagedir;
   if (pd != NULL) 
     {
       hash_destroy (&cur->fds, fd_free);
