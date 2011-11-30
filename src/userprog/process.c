@@ -17,9 +17,33 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+
+
+static unsigned
+fd_hash (const struct hash_elem *e, void *t UNUSED)
+{
+  return (unsigned) hash_entry (e, struct fd, elem)->fd;
+}
+
+static bool
+fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t UNUSED)
+{
+  struct fd *aa = hash_entry (a, struct fd, elem);
+  struct fd *bb = hash_entry (b, struct fd, elem);
+  return aa->fd < bb->fd;
+}
+
+static void
+fd_free (struct hash_elem *e, void *aux UNUSED)
+{
+  struct fd *fd = hash_entry (e, struct fd, elem);
+  file_close (fd->file);
+  free (fd);
+}
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -199,7 +223,6 @@ start_process (void *const file_name_)
   if (!load (exe, &if_.eip, &if_.esp))
     goto failure;
   
-  char *const start = if_.esp;
   char *const end = if_.esp - PGSIZE;
   
   // pushing an empty string not to crash if argv[argc] was referenced
@@ -254,6 +277,8 @@ start_process (void *const file_name_)
     goto failure;
 
   palloc_free_page (file_name_);
+  struct thread *t = thread_current ();
+  hash_init (&t->fds, fd_hash, fd_less, t);
   
   // debug_hexdump (if_.esp, start);
 
@@ -300,6 +325,7 @@ process_exit (void)
   pd = cur->pagedir;
   if (pd != NULL) 
     {
+      hash_destroy (&cur->fds, fd_free);
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
