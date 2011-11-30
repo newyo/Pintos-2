@@ -10,7 +10,9 @@
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
 #include "threads/malloc.h"
+#include "lib/user/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -26,7 +28,7 @@ syscall_init (void)
                               struct intr_frame *if_  UNUSED
 
 static bool
-is_user_memory (void *addr, size_t size)
+is_user_memory (const void *addr, unsigned size)
 {
   if (size == 0)
     return true;
@@ -49,38 +51,55 @@ is_user_memory (void *addr, size_t size)
 static void
 syscall_handler_SYS_HALT (_SYSCALL_HANDLER_ARGS)
 {
+  // void halt (void) NO_RETURN;
   shutdown_power_off ();
 }
 
 static void
 syscall_handler_SYS_EXIT (_SYSCALL_HANDLER_ARGS)
 {
-  // TODO
+  // void exit (int status) NO_RETURN;
+  // TODO: waiters?
+  thread_current ()->exit_code = *(int *) arg1;
   thread_exit ();
 }
 
 static void
 syscall_handler_SYS_EXEC (_SYSCALL_HANDLER_ARGS)
 {
+  // pid_t exec (const char *file);
   //TODO
 }
 
 static void
 syscall_handler_SYS_WAIT (_SYSCALL_HANDLER_ARGS)
 {
+  // int wait (pid_t);
   //TODO
 }
 
 static void
 syscall_handler_SYS_CREATE (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // bool create (const char *file, unsigned initial_size);
+  
+  //TODO: ensure user memory (EFAULT)
+  const char *filename = *(const char **) arg1;
+  if (strlen (filename) > READDIR_MAX_LEN)
+    thread_exit ();
+  if_->eax = filesys_create (filename, *(off_t *) arg2);
 }
 
 static void
 syscall_handler_SYS_REMOVE (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // bool remove (const char *file);
+  
+  //TODO: ensure user memory (EFAULT)
+  const char *filename = *(const char **) arg1;
+  if (strlen (filename) > READDIR_MAX_LEN)
+    thread_exit ();
+  if_->eax = filesys_remove (filename);
 }
 
 static void
@@ -90,7 +109,7 @@ syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
   
   //TODO: ensure user memory (EFAULT)
   const char *filename = *(const char **) arg1;
-  if (strlen (filename) > 14)
+  if (strlen (filename) > READDIR_MAX_LEN)
     {
       if_->eax = -ENAMETOOLONG;
       return;
@@ -126,49 +145,128 @@ syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
   if_->eax = fd->fd;
 }
 
+static struct fd *
+retrieve_fd (unsigned fd)
+{
+  struct fd search;
+  memset (&search, 0, sizeof (search));
+  search.fd = fd;
+  struct hash_elem *e = hash_find (&thread_current ()->fds, &search.elem);
+  return e ? hash_entry (e, struct fd, elem) : NULL;
+}
+
 static void
 syscall_handler_SYS_FILESIZE (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // int filesize (int fd);
+  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  if_->eax = fd_data ? file_length (fd_data->file) : -1;
 }
 
 static void
 syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
-}
-
-static void
-syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
-{
-  // write (*(int *) arg1, *(void **) arg2, *(size_t *) arg3);
-  // TODO: mind fd
-  if (!is_user_memory (*(void **) arg2, *(size_t *) arg3))
+  // int read (int fd, void *buffer, unsigned length);
+  
+  unsigned fd = *(unsigned *) arg1;
+  char *buffer = *(void **) arg2;
+  unsigned length = *(unsigned *) arg3;
+  
+  if (!is_user_memory (buffer, length))
     {
       printf ("Killed %d, because of bad memory usage.\n",
               thread_current ()->tid);
       thread_exit ();
     }
-  else
-    putbuf (*(void **) arg2, *(size_t *) arg3);
+  struct fd *fd_data = retrieve_fd (fd);
+  if (!fd_data)
+    {
+      if_->eax = -EBADF;
+      return;
+    }
+  if_->eax = file_read (fd_data->file, buffer, length);
+}
+
+static void
+syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
+{
+  // int write (int fd, const void *buffer, unsigned length);
+  
+  unsigned fd = *(unsigned *) arg1;
+  const char *buffer = *(const void **) arg2;
+  unsigned length = *(unsigned *) arg3;
+  
+  if (!is_user_memory (buffer, length))
+    {
+      printf ("Killed %d, because of bad memory usage.\n",
+              thread_current ()->tid);
+      thread_exit ();
+    }
+  else if (fd == 0 || fd >= INT_MAX)
+    {
+      if_->eax = -EBADF;
+      return;
+    }
+  else if (fd == 1 || fd == 2)
+    {
+      putbuf (buffer, length);
+      if_->eax = length;
+      return;
+    }
+  
+  struct fd *fd_data = retrieve_fd (fd);
+  if_->eax = fd_data ? file_write (fd_data->file, buffer, length): -EBADF;
 }
 
 static void
 syscall_handler_SYS_SEEK (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // void seek (int fd, unsigned position);
+  
+  unsigned fd = *(unsigned *) arg1;
+  unsigned position = *(unsigned *) arg2;
+  
+  struct fd *fd_data = retrieve_fd (fd);
+  if (!fd_data)
+    {
+      printf ("Killed %d, because of bad fd.\n",
+              thread_current ()->tid);
+      thread_exit ();
+    }
+  file_seek (fd_data->file, position);
 }
 
 static void
 syscall_handler_SYS_TELL (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // unsigned tell (int fd);
+  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  if (!fd_data)
+    {
+      printf ("Killed %d, because of bad fd.\n",
+              thread_current ()->tid);
+      thread_exit ();
+    }
+  if_->eax = file_tell (fd_data->file);
 }
 
 static void
 syscall_handler_SYS_CLOSE (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // void close (int fd);
+  struct fd search;
+  memset (&search, 0, sizeof (search));
+  search.fd = *(unsigned *) arg1;
+  struct hash_elem *e = hash_delete (&thread_current ()->fds, &search.elem);
+  if (!e)
+    {
+      printf ("Killed %d, because of bad fd.\n",
+              thread_current ()->tid);
+      thread_exit ();
+    }
+  struct fd *fd_data = hash_entry (e, struct fd, elem);
+  file_close (fd_data->file);
+  free (fd_data);
 }
 
 static void
