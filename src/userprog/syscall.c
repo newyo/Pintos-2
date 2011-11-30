@@ -1,11 +1,16 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
+#include <limits.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
+#include "userprog/process.h"
 #include "userprog/pagedir.h"
+#include "filesys/filesys.h"
+#include "threads/malloc.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -81,7 +86,44 @@ syscall_handler_SYS_REMOVE (_SYSCALL_HANDLER_ARGS)
 static void
 syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // int open (const char *file);
+  
+  //TODO: ensure user memory (EFAULT)
+  const char *filename = *(const char **) arg1;
+  if (strlen (filename) > 14)
+    {
+      if_->eax = -ENAMETOOLONG;
+      return;
+    }
+    
+  struct fd *fd = calloc (1, sizeof (*fd));
+  if (!fd)
+    {
+      if_->eax = -ENOMEM;
+      return;
+    }
+  
+  struct thread *current_thread = thread_current ();
+  for (fd->fd = 3; fd->fd < INT_MAX; ++fd->fd)
+      if (hash_find (&current_thread->fds, &fd->elem) == NULL)
+        break;
+  if (fd->fd == INT_MAX)
+    {
+      free (fd);
+      if_->eax = -ENFILE;
+      return;
+    }
+  
+  fd->file = filesys_open (filename);
+  if (!fd->file)
+    {
+      free (fd);
+      if_->eax = -ENOENT;
+      return;
+    }
+
+  hash_insert (&current_thread->fds, &fd->elem);
+  if_->eax = fd->fd;
 }
 
 static void
