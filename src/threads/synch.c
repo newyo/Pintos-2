@@ -401,3 +401,98 @@ cond_broadcast (struct condition *cond, struct lock *lock)
     }
   intr_set_level (old_level);
 }
+
+void
+rwlock_init (struct rwlock *rwlock)
+{
+  ASSERT (rwlock != NULL);
+  
+  lock_init (&rwlock->edit_lock);
+  cond_init (&rwlock->readers_list);
+  cond_init (&rwlock->writers_list);
+  rwlock->readers_count = rwlock->writers_count = 0;
+}
+
+void
+rwlock_acquire_read (struct rwlock *rwlock)
+{
+  ASSERT (rwlock != NULL);
+  
+  lock_acquire (&rwlock->edit_lock);
+  while (rwlock->writers_count > 0)
+    cond_wait (&rwlock->readers_list, &rwlock->edit_lock);
+  ++rwlock->readers_count;
+  lock_release (&rwlock->edit_lock);
+}
+
+void
+rwlock_acquire_write (struct rwlock *rwlock)
+{
+  ASSERT (rwlock != NULL);
+  
+  lock_acquire (&rwlock->edit_lock);
+  while (rwlock->readers_count > 0 || rwlock->writers_count > 0)
+    cond_wait (&rwlock->writers_list, &rwlock->edit_lock);
+  ++rwlock->writers_count;
+  lock_release (&rwlock->edit_lock);
+}
+
+bool
+rwlock_try_acquire_read (struct rwlock *rwlock)
+{
+  ASSERT (rwlock != NULL);
+  
+  if (!lock_try_acquire (&rwlock->edit_lock))
+    return false;
+  if (rwlock->writers_count > 0)
+    return false;
+  ++rwlock->readers_count;
+  lock_release (&rwlock->edit_lock);
+  
+  return true;
+}
+
+bool
+rwlock_try_acquire_write (struct rwlock *rwlock)
+{
+  ASSERT (rwlock != NULL);
+  
+  if (!lock_try_acquire (&rwlock->edit_lock))
+    return false;
+  if (rwlock->readers_count > 0 || rwlock->writers_count > 0)
+    return false;
+  ++rwlock->writers_count;
+  lock_release (&rwlock->edit_lock);
+  
+  return true;
+}
+
+void
+rwlock_release_read (struct rwlock *rwlock)
+{
+  ASSERT (rwlock != NULL);
+  ASSERT (rwlock->readers_count > 0 && rwlock->writers_count == 0);
+  
+  lock_acquire (&rwlock->edit_lock);
+  --rwlock->readers_count;
+  if (rwlock->readers_count == 0 && !list_empty (&rwlock->writers_list.waiters))
+    cond_signal (&rwlock->writers_list, &rwlock->edit_lock);
+  else if (!list_empty (&rwlock->readers_list.waiters))
+    cond_broadcast (&rwlock->readers_list, &rwlock->edit_lock);
+  lock_release (&rwlock->edit_lock);
+}
+
+void
+rwlock_release_write (struct rwlock *rwlock)
+{
+  ASSERT (rwlock != NULL);
+  ASSERT (rwlock->readers_count == 0 && rwlock->writers_count == 1);
+  
+  lock_acquire (&rwlock->edit_lock);
+  --rwlock->writers_count;
+  if (!list_empty (&rwlock->readers_list.waiters))
+    cond_broadcast (&rwlock->readers_list, &rwlock->edit_lock);
+  else if (!list_empty (&rwlock->writers_list.waiters))
+    cond_signal (&rwlock->writers_list, &rwlock->edit_lock);
+  lock_release (&rwlock->edit_lock);
+}
