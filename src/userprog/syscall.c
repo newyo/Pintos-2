@@ -12,13 +12,26 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 #include "lib/user/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
 
+static struct lock filesys_lock;
+
+#define SYNC(WHAT)              \
+({                              \
+  lock_acquire (&filesys_lock); \
+  __typeof (WHAT) _r = (WHAT);  \
+  lock_release (&filesys_lock); \
+  _r;                           \
+})
+#define SYNC_VOID(WHAT) SYNC ( (WHAT, 0) )
+
 void
 syscall_init (void) 
 {
+  lock_init (&filesys_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -87,7 +100,8 @@ syscall_handler_SYS_CREATE (_SYSCALL_HANDLER_ARGS)
   const char *filename = *(const char **) arg1;
   if (strlen (filename) > READDIR_MAX_LEN)
     thread_exit ();
-  if_->eax = filesys_create (filename, *(off_t *) arg2);
+    
+  if_->eax = SYNC (filesys_create (filename, *(off_t *) arg2));
 }
 
 static void
@@ -99,7 +113,8 @@ syscall_handler_SYS_REMOVE (_SYSCALL_HANDLER_ARGS)
   const char *filename = *(const char **) arg1;
   if (strlen (filename) > READDIR_MAX_LEN)
     thread_exit ();
-  if_->eax = filesys_remove (filename);
+    
+  if_->eax = SYNC (filesys_remove (filename));
 }
 
 static void
@@ -133,7 +148,7 @@ syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
       return;
     }
   
-  fd->file = filesys_open (filename);
+  fd->file = SYNC (filesys_open (filename));
   if (!fd->file)
     {
       free (fd);
@@ -160,7 +175,7 @@ syscall_handler_SYS_FILESIZE (_SYSCALL_HANDLER_ARGS)
 {
   // int filesize (int fd);
   struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
-  if_->eax = fd_data ? file_length (fd_data->file) : -1;
+  if_->eax = fd_data ? SYNC (file_length (fd_data->file)) : -1;
 }
 
 static void
@@ -184,7 +199,7 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
       if_->eax = -EBADF;
       return;
     }
-  if_->eax = file_read (fd_data->file, buffer, length);
+  if_->eax = SYNC (file_read (fd_data->file, buffer, length));
 }
 
 static void
@@ -215,7 +230,8 @@ syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
     }
   
   struct fd *fd_data = retrieve_fd (fd);
-  if_->eax = fd_data ? file_write (fd_data->file, buffer, length): -EBADF;
+  if_->eax = fd_data ? SYNC (file_write (fd_data->file, buffer, length))
+                     : -EBADF;
 }
 
 static void
@@ -233,7 +249,7 @@ syscall_handler_SYS_SEEK (_SYSCALL_HANDLER_ARGS)
               thread_current ()->tid);
       thread_exit ();
     }
-  file_seek (fd_data->file, position);
+  SYNC_VOID (file_seek (fd_data->file, position));
 }
 
 static void
@@ -247,7 +263,7 @@ syscall_handler_SYS_TELL (_SYSCALL_HANDLER_ARGS)
               thread_current ()->tid);
       thread_exit ();
     }
-  if_->eax = file_tell (fd_data->file);
+  if_->eax = SYNC (file_tell (fd_data->file));
 }
 
 static void
@@ -265,7 +281,7 @@ syscall_handler_SYS_CLOSE (_SYSCALL_HANDLER_ARGS)
       thread_exit ();
     }
   struct fd *fd_data = hash_entry (e, struct fd, elem);
-  file_close (fd_data->file);
+  SYNC_VOID (file_close (fd_data->file));
   free (fd_data);
 }
 
