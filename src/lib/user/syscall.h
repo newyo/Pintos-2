@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <debug.h>
+#include <errno.h>
 
 /* Process identifier. */
 typedef int pid_t;
