@@ -108,6 +108,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct hash fds;                    /* open file descriptors */
+    int exit_code;                      /* exit code of the thread */
 #endif
 
     /* Owned by thread.c. */
