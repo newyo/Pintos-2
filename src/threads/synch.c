@@ -287,29 +287,6 @@ struct semaphore_elem
     struct semaphore semaphore;         /* This semaphore. */
   };
 
-static bool
-sema_cmp_priority (const struct list_elem *left_elem,
-                   const struct list_elem *right_elem,
-                   void *prio)
-{
-  // we kindly ignore the 80 columns with best regards to readability ...
-  struct semaphore_elem *left_sema  = list_entry (left_elem, struct semaphore_elem, elem);
-  struct semaphore_elem *right_sema = list_entry (right_elem, struct semaphore_elem, elem);
-  
-  // reverse test if in wrong order
-  if (!list_empty (&left_sema->semaphore.waiters))
-    {
-      ASSERT (list_empty (&left_sema->semaphore.waiters));
-      return !sema_cmp_priority (right_elem, left_elem, prio);
-    }
-    
-  ASSERT (!list_empty (&right_sema->semaphore.waiters));
-  
-  struct list_elem *right_head = list_front (&right_sema->semaphore.waiters);
-  struct thread *right_thread = list_entry (right_head, struct thread, elem);
-  return *(int*)prio > right_thread->priority;
-}
-
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */
