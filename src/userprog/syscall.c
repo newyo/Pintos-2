@@ -3,7 +3,9 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "devices/shutdown.h"
+#include "userprog/pagedir.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -17,6 +19,27 @@ syscall_init (void)
                               void              *arg2 UNUSED, \
                               void              *arg3 UNUSED, \
                               struct intr_frame *if_  UNUSED
+
+static bool
+is_user_memory (void *addr, size_t size)
+{
+  if (size == 0)
+    return true;
+  if (addr >= PHYS_BASE)
+    return false;
+  intptr_t start = (intptr_t) addr;
+  intptr_t end   = start + size;
+  if (end < start)
+    return false;
+  if ((void *) end > PHYS_BASE)
+    return false;
+  struct thread *t = thread_current ();
+  intptr_t i;
+  for (i = start & ~(PGSIZE-1); i < end; i += PGSIZE)
+    if (pagedir_get_page (t->pagedir, (void *) i) == NULL)
+      return false;
+  return true;
+}
 
 static void
 syscall_handler_SYS_HALT (_SYSCALL_HANDLER_ARGS)
@@ -77,8 +100,15 @@ static void
 syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
 {
   // write (*(int *) arg1, *(void **) arg2, *(size_t *) arg3);
-  // TODO
-  putbuf (*(void **) arg2, *(size_t *) arg3);
+  // TODO: mind fd
+  if (!is_user_memory (*(void **) arg2, *(size_t *) arg3))
+    {
+      printf ("Killed %d, because of bad memory usage.\n",
+              thread_current ()->tid);
+      thread_exit ();
+    }
+  else
+    putbuf (*(void **) arg2, *(size_t *) arg3);
 }
 
 static void
