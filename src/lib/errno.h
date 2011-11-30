@@ -3,7 +3,8 @@
 
 // http://pubs.opengroup.org/onlinepubs/9699919799/basedefs/errno.h.html
 // ^\[([A-Z]+)\]\n {4}(.+)  -->  \1, // \2
-enum ERRNO {
+enum
+{
   ESUCCESS = 0,
   
   E2BIG, // Argument list too long.
