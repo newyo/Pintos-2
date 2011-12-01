@@ -70,8 +70,8 @@ static void __attribute__ ((noreturn))
 kill_segv (void)
 {
   struct thread *t = thread_current ();
-  printf ("Killed %d (%.*s), because of bad memory usage.\n",
-          t->tid, sizeof (t->name), t->name);
+  // printf ("Killed %d (%.*s), because of bad memory usage.\n",
+  //         t->tid, sizeof (t->name), t->name);
   thread_exit ();
 }
 
