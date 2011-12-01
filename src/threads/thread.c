@@ -26,6 +26,9 @@
 static struct list ready_list[PRI_MAX + 1];
 
 static struct list sleep_list;
+#ifdef USERPROG
+static struct list zombie_list;
+#endif
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -136,6 +139,9 @@ thread_init (void)
 
   list_init (&all_list);
   list_init (&sleep_list);
+#if USERPROG
+  list_init (&zombie_list);
+#endif
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -364,20 +370,44 @@ thread_tid (void)
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void
-thread_exit (void) 
+thread_exit (void)
 {
   ASSERT (!intr_context ());
+  struct thread *t = thread_current ();
+  
+  intr_disable ();
+  list_remove (&t->allelem);
 
 #ifdef USERPROG
-  process_exit ();
+  if (t->pagedir)
+    {
+      process_exit ();
+      if (t->parent == NULL)
+        t->status = THREAD_DYING;
+      else
+        {
+          t->status = THREAD_ZOMBIE;
+          list_push_back (&zombie_list, &t->elem);
+        }  
+      while (!list_empty (&t->children))
+        {
+          struct thread *child;
+          child = thread_list_entry (list_pop_front (&t->children));
+          child->parent = NULL;
+          if (child->status == THREAD_ZOMBIE)
+            {
+              list_remove (&child->elem);
+              palloc_free_page (child);
+            }
+        }
+    }
+  else
 #endif
+    t->status = THREAD_DYING;
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
-  intr_disable ();
-  list_remove (&thread_current()->allelem);
-  thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
 }
@@ -578,11 +608,15 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice) 
 {
-  ASSERT(-20 <= nice && nice <= 20);
-  thread_current ()->nice = nice;
-
+  if(nice < -20)
+    nice = -20;
+  else if(nice < 20)
+    nice = 20;
+  struct thread *t = thread_current ();
+    
   enum intr_level old_level = intr_disable ();
-  thread_recalculate_priorities (thread_current (), NULL);
+  t->nice = nice;
+  thread_recalculate_priorities (t, NULL);
   intr_set_level (old_level);
 }
 
@@ -877,7 +911,8 @@ thread_schedule_tail (struct thread *prev)
 }
 
 // TODO: we don't need 64 lists ...
-static void reschedule_ready_lists (void)
+static void
+reschedule_ready_lists (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
   

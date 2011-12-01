@@ -19,9 +19,15 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 
+
+struct process_start_aux
+{
+  struct thread *parent;
+  char file_name[PGSIZE - sizeof (struct thread *)];
+};
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-
 
 static unsigned
 fd_hash (const struct hash_elem *e, void *t UNUSED)
@@ -52,20 +58,18 @@ fd_free (struct hash_elem *e, void *aux UNUSED)
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
-  tid_t tid;
-
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  struct process_start_aux *aux = palloc_get_page (0);
+  if (aux == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  aux->parent = thread_current ();
+  strlcpy (aux->file_name, file_name, sizeof (aux->file_name));
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid_t tid = thread_create (file_name, PRI_DEFAULT, start_process, aux);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (aux);
   return tid;
 }
 
@@ -188,8 +192,12 @@ debug_hexdump (void *from, void *to)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *const file_name_)
+start_process (void *const aux_)
 {
+  struct process_start_aux *aux = aux_;
+  ASSERT (aux != NULL);
+  ASSERT (aux->parent != NULL);
+  
   /* Initialize interrupt frame */
   struct intr_frame if_;
   memset (&if_, 0, sizeof (if_));
@@ -198,7 +206,7 @@ start_process (void *const file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   
   /* Trim leading spaces */
-  char *arguments = file_name_;
+  char *arguments = aux->file_name;
   if (!arguments)
     goto failure;
   while (*arguments == ' ')
@@ -275,12 +283,20 @@ start_process (void *const file_name_)
       !elf_stack_push_int (&if_.esp, argc, end) ||
       !elf_stack_push_ptr (&if_.esp, NULL, end))
     goto failure;
-
-  palloc_free_page (file_name_);
-  
+    
   struct thread *t = thread_current ();
+  
+  if (aux->parent->pagedir != NULL)
+    {
+      t->parent = aux->parent;
+      list_push_back (&aux->parent->children, &t->parent_elem);
+    }
+  palloc_free_page (aux_);
+  
   hash_init (&t->fds, fd_hash, fd_less, t);
   t->exit_code = -1;
+  list_elem_init (&t->parent_elem);
+  list_init (&t->children);
   
   // debug_hexdump (if_.esp, start);
 
@@ -294,7 +310,7 @@ start_process (void *const file_name_)
   NOT_REACHED ();
   
 failure:
-  palloc_free_page (file_name_);
+  palloc_free_page (aux_);
   thread_exit ();
 }
 
@@ -319,26 +335,25 @@ process_wait (tid_t child_tid UNUSED)
 void
 process_exit (void)
 {
+  ASSERT (intr_get_level () == INTR_OFF);
+  
   struct thread *cur = thread_current ();
   printf ("%.*s: exit(%d)\n", sizeof (cur->name), cur->name, cur->exit_code);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   uint32_t *pd = cur->pagedir;
-  if (pd != NULL) 
-    {
-      hash_destroy (&cur->fds, fd_free);
-      /* Correct ordering here is crucial.  We must set
-         cur->pagedir to NULL before switching page directories,
-         so that a timer interrupt can't switch back to the
-         process page directory.  We must activate the base page
-         directory before destroying the process's page
-         directory, or our active page directory will be one
-         that's been freed (and cleared). */
-      cur->pagedir = NULL;
-      pagedir_activate (NULL);
-      pagedir_destroy (pd);
-    }
+  hash_destroy (&cur->fds, fd_free);
+  /* Correct ordering here is crucial.  We must set
+     cur->pagedir to NULL before switching page directories,
+     so that a timer interrupt can't switch back to the
+     process page directory.  We must activate the base page
+     directory before destroying the process's page
+     directory, or our active page directory will be one
+     that's been freed (and cleared). */
+  cur->pagedir = NULL;
+  pagedir_activate (NULL);
+  pagedir_destroy (pd);
 }
 
 /* Sets up the CPU for running user code in the current

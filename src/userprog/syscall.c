@@ -132,7 +132,7 @@ syscall_handler_SYS_EXEC (_SYSCALL_HANDLER_ARGS)
   signed len = user_strlen (file);
   if (len < 0)
     kill_segv ();
-  if (len >= sizeof (((struct thread *) 0)->name));
+  if ((unsigned) len >= sizeof (((struct thread *) 0)->name))
     thread_exit ();
   if_->eax = process_execute (file);
 }
@@ -141,7 +141,11 @@ static void
 syscall_handler_SYS_WAIT (_SYSCALL_HANDLER_ARGS)
 {
   // int wait (pid_t);
-  //TODO
+  
+  // TODO: remove yield
+  old_level = intr_disable ();
+  // TODO
+  intr_set_level (old_level);
 }
 
 static void
@@ -370,7 +374,9 @@ syscall_handler_SYS_INUMBER (_SYSCALL_HANDLER_ARGS)
 static void
 syscall_handler (struct intr_frame *if_) 
 {
-  // TODO: ensure readability
+  if (!is_user_memory (if_->esp, 4*sizeof (void *)))
+    kill_segv();
+  
   int  *nr       = &((int   *) if_->esp)[0];
   void *arg1     = &((void **) if_->esp)[1];
   void *arg2     = &((void **) if_->esp)[2];

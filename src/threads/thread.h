@@ -17,6 +17,7 @@ enum thread_status
     THREAD_RUNNING,     /* Running thread. */
     THREAD_READY,       /* Not running but ready to run. */
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
+    THREAD_ZOMBIE,      /* Waiting for parent's wait. Braaaaiiins!! */
     THREAD_DYING        /* About to be destroyed. */
   };
 
@@ -109,6 +110,10 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct hash fds;                    /* open file descriptors */
     int exit_code;                      /* exit code of the thread */
+
+    struct thread *parent;              /* direct parent of thread */
+    struct list children;               /* list of direct children */
+    struct list_elem parent_elem;       /* to be inserted in parent's list */
 #endif
 
     /* Owned by thread.c. */
