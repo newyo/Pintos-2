@@ -19,23 +19,24 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 
-
 struct process_start_aux
 {
-  struct thread *parent;
-  char file_name[PGSIZE - sizeof (struct thread *)];
-};
+  char file_name[PGSIZE];
+} __attribute__ ((packed));
+
+typedef char _CASSERT_SIZEOF_PROCESS_START_AUX_EQ_PGSIZE[
+    0-!(sizeof (struct process_start_aux) == PGSIZE)];
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-static unsigned
+unsigned
 fd_hash (const struct hash_elem *e, void *t UNUSED)
 {
   return (unsigned) hash_entry (e, struct fd, elem)->fd;
 }
 
-static bool
+bool
 fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t UNUSED)
 {
   struct fd *aa = hash_entry (a, struct fd, elem);
@@ -43,7 +44,7 @@ fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t UNUSED)
   return aa->fd < bb->fd;
 }
 
-static void
+void
 fd_free (struct hash_elem *e, void *aux UNUSED)
 {
   struct fd *fd = hash_entry (e, struct fd, elem);
@@ -63,7 +64,6 @@ process_execute (const char *file_name)
   struct process_start_aux *aux = palloc_get_page (0);
   if (aux == NULL)
     return TID_ERROR;
-  aux->parent = thread_current ();
   strlcpy (aux->file_name, file_name, sizeof (aux->file_name));
 
   /* Create a new thread to execute FILE_NAME. */
@@ -196,7 +196,6 @@ start_process (void *const aux_)
 {
   struct process_start_aux *aux = aux_;
   ASSERT (aux != NULL);
-  ASSERT (aux->parent != NULL);
   
   /* Initialize interrupt frame */
   struct intr_frame if_;
@@ -284,19 +283,7 @@ start_process (void *const aux_)
       !elf_stack_push_ptr (&if_.esp, NULL, end))
     goto failure;
     
-  struct thread *t = thread_current ();
-  
-  if (aux->parent->pagedir != NULL)
-    {
-      t->parent = aux->parent;
-      list_push_back (&aux->parent->children, &t->parent_elem);
-    }
   palloc_free_page (aux_);
-  
-  hash_init (&t->fds, fd_hash, fd_less, t);
-  t->exit_code = -1;
-  list_elem_init (&t->parent_elem);
-  list_init (&t->children);
   
   // debug_hexdump (if_.esp, start);
 
@@ -326,9 +313,19 @@ failure:
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  for(;;)
-    continue;
-  return -1;
+  int result = -1;
+  
+  int old_level = intr_disable ();
+  struct thread *t = thread_current ();
+  if (t->parent == NULL)
+    goto end;
+  sema_down (&t->wait_sema);
+  result = t->parent->exit_code;
+  thread_dispel_zombie (t->parent);
+  
+end:
+  intr_set_level (old_level);
+  return result;
 }
 
 /* Free the current process's resources. */

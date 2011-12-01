@@ -276,6 +276,15 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
+  
+#ifdef USERPROG
+  hash_init (&t->fds, fd_hash, fd_less, t);
+  t->exit_code = -1;
+  
+  struct thread *current_thread = thread_current ();
+  t->parent = current_thread;
+  list_push_back (&current_thread->children, &t->parent_elem);
+#endif
 
   intr_set_level (old_level);
 
@@ -381,24 +390,24 @@ thread_exit (void)
 #ifdef USERPROG
   if (t->pagedir)
     {
-      process_exit ();
-      if (t->parent == NULL)
-        t->status = THREAD_DYING;
-      else
-        {
-          t->status = THREAD_ZOMBIE;
-          list_push_back (&zombie_list, &t->elem);
-        }  
       while (!list_empty (&t->children))
         {
           struct thread *child;
           child = thread_list_entry (list_pop_front (&t->children));
           child->parent = NULL;
           if (child->status == THREAD_ZOMBIE)
-            {
-              list_remove (&child->elem);
-              palloc_free_page (child);
-            }
+            thread_dispel_zombie (child);
+        }
+        
+      process_exit ();
+      
+      if (t->parent == NULL)
+        t->status = THREAD_DYING;
+      else
+        {
+          t->status = THREAD_ZOMBIE;
+          list_push_back (&zombie_list, &t->elem);
+          sema_up (&t->wait_sema);
         }
     }
   else
@@ -410,6 +419,17 @@ thread_exit (void)
      when it calls thread_schedule_tail(). */
   schedule ();
   NOT_REACHED ();
+}
+
+void
+thread_dispel_zombie (struct thread *t)
+{
+  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (is_thread (t));
+  ASSERT (t->status == THREAD_ZOMBIE);
+  
+  list_remove (&t->elem);
+  palloc_free_page (t);
 }
 
 /* Yields the CPU.  The current thread is not put to sleep and
@@ -821,6 +841,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   list_init (&t->lock_list);
   list_push_back (&all_list, &t->allelem);
+  
+#ifdef USERPROG
+  list_elem_init (&t->parent_elem);
+  list_init (&t->children);
+  sema_init (&t->wait_sema, 0);
+#endif
   
   if (!thread_mlfqs)
     {

@@ -7,6 +7,7 @@
 
 #ifdef USERPROG
 #include <hash.h>
+#include "synch.h"
 #endif
 
 #include "fixed-point.h"
@@ -114,6 +115,7 @@ struct thread
     struct thread *parent;              /* direct parent of thread */
     struct list children;               /* list of direct children */
     struct list_elem parent_elem;       /* to be inserted in parent's list */
+    struct semaphore wait_sema;         /* semaphore the parent waits for */
 #endif
 
     /* Owned by thread.c. */
@@ -167,5 +169,9 @@ bool thread_cmp_priority (const struct list_elem *a,
 
 extern const uint32_t thread_stack_ofs;
 fp_t thread_load_avg;
+
+#ifdef USERPROG
+void thread_dispel_zombie (struct thread *t);
+#endif
 
 #endif /* threads/thread.h */

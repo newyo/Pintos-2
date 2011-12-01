@@ -118,7 +118,7 @@ static void
 syscall_handler_SYS_EXIT (_SYSCALL_HANDLER_ARGS)
 {
   // void exit (int status) NO_RETURN;
-  // TODO: waiters?
+  
   thread_current ()->exit_code = *(int *) arg1;
   thread_exit ();
 }
@@ -142,10 +142,8 @@ syscall_handler_SYS_WAIT (_SYSCALL_HANDLER_ARGS)
 {
   // int wait (pid_t);
   
-  // TODO: remove yield
-  old_level = intr_disable ();
-  // TODO
-  intr_set_level (old_level);
+  tid_t child = *(tid_t *) arg1;
+  if_->eax = process_wait (child);
 }
 
 static void
