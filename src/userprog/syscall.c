@@ -65,11 +65,10 @@ is_user_memory (const void *addr, unsigned size)
   return true;
 }
 
-
 static void __attribute__ ((noreturn))
 kill_segv (void)
 {
-  struct thread *t = thread_current ();
+  //struct thread *t = thread_current ();
   // printf ("Killed %d (%.*s), because of bad memory usage.\n",
   //         t->tid, sizeof (t->name), t->name);
   thread_exit ();
