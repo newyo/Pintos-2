@@ -67,12 +67,7 @@ process_execute (const char *file_name)
   strlcpy (aux->file_name, file_name, sizeof (aux->file_name));
 
   /* Create a new thread to execute FILE_NAME. */
-  char program_name[sizeof (((struct thread *) 0)->name)];
-  strlcpy (program_name, file_name, sizeof (program_name));
-  char *c = strchr (program_name, ' ');
-  if (c)
-    c = '\0';
-  tid_t tid = thread_create (program_name, PRI_DEFAULT, start_process, aux);
+  tid_t tid = thread_create (file_name, PRI_DEFAULT, start_process, aux);
   if (tid == TID_ERROR)
     palloc_free_page (aux);
   return tid;
