@@ -233,11 +233,6 @@ start_process (void *const aux_)
   char *const start = if_.esp;
   char *const end = start - PGSIZE;
   
-  // placeholder to push the name to
-  if (!elf_stack_push_ptr (&if_.esp, NULL, end))
-    goto failure;
-  char **const exe_placeholder = if_.esp;
-  
   // pushing the untokenized arguments
   if (arguments && *arguments)
     if (!elf_stack_push_str (&if_.esp, arguments, end))
@@ -261,14 +256,15 @@ start_process (void *const aux_)
   // tokenizing, pushing and counting arguments
   int argc = 1;
   char *arg, *save_ptr;
-  for (arg = strtok_r (arg_ptr_arguments, " ", &save_ptr);
-       arg;
-       arg = strtok_r (NULL, " ", &save_ptr))
-    {
-      ++argc;
-      if (!elf_stack_push_ptr (&if_.esp, arg, end))
-        goto failure;
-    }
+  if (arguments && *arguments)
+    for (arg = strtok_r (arg_ptr_arguments, " ", &save_ptr);
+         arg;
+         arg = strtok_r (NULL, " ", &save_ptr))
+      {
+        ++argc;
+        if (!elf_stack_push_ptr (&if_.esp, arg, end))
+          goto failure;
+      }
   char **argv_end = if_.esp;
     
   //swap reverse ordered argv pointers in place
@@ -284,8 +280,6 @@ start_process (void *const aux_)
       !elf_stack_push_int (&if_.esp, argc, end) ||
       !elf_stack_push_ptr (&if_.esp, NULL, end))
     goto failure;
-    
-  *exe_placeholder = arg_ptr_exe;
   
   palloc_free_page (aux_);
   
@@ -339,8 +333,9 @@ process_exit (void)
   ASSERT (intr_get_level () == INTR_OFF);
   
   struct thread *cur = thread_current ();
-  printf ("%s: exit(%d)\n", *((char **) PHYS_BASE - 1),
-                            cur->exit_code);
+  const char *c = strchr (cur->name, ' ');
+  int name_len = c ? (int) (c-cur->name) : sizeof (cur->name);
+  printf ("%.*s: exit(%d)\n", name_len, cur->name, cur->exit_code);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
