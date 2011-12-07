@@ -435,6 +435,8 @@ thread_dispel_zombie (struct thread *t)
   ASSERT (is_thread (t));
   ASSERT (t->status == THREAD_ZOMBIE);
   
+  if (t->parent != NULL)
+    list_remove (&t->parent_elem);
   list_remove (&t->elem);
   palloc_free_page (t);
 }
