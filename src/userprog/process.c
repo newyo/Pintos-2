@@ -305,21 +305,23 @@ failure:
    child of the calling process, or if process_wait() has already
    been successfully called for the given TID, returns -1
    immediately, without waiting.
-
-   This function will be implemented in problem 2-2.  For now, it
-   does nothing. */
+*/
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
   int result = -1;
   
   int old_level = intr_disable ();
-  struct thread *t = thread_current ();
-  if (t->parent == NULL)
+  struct thread *child = thread_find_tid (child_tid);
+  if (!child)
     goto end;
-  sema_down (&t->wait_sema);
-  result = t->parent->exit_code;
-  thread_dispel_zombie (t->parent);
+  struct thread *current = thread_current ();
+  if (child->parent != current)
+    goto end;
+  sema_down (&child->wait_sema);
+  
+  result = child->exit_code;
+  thread_dispel_zombie (child);
   
 end:
   intr_set_level (old_level);
@@ -333,8 +335,10 @@ process_exit (void)
   ASSERT (intr_get_level () == INTR_OFF);
   
   struct thread *cur = thread_current ();
-  const char *c = strchr (cur->name, ' ');
-  int name_len = c ? (int) (c-cur->name) : sizeof (cur->name);
+  
+  // The Pintos tests want us to display the exit code once exited
+  const char *c = strchr (cur->name, ' '); // find space in arguments line if exists
+  int name_len = c != NULL ? (int) (c - cur->name) : sizeof (cur->name);
   printf ("%.*s: exit(%d)\n", name_len, cur->name, cur->exit_code);
 
   /* Destroy the current process's page directory and switch back
