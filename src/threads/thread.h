@@ -170,6 +170,8 @@ bool thread_cmp_priority (const struct list_elem *a,
 extern const uint32_t thread_stack_ofs;
 fp_t thread_load_avg;
 
+struct thread *thread_find_tid (tid_t t);
+
 #ifdef USERPROG
 void thread_dispel_zombie (struct thread *t);
 #endif
