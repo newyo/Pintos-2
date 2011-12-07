@@ -232,11 +232,6 @@ start_process (void *const aux_)
   
   char *const end = if_.esp - PGSIZE;
   
-  // pushing an empty string not to crash if argv[argc] was referenced
-  if (!elf_stack_push_str (&if_.esp, "", end))
-    goto failure;
-  char *const arg_ptr_terminator = if_.esp;
-  
   // pushing the untokenized arguments
   if (!elf_stack_push_str (&if_.esp, arguments, end))
     goto failure;
@@ -248,10 +243,10 @@ start_process (void *const aux_)
   char *const arg_ptr_exe = if_.esp;
     
   //**************** STARTING ARGV ARRAY: *************************************
-  // Pushing pointers to the terminator and the executable.
+  // Pushing a NULL pointer as a terminator to argv.
   // Further on exe and the argument pointers will be push in reverse order.
   // After everything was pushed the arvs items will be reversed inplace.
-  if (!elf_stack_push_ptr (&if_.esp, arg_ptr_terminator, end) ||
+  if (!elf_stack_push_ptr (&if_.esp, NULL, end) ||
       !elf_stack_push_ptr (&if_.esp, arg_ptr_exe, end))
     goto failure;
   char **const argv_start = if_.esp;
@@ -442,7 +437,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
-bool
+static bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
