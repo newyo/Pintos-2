@@ -376,6 +376,33 @@ thread_tid (void)
   return thread_current ()->tid;
 }
 
+static void
+exit_user_proc (struct thread *t)
+{
+  ASSERT (intr_get_level () == INTR_OFF);
+  
+  // when the parent dies, all children must be disposed
+  while (!list_empty (&t->children))
+    {
+      struct thread *child;
+      child = thread_list_entry (list_pop_front (&t->children));
+      child->parent = NULL;
+      if (child->status == THREAD_ZOMBIE)
+        thread_dispel_zombie (child);
+    }
+    
+  process_exit ();
+  
+  if (t->parent == NULL)
+    t->status = THREAD_DYING;
+  else
+    {
+      list_push_back (&zombie_list, &t->elem);
+      sema_up (&t->wait_sema);
+      t->status = THREAD_ZOMBIE;
+    }
+}
+
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void
@@ -389,27 +416,7 @@ thread_exit (void)
 
 #ifdef USERPROG
   if (t->pagedir)
-    {
-      while (!list_empty (&t->children))
-        {
-          struct thread *child;
-          child = thread_list_entry (list_pop_front (&t->children));
-          child->parent = NULL;
-          if (child->status == THREAD_ZOMBIE)
-            thread_dispel_zombie (child);
-        }
-        
-      process_exit ();
-      
-      if (t->parent == NULL)
-        t->status = THREAD_DYING;
-      else
-        {
-          t->status = THREAD_ZOMBIE;
-          list_push_back (&zombie_list, &t->elem);
-          sema_up (&t->wait_sema);
-        }
-    }
+    exit_user_proc (t);
   else
 #endif
     t->status = THREAD_DYING;
