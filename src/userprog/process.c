@@ -230,11 +230,18 @@ start_process (void *const aux_)
   if (!load (exe, &if_.eip, &if_.esp))
     goto failure;
   
-  char *const end = if_.esp - PGSIZE;
+  char *const start = if_.esp;
+  char *const end = start - PGSIZE;
+  
+  // placeholder to push the name to
+  if (!elf_stack_push_ptr (&if_.esp, NULL, end))
+    goto failure;
+  char **const exe_placeholder = if_.esp;
   
   // pushing the untokenized arguments
-  if (!elf_stack_push_str (&if_.esp, arguments, end))
-    goto failure;
+  if (arguments && *arguments)
+    if (!elf_stack_push_str (&if_.esp, arguments, end))
+      goto failure;
   char *const arg_ptr_arguments = if_.esp;
   
   // pushing the exe name
@@ -278,9 +285,11 @@ start_process (void *const aux_)
       !elf_stack_push_ptr (&if_.esp, NULL, end))
     goto failure;
     
+  *exe_placeholder = arg_ptr_exe;
+  
   palloc_free_page (aux_);
   
-  // debug_hexdump (if_.esp, start);
+  //debug_hexdump (if_.esp, start);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -330,7 +339,8 @@ process_exit (void)
   ASSERT (intr_get_level () == INTR_OFF);
   
   struct thread *cur = thread_current ();
-  printf ("%.*s: exit(%d)\n", sizeof (cur->name), cur->name, cur->exit_code);
+  printf ("%s: exit(%d)\n", *((char **) PHYS_BASE - 1),
+                            cur->exit_code);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
