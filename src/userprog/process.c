@@ -338,7 +338,7 @@ process_exit (void)
   
   // The Pintos tests want us to display the exit code once exited
   const char *c = strchr (cur->name, ' '); // find space in arguments line if exists
-  int name_len = c != NULL ? (int) (c - cur->name) : sizeof (cur->name);
+  int name_len = c != NULL ? (int) (c - cur->name) : (int) sizeof (cur->name);
   printf ("%.*s: exit(%d)\n", name_len, cur->name, cur->exit_code);
 
   /* Destroy the current process's page directory and switch back
