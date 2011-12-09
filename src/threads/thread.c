@@ -380,42 +380,6 @@ thread_tid (void)
   return thread_current ()->tid;
 }
 
-static void
-exit_user_proc (struct thread *t)
-{
-  ASSERT (intr_get_level () == INTR_OFF);
-  
-  // when the parent dies, all children must be disposed
-  while (!list_empty (&t->children))
-    {
-      struct thread *child;
-      child = thread_list_entry (list_pop_front (&t->children));
-      if (child->status == THREAD_ZOMBIE)
-        thread_dispel_zombie (child);
-      else
-        child->parent = NULL;
-    }
-    
-  process_exit ();
-  
-  if (t->parent == NULL)
-    {
-      ASSERT (!list_is_interior (&t->parent_elem));
-      
-      list_push_back (&zombie_list, &t->elem);
-      t->status = THREAD_ZOMBIE;
-      thread_dispel_zombie (t);
-    }
-  else
-    {
-      ASSERT (list_is_interior (&t->parent_elem));
-      
-      list_push_back (&zombie_list, &t->elem);
-      sema_up (&t->wait_sema);
-      t->status = THREAD_ZOMBIE;
-    }
-}
-
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void
@@ -428,11 +392,41 @@ thread_exit (void)
   list_remove (&t->allelem);
 
 #ifdef USERPROG
+  // when the parent dies, all children must be disposed
+  while (!list_empty (&t->children))
+    {
+      struct thread *child = list_entry (list_pop_front (&t->children),
+                                         struct thread, parent_elem);
+      ASSERT (is_thread (child));
+      
+      if (child->status == THREAD_ZOMBIE)
+        thread_dispel_zombie (child);
+      else
+        child->parent = NULL;
+    }
+    
   if (t->pagedir)
-    exit_user_proc (t);
+    {
+      process_exit ();
+      t->pagedir = NULL;
+    }
+  
+  if (t->parent == NULL)
+    {
+      ASSERT (!list_is_interior (&t->parent_elem));
+      t->status = THREAD_DYING;
+    }
   else
+    {
+      ASSERT (list_is_interior (&t->parent_elem));
+      
+      list_push_back (&zombie_list, &t->elem);
+      sema_up (&t->wait_sema);
+      t->status = THREAD_ZOMBIE;
+    }
+#else
+  t->status = THREAD_DYING;
 #endif
-    t->status = THREAD_DYING;
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us

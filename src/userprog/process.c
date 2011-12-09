@@ -18,10 +18,14 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 
 struct process_start_aux
 {
-  char file_name[PGSIZE];
+  struct semaphore *sema;
+  bool *failed;
+  
+  char file_name[PGSIZE - 2*sizeof (void *)];
 } __attribute__ ((packed));
 
 typedef char _CASSERT_SIZEOF_PROCESS_START_AUX_EQ_PGSIZE[
@@ -65,12 +69,20 @@ process_execute (const char *file_name)
   if (aux == NULL)
     return TID_ERROR;
   strlcpy (aux->file_name, file_name, sizeof (aux->file_name));
+  
+  volatile bool failed = true;
+  aux->failed = &failed;
+  struct semaphore sema;
+  sema_init (&sema, 0);
+  aux->sema = &sema;
 
   /* Create a new thread to execute FILE_NAME. */
   tid_t tid = thread_create (file_name, PRI_DEFAULT, start_process, aux);
   if (tid == TID_ERROR)
     palloc_free_page (aux);
-  return tid;
+  else
+    sema_down (&sema);
+  return failed ? TID_ERROR : tid;
 }
 
 // per definitionem:
@@ -281,6 +293,8 @@ start_process (void *const aux_)
       !elf_stack_push_ptr (&if_.esp, NULL, end))
     goto failure;
   
+  *aux->failed = 0;
+  sema_up (aux->sema);
   palloc_free_page (aux_);
   
   //debug_hexdump (if_.esp, start);
@@ -295,6 +309,8 @@ start_process (void *const aux_)
   NOT_REACHED ();
   
 failure:
+  *aux->failed = 1;
+  sema_up (aux->sema);
   palloc_free_page (aux_);
   thread_exit ();
 }
