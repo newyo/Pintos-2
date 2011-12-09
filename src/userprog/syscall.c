@@ -136,7 +136,7 @@ syscall_handler_SYS_EXEC (_SYSCALL_HANDLER_ARGS)
   signed len = user_strlen (file);
   if (len < 0)
     kill_segv ();
-  if_->eax = process_execute (file);
+  if_->eax = SYNC (process_execute (file));
 }
 
 static void
@@ -250,6 +250,8 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
   unsigned fd = *(unsigned *) arg1;
   char *buffer = *(void **) arg2;
   unsigned length = *(unsigned *) arg3;
+  
+  // TODO: handle fd == 0, read from console ("serial port")
   
   if (!is_user_memory (buffer, length))
     kill_segv ();
