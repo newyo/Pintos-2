@@ -116,6 +116,9 @@ struct thread
     struct list children;               /* list of direct children */
     struct list_elem parent_elem;       /* to be inserted in parent's list */
     struct semaphore wait_sema;         /* semaphore the parent waits for */
+    
+    struct file *executable;            /* for rox, executable it was loaded */
+                                        /* from */
 #endif
 
     /* Owned by thread.c. */
@@ -174,6 +177,7 @@ struct thread *thread_find_tid (tid_t t);
 
 #ifdef USERPROG
 void thread_dispel_zombie (struct thread *t);
+bool thread_is_file_currently_executed (struct file *f);
 #endif
 
 #endif /* threads/thread.h */

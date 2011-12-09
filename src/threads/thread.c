@@ -14,6 +14,7 @@
 #include "../devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "filesys/file.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -1057,6 +1058,32 @@ thread_find_tid (tid_t tid)
     }
 
 end:
+  intr_set_level (old_level);
+  return result;
+}
+
+bool
+thread_is_file_currently_executed (struct file *f)
+{
+  ASSERT (f != NULL);
+  int old_level = intr_disable ();
+  
+  struct inode *inode = file_get_inode (f);
+  bool result = false;
+  
+  struct list_elem *e;
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+      ASSERT (is_thread (t));
+      
+      if (t->executable && inode == file_get_inode (t->executable))
+        {
+          result = true;
+          break;
+        }
+    }
   intr_set_level (old_level);
   return result;
 }

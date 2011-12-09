@@ -290,8 +290,17 @@ syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
     }
   
   struct fd *fd_data = retrieve_fd (fd);
-  if_->eax = fd_data ? SYNC (file_write (fd_data->file, buffer, length))
-                     : -EBADF;
+  if (fd_data)
+    {
+      lock_acquire (&filesys_lock);
+      if (!thread_is_file_currently_executed (fd_data->file))
+        if_->eax = file_write (fd_data->file, buffer, length);
+      else
+        if_->eax = 0; // returning 0 does not make any sense at all
+      lock_release (&filesys_lock);
+    }
+  else
+    if_->eax = -EBADF;
 }
 
 static void

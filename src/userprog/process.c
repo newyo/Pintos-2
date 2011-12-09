@@ -336,6 +336,12 @@ process_exit (void)
   
   struct thread *cur = thread_current ();
   
+  if (cur->executable)
+    {
+      file_close (cur->executable);
+      cur->executable = NULL;
+    }
+  
   // The Pintos tests want us to display the exit code once exited
   const char *c = strchr (cur->name, ' '); // find space in arguments line if exists
   int name_len = c != NULL ? (int) (c - cur->name) : (int) sizeof (cur->name);
@@ -469,6 +475,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+  t->executable = file; // file will be closed by process_exit
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -553,7 +560,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 
