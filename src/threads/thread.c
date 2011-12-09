@@ -436,6 +436,7 @@ thread_exit (void)
   NOT_REACHED ();
 }
 
+#ifdef USERPROG
 void
 thread_dispel_zombie (struct thread *t)
 {
@@ -454,6 +455,7 @@ thread_dispel_zombie (struct thread *t)
   list_remove (&t->elem);
   palloc_free_page (t);
 }
+#endif
 
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
@@ -1039,7 +1041,8 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 const uint32_t thread_stack_ofs = offsetof (struct thread, stack);
-  
+
+#ifdef USERPROG
 struct thread *
 thread_find_tid (tid_t tid)
 {
@@ -1100,3 +1103,4 @@ thread_is_file_currently_executed (struct file *f)
   intr_set_level (old_level);
   return result;
 }
+#endif
