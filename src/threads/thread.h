@@ -112,11 +112,11 @@ struct thread
     struct hash fds;                    /* open file descriptors */
     int exit_code;                      /* exit code of the thread */
 
+    /* Shared between thread.c and userprog/process.c. */
     struct thread *parent;              /* direct parent of thread */
     struct list children;               /* list of direct children */
     struct list_elem parent_elem;       /* to be inserted in parent's list */
     struct semaphore wait_sema;         /* semaphore the parent waits for */
-    
     struct file *executable;            /* for rox, executable it was loaded */
                                         /* from */
 #endif
