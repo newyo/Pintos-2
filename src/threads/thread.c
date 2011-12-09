@@ -390,17 +390,26 @@ exit_user_proc (struct thread *t)
     {
       struct thread *child;
       child = thread_list_entry (list_pop_front (&t->children));
-      child->parent = NULL;
       if (child->status == THREAD_ZOMBIE)
         thread_dispel_zombie (child);
+      else
+        child->parent = NULL;
     }
     
   process_exit ();
   
   if (t->parent == NULL)
-    t->status = THREAD_DYING;
+    {
+      ASSERT (!list_is_interior (&t->parent_elem));
+      
+      list_push_back (&zombie_list, &t->elem);
+      t->status = THREAD_ZOMBIE;
+      thread_dispel_zombie (t);
+    }
   else
     {
+      ASSERT (list_is_interior (&t->parent_elem));
+      
       list_push_back (&zombie_list, &t->elem);
       sema_up (&t->wait_sema);
       t->status = THREAD_ZOMBIE;
