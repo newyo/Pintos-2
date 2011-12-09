@@ -398,6 +398,7 @@ thread_exit (void)
       struct thread *child = list_entry (list_pop_front (&t->children),
                                          struct thread, parent_elem);
       ASSERT (is_thread (child));
+      ASSERT (child->parent == t);
       
       if (child->status == THREAD_ZOMBIE)
         thread_dispel_zombie (child);
@@ -652,7 +653,7 @@ thread_set_nice (int nice)
 {
   if(nice < -20)
     nice = -20;
-  else if(nice < 20)
+  else if(nice > 20)
     nice = 20;
   struct thread *t = thread_current ();
     
