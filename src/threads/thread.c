@@ -109,6 +109,9 @@ ready_lists_arent_messed_up (void)
   int prio;
   for (prio = PRI_MIN; prio <= PRI_MAX; ++prio)
     list_foldl (&ready_list[prio], ready_lists_arent_messed_up_sub, NULL);
+#ifdef USERPROG
+  list_foldl (&zombie_list, ready_lists_arent_messed_up_sub, NULL);
+#endif
   return true;
 }
 
@@ -436,8 +439,14 @@ thread_dispel_zombie (struct thread *t)
   ASSERT (is_thread (t));
   ASSERT (t->status == THREAD_ZOMBIE);
   
-  if (t->parent != NULL)
-    list_remove (&t->parent_elem);
+  if (t->parent)
+    {
+      ASSERT (list_is_interior (&t->parent_elem));
+      list_remove (&t->parent_elem);
+    }
+  else
+    ASSERT (!list_is_interior (&t->parent_elem));
+  
   list_remove (&t->elem);
   palloc_free_page (t);
 }
