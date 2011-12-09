@@ -373,3 +373,12 @@ strlcat (char *dst, const char *src, size_t size)
   return src_len + dst_len;
 }
 
+char *
+strchrnul (const char *s, char c)
+{
+  ASSERT (s != NULL);
+  
+  while (*s && *s != c)
+    ++s;
+  return s;
+}

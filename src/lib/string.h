@@ -32,4 +32,7 @@ size_t strnlen (const char *, size_t);
 #define strncat dont_use_strncat_use_strlcat
 #define strtok dont_use_strtok_use_strtok_r
 
+/* GNU extensions */
+char *strchrnul (const char *, char);
+
 #endif /* lib/string.h */
