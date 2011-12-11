@@ -8,18 +8,21 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Christian Mehlis   <mehlis@inf.fu-berlin.de>
+René Kijewski    <kijewski@inf.fu-berlin.de>
 
 ---- PRELIMINARIES ----
 
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+n/v
+
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
+
+n/v
 
 			   ARGUMENT PASSING
 			   ================
@@ -30,19 +33,45 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+TODO
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+(Zeile 5 enthält die wichtige Eigenschaft.)
+
+1) Zuerst wird der Exe-Name gepushed, Adresse e_ptr gemerkt.
+2) Die Argumente werden untokenized gepushed, Adresse a_ptr gemerkt.
+3) e_ptr wird gepushed.
+4) Die Argumente werden im Stack tokenized
+ .1) Die jeweiligen Adressen werden gepushed.
+ .2) argc inkrementiert
+5) Die pointer im argv werden inplace von vorne nach hinten geswapped.
+   (a_0 <-> a_(n-1), a_1 <-> a_(n_2) ...)
+6) Derzeitigen ESP wird gepushed (-> Adresse des argv)
+7) argc wird gepushed.
+
+Overflowing:
+1) Wir merken uns einen Pointer auf das Ende vom Stack.
+2) Alle Pushes auf den Stack (Pointer, Strings, Integers) gegen durch eine
+   Helferfunktion.
+3) Es wird vorab getestet, ob n Bytes auf dem Stack noch Platz haben.
+4) Der SP wird um diese Größe (auf Wordboundary aligned) dekrementiert.
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
+TODO
+
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
+
+TODO
 
 			     SYSTEM CALLS
 			     ============
@@ -53,14 +82,22 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+TODO
+
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
+
+FDs sind einmalig innerhalb eines Prozesses.
+Jeder Prozess hat eine Hashtable [int -> struct file*] der offenen FDs.
+In struct thread wird diese FD-Tabelle untergebracht.
 
 ---- ALGORITHMS ----
 
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
+
+TODO
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -69,8 +106,17 @@ FirstName LastName <email@domain.example>
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
+Wenn die 4096 Bytes eine Speicherseite umfassen, wird pagedir_get_page nur
+einmal aufgerufen; spannen die 4096B über zwei Seiten, wird pagedir_get_page
+auch zwei mal aufgerufen.
+Für zwei Bytes äquivalent.
+Unsere Implementierung ist das technische Optimum; es sind keine Verbesserungen
+möglich (ohne die Implementierung der Pagedir anzufassen).
+
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
+
+TODO
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -86,12 +132,20 @@ FirstName LastName <email@domain.example>
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
+TODO
+
 ---- SYNCHRONIZATION ----
 
 >> B7: The "exec" system call returns -1 if loading the new executable
 >> fails, so it cannot return before the new executable has completed
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
+
+In process_execute wird eine Semaphore mit Wert 0 angelegt, die start_process
+übergeben wird. start_process erhält einen Pointer, den den der Erfolgswert
+geschrieben wird.
+Der Vaterprozess downed die Semaphore, wenn thread_create keinen Fehlerwert
+zurück gibt. Die Semaphore wird in start_process ge-upped.
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
@@ -100,16 +154,25 @@ FirstName LastName <email@domain.example>
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
+TODO
+
 ---- RATIONALE ----
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
+Das war die erste Möglichkeit, die uns einfiel.
+Nach Nachdenken war uns aufgfallen, dass sie optimal ist.
+
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
+TODO
+
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+
+TODO
 
 			   SURVEY QUESTIONS
 			   ================
@@ -123,14 +186,24 @@ the quarter.
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
+n/v
+
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+
+n/v
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
 
+n/v
+
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters or the remaining projects?
 
+n/v
+
 >> Any other comments?
+
+n/v
