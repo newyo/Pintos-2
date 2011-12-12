@@ -47,19 +47,19 @@ syscall_init (void)
 static bool
 is_user_memory (const void *addr, unsigned size)
 {
-  if (size == 0)
+  if (size == 0) // nothing to read
     return true;
-  if (addr >= PHYS_BASE)
+  if (addr >= PHYS_BASE) // start points to kernelspace
     return false;
   intptr_t start = (intptr_t) addr;
   intptr_t end   = start + size;
-  if (end < start)
+  if (end < start) // we have an overflow, cannot be a valid pointer
     return false;
-  if ((void *) end > PHYS_BASE)
+  if ((void *) end > PHYS_BASE) // end points to kernelspace
     return false;
   struct thread *t = thread_current ();
   intptr_t i;
-  for (i = start & ~(PGSIZE-1); i < end; i += PGSIZE)
+  for (i = start & ~(PGSIZE-1); i < end; i += PGSIZE) // look for all tangented pages
     if (pagedir_get_page (t->pagedir, (void *) i) == NULL)
       return false;
   return true;
@@ -69,9 +69,6 @@ is_user_memory (const void *addr, unsigned size)
 static void __attribute__ ((noreturn))
 kill_segv (void)
 {
-  //struct thread *t = thread_current ();
-  // printf ("Killed %d (%.*s), because of bad memory usage.\n",
-  //         t->tid, sizeof (t->name), t->name);
   thread_exit ();
 }
 
