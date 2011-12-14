@@ -14,10 +14,11 @@
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "lib/user/syscall.h"
+#include "devices/input.h"
 
 static void syscall_handler (struct intr_frame *);
 
-static struct lock filesys_lock;
+static struct lock filesys_lock, stdin_lock;
 
 #define SYNC(WHAT)              \
 ({                              \
@@ -36,6 +37,7 @@ void
 syscall_init (void) 
 {
   lock_init (&filesys_lock);
+  lock_init (&stdin_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -248,17 +250,33 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
   char *buffer = *(void **) arg2;
   unsigned length = *(unsigned *) arg3;
   
-  // TODO: handle fd == 0, read from console ("serial port")
-  
   if (!is_user_memory (buffer, length))
     kill_segv ();
-  struct fd *fd_data = retrieve_fd (fd);
-  if (!fd_data)
+    
+  if (fd != 0)
     {
-      if_->eax = -EBADF;
-      return;
+      struct fd *fd_data = retrieve_fd (fd);
+      if (!fd_data)
+        {
+          if_->eax = -EBADF;
+          return;
+        }
+      if_->eax = SYNC (file_read (fd_data->file, buffer, length));
     }
-  if_->eax = SYNC (file_read (fd_data->file, buffer, length));
+  else
+    {
+      char *dest = buffer;
+      int result = 0;
+      lock_acquire (&stdin_lock);
+      while (input_full () && (unsigned) result < length)
+        {
+          *dest = input_getc ();
+          ++dest;
+          ++result;
+        }
+      *dest = '\0';
+      lock_release (&stdin_lock);
+    }
 }
 
 static void
