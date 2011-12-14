@@ -33,7 +33,8 @@ n/v
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-TODO
+process.c: +=  struct process_start_aux:
+Wird zwischen process_execute und start_process geteilt: Aufrufzeile und Ergebnis, ob Starten klappte oder nicht.
 
 ---- ALGORITHMS ----
 
@@ -65,7 +66,11 @@ Overflowing:
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
-TODO
+strtok ist nicht nebenläufig benutzbar, da globale Variablen benutzt werden.
+Im normalen Programmkontext bedeutet "global" = "prozessweit".
+In Pintos heißt "global" = "systemweit".
+Ein Prozess kännte sich also nicht auf ein deterministisches Ergebnis von strtok verlassen.
+Im Kernelmode müssten immer die Interrupts disabled werden, nur um einen String zu tokenizen.
 
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
@@ -82,7 +87,40 @@ TODO
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-TODO
+synch.h:  struct rwlock:
+ein Read-Write-Lock, doch nicht benutzt
+
+thread.h: enum thread_status:
++= THREAD_ZOMBIE (exit'ed, aber noch nicht darauf gewartet)
+
+thread.h: struct thread:
++= struct hash fds
+Hashtabelle [int -> struct fd*] der offenen Dateideskriptoren
++= int exit_code
+Gespeicherter Wert, der bei wait zurückgegeben wird.
++= struct thread *parent
+Direkter Elter des Threads, NULL wenn Elter exit'd
++= struct list children
+Liste der direkten Kinder, auf die noch nicht gewaited wurde
++= struct list_elem parent_elem
+Zum Einfügen in struct list children
++= struct semaphore wait_sema
+Parent downed diese Sema beim Warten, Kind upped sie beim exiten
++= struct file *executable
+Datei, aus der der Prozess geladen wurde
+
+thread.c:
++= static struct list zombie_list:
+Liste von struct thread*, die Status THREAD_ZOMBIE haben (→ aus struct all_list entfernt sind)
+
+process.h: += struct fd:
+Für Mapping [int -> struct file*] in struct thread::fds
+
+syscall.c:
++= static struct filesys_lock:
+Lock für den exkl. Zugriff auf das Dateisystem in den Syscallhandlern
++= static struct stdin_lock:
+Lock, damit nur ein Prozess auf einmal mit read(0) von der seriellen Schnittstelle liest
 
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
@@ -97,7 +135,15 @@ In struct thread wird diese FD-Tabelle untergebracht.
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
 
-TODO
+process.c:
++= static bool is_user_memory (const void *addr, unsigned size):
+Guckt, ob der komplette Bereich [addr, addr+size) im Userspace und alloziert sind.
++= static signed user_strlen (const char *c):
+Wie strlen, beachtet aber, ob der Bereich im Userspace und alloziert ist.
++= unsigned fd_hash (const struct hash_elem *e, void *t),
++= bool fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t),
++= void fd_free (struct hash_elem *e, void *aux):
+Für struct thread::fds
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -116,7 +162,8 @@ möglich (ohne die Implementierung der Pagedir anzufassen).
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
 
-TODO
+In struct thread wird int exit_code gesetzt und struct semaphore wait_sema geuppt, wenn der Prozess beendet.
+Ein sterbender Prozess wird ein Zombie; das wait treibt den Zombie aus.
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
