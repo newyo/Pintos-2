@@ -51,15 +51,15 @@ Wird zwischen process_execute und start_process geteilt: Aufrufzeile und Ergebni
  .1) Die jeweiligen Adressen werden gepushed.
  .2) argc inkrementiert
 5) Die pointer im argv werden inplace von vorne nach hinten geswapped.
-   (a_0 <-> a_(n-1), a_1 <-> a_(n_2) ...)
+   (a_0 <-> a_(n-1), a_1 <-> a_(n-2) ...)
 6) Derzeitigen ESP wird gepushed (-> Adresse des argv)
 7) argc wird gepushed.
 
 Overflowing:
 1) Wir merken uns einen Pointer auf das Ende vom Stack.
-2) Alle Pushes auf den Stack (Pointer, Strings, Integers) gegen durch eine
+2) Alle Pushes auf den Stack (Pointer, Strings, Integers) gehen durch eine
    Helferfunktion.
-3) Es wird vorab getestet, ob n Bytes auf dem Stack noch Platz haben.
+3) Es wird vorab getestet, ob noch n Bytes auf dem Stack verfügbar sind.
 4) Der SP wird um diese Größe (auf Wordboundary aligned) dekrementiert.
 
 ---- RATIONALE ----
@@ -69,14 +69,14 @@ Overflowing:
 strtok ist nicht nebenläufig benutzbar, da globale Variablen benutzt werden.
 Im normalen Programmkontext bedeutet "global" = "prozessweit".
 In Pintos heißt "global" = "systemweit".
-Ein Prozess kännte sich also nicht auf ein deterministisches Ergebnis von strtok verlassen.
+Ein Prozess könnte sich also nicht auf ein deterministisches Ergebnis von strtok verlassen.
 Im Kernelmode müssten immer die Interrupts disabled werden, nur um einen String zu tokenizen.
 
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
->> separation.  Identify at least two advantages of the Unix approach.
+>> separation. Identify at least two advantages of the Unix approach.
 
-TODO
+Die Verarbeitung der Argumente muss nicht im Kernelspace erfolgen und die Verarbeitung von Leerstellen und Escape-Zeichen müssen nicht gesondert beachtet werden.
 
 			     SYSTEM CALLS
 			     ============
@@ -88,7 +88,7 @@ TODO
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
 synch.h:  struct rwlock:
-ein Read-Write-Lock, doch nicht benutzt
+ein Read-Write-Lock (doch nicht benutzt)
 
 thread.h: enum thread_status:
 += THREAD_ZOMBIE (exit'ed, aber noch nicht darauf gewartet)
@@ -173,13 +173,40 @@ Ein sterbender Prozess wird ein Zombie; das wait treibt den Zombie aus.
 >> arguments, then an arbitrary amount of user memory, and any of
 >> these can fail at any point.  This poses a design and
 >> error-handling problem: how do you best avoid obscuring the primary
->> function of code in a morass of error-handling?  Furthermore, when
+>> function of code in a morass of error-handling?
+
+Am in den Syscall-Handlern werden stets am Funktionsanfang die Benutzereingaben überprüft.
+Nach diesem Einstieg, können den Pointern und werden vertraut werden, so dass es zu keinem "morass of error-handling" kommt.
+
+>> Furthermore, when
 >> an error is detected, how do you ensure that all temporarily
->> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> allocated resources (locks, buffers, etc.) are freed?  
+
+Vor dem Überprüfen werden keine Locks oder ähnliches gesperrt.
+Die Makros SYNC und SYNC_VOID übernehmen das Locken vom filesys_lock und geben das Lock zuverlässig wieder frei.
+
+>> In a few
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
-TODO
+static void
+syscall_handler_SYS_SEEK (_SYSCALL_HANDLER_ARGS)
+{
+  // void seek (int fd, unsigned position);
+  /* BENUTZEREINGABE ÜBERPRÜFEN (hier: ob die beiden Parameter auf dem Stack liegen) */
+  if (!is_user_memory (arg1, sizeof (arg1) * 2))
+    kill_segv();
+  
+  /* DIE BENUTZEREINGABE IST VERTRAUENSWÜRDIG */
+  unsigned fd = *(unsigned *) arg1;
+  unsigned position = *(unsigned *) arg2;
+  
+  struct fd *fd_data = retrieve_fd (fd);
+  if (!fd_data) /* EIN FALSCHER FD WURDE ÜBERGEBEN, keine Resourcen wurden bisher gelockt */
+    kill_segv ();
+  /* SYNC/SYNC_VOID LOCKT DEN FILESYS-ZUGRIFF UND GIBT DEN LOCK ZUVERLÄSSIG WIEDER FREI. */
+  SYNC_VOID (file_seek (fd_data->file, position));
+}
 
 ---- SYNCHRONIZATION ----
 
@@ -201,7 +228,13 @@ zurück gibt. Die Semaphore wird in start_process ge-upped.
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
-TODO
+1) Kernelthread gibt alle Resourcen frei (FDs, Locks, Zombiekinder ...).
+2) Kernelthread guckt, ob er einen Vater hat und dieser kein Zombie ist:
+ .1) Ja: Kernelthread komplett beenden (status = THREAD_DYING)
+ .2) Sonst:
+   .1) Exitcode speichern, damit Vater ihn mit wait auslesen kann
+   .1) In die zombie_list eintragen.
+   .2) status = THREAD_ZOMBIE setzen
 
 ---- RATIONALE ----
 
@@ -211,15 +244,20 @@ TODO
 Das war die erste Möglichkeit, die uns einfiel.
 Nach Nachdenken war uns aufgfallen, dass sie optimal ist.
 
+is_user_memory(addr, size):
+Guckt, ob der komplette Bereich [addr, addr+size-1] im Userspace und alloziert sind.
+Für jede tangierte Seite wird überprüft, ob sie im Userspace liegt.
+Mit pagedir_get_page wir getestet, ob die Seite alloziert ist.
+
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
-TODO
+Prädikat: sehr gut.
 
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
 
-TODO
+Wir haben es nicht geändert.
 
 			   SURVEY QUESTIONS
 			   ================
