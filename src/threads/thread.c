@@ -411,6 +411,10 @@ thread_exit (void)
       process_exit ();
       t->pagedir = NULL;
     }
+  else
+    {
+      ASSERT (list_empty (&t->lock_list));
+    }
   
   if (t->parent == NULL)
     {

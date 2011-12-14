@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <list.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -70,7 +71,7 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (aux->file_name, file_name, sizeof (aux->file_name));
   
-  volatile bool failed = true;
+  bool failed = true;
   aux->failed = &failed;
   struct semaphore sema;
   sema_init (&sema, 0);
@@ -361,6 +362,12 @@ process_exit (void)
   const char *c = strchr (cur->name, ' '); // find space in arguments line if exists
   int name_len = c != NULL ? (int) (c - cur->name) : (int) sizeof (cur->name);
   printf ("%.*s: exit(%d)\n", name_len, cur->name, cur->exit_code);
+  
+  while (!list_empty (&cur->lock_list))
+    {
+      struct lock *l = list_entry (list_front (&cur->lock_list), struct lock, holder_elem);
+      lock_release (l);
+    }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
