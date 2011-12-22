@@ -373,7 +373,7 @@ strlcat (char *dst, const char *src, size_t size)
   return src_len + dst_len;
 }
 
-char *
+const char *
 strchrnul (const char *s, char c)
 {
   ASSERT (s != NULL);

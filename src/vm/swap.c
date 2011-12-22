@@ -52,7 +52,7 @@ swap_get_disposable_pages (size_t count)
   if (count != 1)  // don't bother to make room for multiple pages for now
     return SWAP_FAIL;
   
-  struct lru_entry *e = lru_pop_least (&unmodified_pages);
+  struct lru_elem *e = lru_pop_least (&unmodified_pages);
   if (e == NULL) // swap page is exhausted
     return SWAP_FAIL;
     
