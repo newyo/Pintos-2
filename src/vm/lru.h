@@ -3,8 +3,8 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-#include <list.h>
 #include <debug.h>
+#include <list.h>
 
 #define LRU_MAGIC ('L'<<24 | 'R'<<16 | 'U'<<8)
 
@@ -16,14 +16,14 @@ struct lru_elem
   char              end[0];
 };
 
-#define lru_entry(E, T, ELEM) \
+#define lru_entry(LIST_ELEM, STRUCT, MEMBER) \
 ({ \
-  typedef __typedef (T) _t; \
-  __typeof (E) _e = (E); \
+  typedef __typeof (STRUCT) _t; \
+  __typeof (LIST_ELEM) _e = (LIST_ELEM); \
   ASSERT (_e != NULL); \
-  ASSERT (_e->lru_magic == LRU_MAGIC || !list_is_interior (&e->elem)); \
-  ASSERT (_e->lru_magic == 0         ||  list_is_interior (&e->elem)); \
-  (_t*) ((uintprt_t*)&_list_elem->end - offsetof (t, MEMBER.end)); \
+  ASSERT (_e->lru_magic == LRU_MAGIC || !list_is_interior (&_e->elem)); \
+  ASSERT (_e->lru_magic == 0         ||  list_is_interior (&_e->elem)); \
+  (_t*) ((uint8_t*)&_e->end - offsetof (_t, MEMBER.end)); \
 })
 
 typedef void lru_dispose_action (struct lru_elem *e, void *aux);
