@@ -23,19 +23,22 @@
 #include "threads/pte.h"
 #include "threads/thread.h"
 #ifdef USERPROG
-#include "userprog/process.h"
-#include "userprog/exception.h"
-#include "userprog/gdt.h"
-#include "userprog/syscall.h"
-#include "userprog/tss.h"
+# include "userprog/process.h"
+# include "userprog/exception.h"
+# include "userprog/gdt.h"
+# include "userprog/syscall.h"
+# include "userprog/tss.h"
 #else
-#include "tests/threads/tests.h"
+# include "tests/threads/tests.h"
+#endif
+#ifdef VM
+# include "vm/swap.h"
 #endif
 #ifdef FILESYS
-#include "devices/block.h"
-#include "devices/ide.h"
-#include "filesys/filesys.h"
-#include "filesys/fsutil.h"
+# include "devices/block.h"
+# include "devices/ide.h"
+# include "filesys/filesys.h"
+# include "filesys/fsutil.h"
 #endif
 #include "fixed-point.h"
 
@@ -126,6 +129,10 @@ main (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
+#endif
+
+#ifdef VM
+  swap_init (); // swapping depends on filesystem being started!
 #endif
 
   thread_load_avg = fp_from_int (0);
