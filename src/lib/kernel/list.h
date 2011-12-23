@@ -148,7 +148,7 @@ void list_init (struct list *);
     _elem->prev = NULL; \
     _elem->next = NULL; \
     _elem->magic = LIST_ELEM_MAGIC__; \
-    _elem; \
+    (void) 0; \
   })
 
 /* Returns true if ELEM is an interior element,
