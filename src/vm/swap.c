@@ -15,23 +15,18 @@ typedef size_t swap_t;
 
 const char SWAP_FILENAME[] = "swap.dsk";
 
-struct swap_owner
+struct swapped_page
 {
+  struct lru_elem   unmodified_pages_elem;
   struct thread    *thread;
   struct list_elem  elem;
   void             *base;
 };
 
-struct swapped_page
-{
-  struct lru_elem   unmodified_pages_elem;
-  struct swap_owner owner;
-};
-
 struct file *swap_file;
 size_t swap_pages_count;
 
-struct bitmap *empty_pages; // false <=> free
+struct bitmap *used_pages; // false == free
 struct lru unmodified_pages; // list of struct swapped_page
 struct swapped_page *swapped_pages_space;
 
@@ -72,8 +67,8 @@ swap_init (void)
   if (!swapped_pages_space)
     PANIC ("Could not set up swapping: Memory exhausted (1)");
   
-  empty_pages = bitmap_create (swap_pages_count);
-  if (!empty_pages)
+  used_pages = bitmap_create (swap_pages_count);
+  if (!used_pages)
     PANIC ("Could not set up swapping: Memory exhausted (2)");
   lru_init (&unmodified_pages, 0, NULL, NULL);
 }
@@ -85,7 +80,7 @@ swap_get_disposable_pages (size_t count)
   ASSERT (count > 0);
   ASSERT (count <= swap_pages_count);
   
-  size_t result = bitmap_scan (empty_pages, 0, count, false);
+  size_t result = bitmap_scan (used_pages, 0, count, false);
   if (result != BITMAP_ERROR)
     return result;
   
@@ -101,10 +96,10 @@ swap_get_disposable_pages (size_t count)
   ASSERT (ee != NULL);
   result = swapped_page_id (ee);
   
-  list_remove (&ee->owner.elem);
-  process_dispose_unmodified_swap_page (&ee->owner.base);
+  list_remove (&ee->elem);
+  process_dispose_unmodified_swap_page (&ee->base);
   memset (ee, sizeof (*ee), 0);
-  bitmap_reset (empty_pages, result);
+  bitmap_reset (used_pages, result);
   
   return result;
 }
@@ -136,14 +131,14 @@ swap_write (swap_t         id,
   for (i = id; i < id+amount; ++i)
     {
       struct swapped_page *ee = &swapped_pages_space[i];
-      ASSERT (ee->owner.thread == NULL);
-      ASSERT (!bitmap_test (empty_pages, i));
+      ASSERT (ee->thread == NULL);
+      ASSERT (!bitmap_test (used_pages, i));
       
-      bitmap_mark (empty_pages, i);
-      ee->owner.thread = owner;
-      list_push_front (&owner->swap_pages, &ee->owner.elem);
+      bitmap_mark (used_pages, i);
+      ee->thread = owner;
+      list_push_front (&owner->swap_pages, &ee->elem);
       lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
-      ee->owner.base = src;
+      ee->base = src;
       
       off_t len = MIN (length, (size_t) PGSIZE);
       off_t wrote UNUSED = file_write_at (swap_file, src, len, i*PGSIZE);
@@ -178,8 +173,10 @@ swap_alloc_and_write (struct thread *owner,
   // Break it does to many pages atomically.
   // Find enough pages and write then or write nothing at all.
   // We don't have to care about the retreived swap_t's,
-  // b/c if they are not written to, they stay marked free in the empty_pages.
+  // b/c if they are not written to, they stay marked free in the used_pages.
   swap_t *ids = calloc (amount, sizeof (swap_t));
+  if (!ids)
+    return false;
   size_t i;
   for (i = 0; i < amount; ++i)
     {
@@ -206,9 +203,9 @@ swap_dispose_page (struct swapped_page *ee)
 {
   ASSERT (ee != NULL);
   lru_dispose (&unmodified_pages, &ee->unmodified_pages_elem, false);
-  process_dispose_unmodified_swap_page (&ee->owner.base);
+  process_dispose_unmodified_swap_page (&ee->base);
   memset (ee, sizeof (*ee), 0);
-  bitmap_reset (empty_pages, swapped_page_id (ee));
+  bitmap_reset (used_pages, swapped_page_id (ee));
 }
 
 void
@@ -232,8 +229,8 @@ swap_dispose (struct thread *owner, const void *base_, size_t amount)
         {
           struct swapped_page *ee = list_entry (e,
                                                 struct swapped_page,
-                                                owner.elem);
-          if (ee->owner.base == base)
+                                                elem);
+          if (ee->base == base)
             {
               swap_dispose_page (ee);
               break;
@@ -270,12 +267,12 @@ swap_read_and_retain (struct thread *owner,
         {
           struct swapped_page *ee = list_entry (e,
                                                 struct swapped_page,
-                                                owner.elem);
-          if (ee->owner.base == base)
+                                                elem);
+          if (ee->base == base)
             {
               off_t len = MIN (length, (size_t) PGSIZE);
               off_t wrote UNUSED = file_read_at (swap_file,
-                                                 ee->owner.base,
+                                                 ee->base,
                                                  len,
                                                  swapped_page_id (ee));
               ASSERT (wrote == len);
@@ -300,7 +297,7 @@ swap_clean (struct thread *owner)
     {
       struct list_elem *e = list_pop_front (&owner->swap_pages);
       ASSERT (e != NULL);
-      struct swapped_page *ee = list_entry (e, struct swapped_page, owner.elem);
+      struct swapped_page *ee = list_entry (e, struct swapped_page, elem);
       swap_dispose_page (ee);
     }
 }
