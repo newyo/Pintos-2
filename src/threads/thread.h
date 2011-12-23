@@ -121,6 +121,11 @@ struct thread
                                         /* from */
 #endif
 
+#ifdef VM
+    /* Owned by swap.h */
+    struct list swap_pages;
+#endif
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

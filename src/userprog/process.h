@@ -21,4 +21,8 @@ bool fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t);
 unsigned fd_hash (const struct hash_elem *e, void *t);
 void fd_free (struct hash_elem *e, void *aux);
 
+#ifdef VM
+void process_dispose_unmodified_swap_page (void *base);
+#endif
+
 #endif /* userprog/process.h */

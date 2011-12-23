@@ -20,6 +20,9 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#ifdef VM
+# include "vm/swap.h"
+#endif
 
 struct process_start_aux
 {
@@ -380,6 +383,11 @@ process_exit (void)
      directory before destroying the process's page
      directory, or our active page directory will be one
      that's been freed (and cleared). */
+
+#ifdef VM
+  swap_clean (cur);
+#endif
+
   cur->pagedir = NULL;
   pagedir_activate (NULL);
   pagedir_destroy (pd);
@@ -732,3 +740,18 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+#ifdef VM
+/* Called when swap needed room and disposed an unchanged page.
+ * Also called when disposal was initiated through swap_dispose!
+ * Called once per disposed page.
+ */
+void
+process_dispose_unmodified_swap_page (void *base)
+{
+  ASSERT (intr_get_level () == INTR_OFF);
+  
+  // TODO
+  (void) base;
+}
+#endif

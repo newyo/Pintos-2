@@ -876,6 +876,10 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->children);
   sema_init (&t->wait_sema, 0);
 #endif
+
+#ifdef VM
+  list_init (&t->swap_pages);
+#endif
   
   if (!thread_mlfqs)
     {
