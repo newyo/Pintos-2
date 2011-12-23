@@ -31,9 +31,9 @@ struct swapped_page
 struct file *swap_file;
 size_t swap_pages_count;
 
-struct bitmap *empty_pages;
+struct bitmap *empty_pages; // false <=> free
 struct lru unmodified_pages; // list of struct swapped_page
-struct swapped_page *swapped_pages_space; // false <=> free
+struct swapped_page *swapped_pages_space;
 
 static swap_t
 swapped_page_id (struct swapped_page *cur)
@@ -85,7 +85,7 @@ swap_get_disposable_pages (size_t count)
   ASSERT (count > 0);
   ASSERT (count <= swap_pages_count);
   
-  size_t result = bitmap_scan_and_flip (empty_pages, 0, count, true);
+  size_t result = bitmap_scan (empty_pages, 0, count, false);
   if (result != BITMAP_ERROR)
     return result;
   
@@ -107,13 +107,6 @@ swap_get_disposable_pages (size_t count)
   bitmap_reset (empty_pages, result);
   
   return result;
-}
-
-static swap_t
-swap_get_disposable_bytes (size_t length)
-{
-  ASSERT (length > 0);
-  return swap_get_disposable_pages ((length+PGSIZE-1) / PGSIZE);
 }
 
 #define MIN(A,B)         \
@@ -144,7 +137,9 @@ swap_write (swap_t         id,
     {
       struct swapped_page *ee = &swapped_pages_space[i];
       ASSERT (ee->owner.thread == NULL);
+      ASSERT (!bitmap_test (empty_pages, i));
       
+      bitmap_mark (empty_pages, i);
       ee->owner.thread = owner;
       list_push_front (&owner->swap_pages, &ee->owner.elem);
       lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
@@ -171,10 +166,38 @@ swap_alloc_and_write (struct thread *owner,
   ASSERT ((uintptr_t) src % PGSIZE == 0);
   ASSERT (length > 0);
   
-  swap_t id = swap_get_disposable_bytes (length);
-  if (id == SWAP_FAIL)
-    return false;
-  swap_write (id, owner, src, length);
+  size_t amount = (length+PGSIZE-1) / PGSIZE;
+  swap_t id = swap_get_disposable_pages (amount);
+  if (id != SWAP_FAIL)
+    {
+      swap_write (id, owner, src, length);
+      return true;
+    }
+  
+  // Could not find `amount` adjactent swap pages.
+  // Break it does to many pages atomically.
+  // Find enough pages and write then or write nothing at all.
+  // We don't have to care about the retreived swap_t's,
+  // b/c if they are not written to, they stay marked free in the empty_pages.
+  swap_t *ids = calloc (amount, sizeof (swap_t));
+  size_t i;
+  for (i = 0; i < amount; ++i)
+    {
+      id = swap_get_disposable_pages (1);
+      if (id == SWAP_FAIL)
+        {
+          free (ids);
+          return false;
+        }
+    }
+  for (i = 0; i < amount; ++i)
+    {
+      off_t len = MIN (length, (size_t) PGSIZE);
+      swap_write (ids[i], owner, src, len);
+      src += len;
+      length -= len;
+    }
+  free (ids);
   return true;
 }
 
@@ -199,7 +222,7 @@ swap_dispose (struct thread *owner, const void *base_, size_t amount)
   ASSERT (amount > 0);
   ASSERT (amount <= swap_pages_count);
   
-  // TODO: don't iterate but use some hase table
+  // TODO: don't iterate but use some hash table
   do
     {
       struct list_elem *e;
@@ -237,7 +260,7 @@ swap_read_and_retain (struct thread *owner,
   ASSERT (amount > 0);
   ASSERT (amount <= swap_pages_count);
   
-  // TODO: don't iterate but use some hase table
+  // TODO: don't iterate but use some hash table
   do
     {
       struct list_elem *e;
