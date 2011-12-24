@@ -743,15 +743,15 @@ install_page (void *upage, void *kpage, bool writable)
 
 #ifdef VM
 /* Called when swap needed room and disposed an unchanged page.
- * Also called when disposal was initiated through swap_dispose!
+ * Not called when disposal was initiated through swap_dispose/swap_clean.
  * Called once per disposed page.
+ * Called with interrupts on!
  */
 void
-process_dispose_unmodified_swap_page (void *base)
+process_dispose_unmodified_swap_page (struct thread *t, void *base)
 {
-  ASSERT (intr_get_level () == INTR_OFF);
-  
   // TODO
+  (void) t;
   (void) base;
 }
 #endif

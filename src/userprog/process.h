@@ -22,7 +22,7 @@ unsigned fd_hash (const struct hash_elem *e, void *t);
 void fd_free (struct hash_elem *e, void *aux);
 
 #ifdef VM
-void process_dispose_unmodified_swap_page (void *base);
+void process_dispose_unmodified_swap_page (struct thread *t, void *base);
 #endif
 
 #endif /* userprog/process.h */
