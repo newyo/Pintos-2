@@ -192,9 +192,9 @@ swap_alloc_and_write (struct thread *owner,
     }
   
   // Could not find `amount` adjactent swap pages.
-  // Break it does to many pages atomically.
+  // Break it down to many pages atomically.
   // Find enough pages and write then or write nothing at all.
-  // We don't have to care about the retreived swap_t's,
+  // We don't have to care about the retreived swap_ts,
   // b/c if they are not written to, they stay marked free in the used_pages.
   swap_t *ids = calloc (amount, sizeof (swap_t));
   if (!ids)
