@@ -42,6 +42,25 @@ swapped_page_id (struct swapped_page *cur)
   return (uintptr_t) (cur - swap_pages_count) / sizeof (*cur);
 }
 
+static struct swapped_page *
+swappage_page_of_owner (struct thread *owner, const void *base)
+{
+  ASSERT (owner != NULL);
+  ASSERT (base != NULL);
+  
+  // TODO: don't iterate but use some hash table
+  struct list_elem *e;
+  for (e = list_begin (&owner->swap_pages);
+       e != list_end (&owner->swap_pages);
+       e = list_next (e))
+    {
+      struct swapped_page *ee = list_entry (e, struct swapped_page, elem);
+      if (ee->base == base)
+        return ee;
+    }
+  return false;
+}
+
 static void swap_dispose_page (struct swapped_page *ee, bool caller_triggered);
 
 #define is_valid_swap_id(ID) \
@@ -231,26 +250,17 @@ swap_dispose (struct thread *owner, const void *base_, size_t amount)
   ASSERT (amount <= swap_pages_count);
   
   lock_acquire (&swap_lock);
-  // TODO: don't iterate but use some hash table
   do
     {
-      struct list_elem *e;
-      for (e = list_begin (&owner->swap_pages);
-           e != list_end (&owner->swap_pages);
-           e = list_next (e))
+      struct swapped_page *ee = swappage_page_of_owner (owner, base);
+      if (!ee)
         {
-          struct swapped_page *ee = list_entry (e,
-                                                struct swapped_page,
-                                                elem);
-          if (ee->base == base)
-            {
-              swap_dispose_page (ee, true);
-              goto further;
-            }
+          lock_release (&swap_lock);
+          return false;
         }
-      lock_release (&swap_lock);
-      return false;
-    further:
+        
+      swap_dispose_page (ee, true);
+      
       base += PGSIZE;
     }
   while (--amount > 0);
@@ -274,34 +284,24 @@ swap_read_and_retain (struct thread *owner,
   ASSERT (amount <= swap_pages_count);
   
   lock_acquire (&swap_lock);
-  // TODO: don't iterate but use some hash table
   do
     {
-      struct list_elem *e;
-      for (e = list_begin (&owner->swap_pages);
-           e != list_end (&owner->swap_pages);
-           e = list_next (e))
+      struct swapped_page *ee = swappage_page_of_owner (owner, base);
+      if (!ee)
         {
-          struct swapped_page *ee = list_entry (e,
-                                                struct swapped_page,
-                                                elem);
-          if (ee->base == base)
-            {
-              off_t len = MIN (length, (size_t) PGSIZE);
-              off_t wrote UNUSED = file_read_at (swap_file,
-                                                 ee->base,
-                                                 len,
-                                                 swapped_page_id (ee));
-              ASSERT (wrote == len);
-              length -= len;
-              lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
-              goto further;
-            }
+          lock_release (&swap_lock);
+          return false;
         }
-      lock_release (&swap_lock);
-      return false;
+        
+      off_t len = MIN (length, (size_t) PGSIZE);
+      off_t wrote UNUSED = file_read_at (swap_file,
+                                         ee->base,
+                                         len,
+                                         swapped_page_id (ee));
+      ASSERT (wrote == len);
+      length -= len;
+      lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
       
-    further:
       base += PGSIZE;
     }
   while (--amount > 0);
@@ -336,5 +336,8 @@ size_t
 swap_stats_full_pages (void)
 {
   ASSERT (bitmap_size (used_pages) == swap_pages_count);
-  return bitmap_count (used_pages, 0, swap_pages_count, true);
+  
+  size_t allocated = bitmap_count (used_pages, 0, swap_pages_count, true);
+  size_t unmodified = lru_usage (&unmodified_pages);
+  return allocated - unmodified;
 }

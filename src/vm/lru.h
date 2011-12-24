@@ -48,5 +48,7 @@ void lru_dispose (struct lru *l, struct lru_elem *e, bool run_dispose_action);
 struct lru_elem *lru_pop_least (struct lru *l);
 
 #define lru_is_empty(L) ((L)->item_count == 0)
+#define lru_capacity(L) ((L)->lru_size)
+#define lru_usage(L) ((L)->item_count)
 
 #endif
