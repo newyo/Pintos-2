@@ -3,7 +3,11 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <bitmap.h>
 #include "threads/thread.h"
+
+typedef size_t swap_t;
+#define SWAP_FAIL ((swap_t) BITMAP_ERROR)
 
 void swap_init (void);
 

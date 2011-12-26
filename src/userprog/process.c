@@ -22,6 +22,7 @@
 #include "threads/synch.h"
 #ifdef VM
 # include "vm/swap.h"
+# include "vm/vm.h"
 #endif
 
 struct process_start_aux
@@ -299,6 +300,12 @@ start_process (void *const aux_)
   *aux->failed = 0;
   sema_up (aux->sema);
   palloc_free_page (aux_);
+
+#ifdef VM
+  struct thread *t = thread_current ();
+  vm_init_thread (t);
+  swap_init_thread (t);
+#endif
   
   //debug_hexdump (if_.esp, start);
 
@@ -371,23 +378,15 @@ process_exit (void)
       struct lock *l = list_entry (list_front (&cur->lock_list), struct lock, holder_elem);
       lock_release (l);
     }
-
-  /* Destroy the current process's page directory and switch back
-     to the kernel-only page directory. */
-  uint32_t *pd = cur->pagedir;
+    
   hash_destroy (&cur->fds, fd_free);
-  /* Correct ordering here is crucial.  We must set
-     cur->pagedir to NULL before switching page directories,
-     so that a timer interrupt can't switch back to the
-     process page directory.  We must activate the base page
-     directory before destroying the process's page
-     directory, or our active page directory will be one
-     that's been freed (and cleared). */
 
 #ifdef VM
+  vm_clean (cur);
   swap_clean (cur);
 #endif
 
+  uint32_t *pd = cur->pagedir;
   cur->pagedir = NULL;
   pagedir_activate (NULL);
   pagedir_destroy (pd);
@@ -740,18 +739,3 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
-
-#ifdef VM
-/* Called when swap needed room and disposed an unchanged page.
- * Not called when disposal was initiated through swap_dispose/swap_clean.
- * Called once per disposed page.
- * Called with interrupts on!
- */
-void
-process_dispose_unmodified_swap_page (struct thread *t, void *base)
-{
-  // TODO
-  (void) t;
-  (void) base;
-}
-#endif

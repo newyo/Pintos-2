@@ -3,7 +3,6 @@
 #include <limits.h>
 #include <list.h>
 #include <hash.h>
-#include <bitmap.h>
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
 #include "threads/malloc.h"
@@ -11,9 +10,7 @@
 #include "userprog/process.h"
 #include "devices/block.h"
 #include "lru.h"
-
-typedef size_t swap_t;
-#define SWAP_FAIL ((swap_t) BITMAP_ERROR)
+#include "vm.h"
 
 struct swapped_page
 {
@@ -73,8 +70,6 @@ swappage_page_of_owner (struct thread *owner, void *base)
   return ee;
 }
 
-static void swap_dispose_page (struct swapped_page *ee, bool caller_triggered);
-
 #define is_valid_swap_id(ID) \
 ({ \
   __typeof (X) _x = (ID); \
@@ -108,10 +103,22 @@ swap_init (void)
   lru_init (&unmodified_pages, 0, NULL, NULL);
 }
 
+static void
+swap_dispose_page (struct swapped_page *ee)
+{
+  ASSERT (ee != NULL);
+  
+  struct hash_elem *e UNUSED = hash_delete (&ee->thread->swap_pages,
+                                            &ee->hash_elem);
+  ASSERT (e != NULL);
+  
+  memset (ee, sizeof (*ee), 0);
+  bitmap_reset (used_pages, swapped_page_id (ee));
+}
+
 static swap_t
 swap_get_disposable_pages (size_t count)
 {
-  ASSERT (intr_get_level () == INTR_ON);
   ASSERT (count > 0);
   ASSERT (count <= swap_pages_count);
   
@@ -122,17 +129,21 @@ swap_get_disposable_pages (size_t count)
   if (count != 1)  // don't bother to make room for multiple pages
     return SWAP_FAIL;
   
-  struct lru_elem *e = lru_pop_least (&unmodified_pages);
-  if (e == NULL) // swap page is exhausted
-    return SWAP_FAIL;
-  
-  struct swapped_page *ee;
-  ee = lru_entry (e, struct swapped_page, unmodified_pages_elem);
-  ASSERT (ee != NULL);
-  result = swapped_page_id (ee);
-  
-  swap_dispose_page (ee, false);
-  return result;
+  for (;;)
+    {
+      struct lru_elem *e = lru_peek_least (&unmodified_pages);
+      if (e == NULL) // swap space is exhausted
+        return SWAP_FAIL;
+      
+      struct swapped_page *ee;
+      ee = lru_entry (e, struct swapped_page, unmodified_pages_elem);
+      ASSERT (ee != NULL);
+      
+      vm_swap_disposed (ee->thread, &ee->base);
+      swap_dispose_page (ee);
+      
+      return swapped_page_id (ee);
+    }
 }
 
 #define MIN(A,B)         \
@@ -196,6 +207,7 @@ swap_write (swap_t         id,
             size_t         length)
 {
   uint8_t *src = src_;
+  
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (src != NULL);
@@ -279,28 +291,11 @@ swap_alloc_and_write (struct thread *owner,
   return true;
 }
 
-static void
-swap_dispose_page (struct swapped_page *ee, bool caller_triggered)
-{
-  ASSERT (ee != NULL);
-  
-  if (!caller_triggered)
-    lru_dispose (&unmodified_pages, &ee->unmodified_pages_elem, false);
-  else
-    {
-      struct hash_elem *e UNUSED = hash_delete (&ee->thread->swap_pages,
-                                                &ee->hash_elem);
-      ASSERT (e != NULL);
-      process_dispose_unmodified_swap_page (ee->thread, &ee->base);
-    }
-  memset (ee, sizeof (*ee), 0);
-  bitmap_reset (used_pages, swapped_page_id (ee));
-}
-
 bool
 swap_dispose (struct thread *owner, void *base_, size_t amount)
 {
   uint8_t *base = base_;
+  
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
@@ -318,7 +313,7 @@ swap_dispose (struct thread *owner, void *base_, size_t amount)
           return false;
         }
         
-      swap_dispose_page (ee, true);
+      swap_dispose_page (ee);
       
       base += PGSIZE;
     }
@@ -333,6 +328,7 @@ swap_read_and_retain (struct thread *owner,
                       size_t         length)
 {
   uint8_t *base = base_;
+  
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
@@ -389,7 +385,7 @@ static void
 swap_clean_sub (struct hash_elem *e, void *aux UNUSED)
 {
   struct swapped_page *ee = hash_entry (e, struct swapped_page, hash_elem);
-  swap_dispose_page (ee, true);
+  swap_dispose_page (ee);
 }
 
 void

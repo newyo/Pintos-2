@@ -17,7 +17,7 @@
 # include "filesys/file.h"
 #endif
 #ifdef VM
-# include "vm/swap.h"
+# include "vm/vm.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -879,10 +879,6 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->children);
   sema_init (&t->wait_sema, 0);
 #endif
-
-#ifdef VM
-  swap_init_thread (t);
-#endif
   
   if (!thread_mlfqs)
     {
@@ -1032,6 +1028,7 @@ schedule (void)
 
   if (cur != next)
     prev = switch_threads (cur, next);
+  vm_rescheduled (cur, next);
   thread_schedule_tail (prev);
 }
 
