@@ -47,7 +47,7 @@ lru_use (struct lru *l, struct lru_elem *e)
       e->lru_magic = LRU_MAGIC;
       ++l->item_count;
       if (l->lru_size > 0 && l->item_count > l->lru_size)
-        lru_dispose (l, lru_pop_least (l), true);
+        lru_pop_least (l);
     }
   else
     ASSERT (e->lru_magic == LRU_MAGIC);
@@ -76,12 +76,10 @@ lru_dispose (struct lru *l, struct lru_elem *e, bool run_dispose_action)
 }
 
 struct lru_elem *
-lru_pop_least (struct lru *l)
+lru_peek_least (struct lru *l)
 {
   ASSERT_FILLING (l);
   if (l->item_count == 0)
     return NULL;
-  return list_entry (list_back (&l->lru_list),
-                                struct lru_elem,
-                                elem);
+  return list_entry (list_back (&l->lru_list), struct lru_elem, elem);
 }

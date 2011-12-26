@@ -45,7 +45,15 @@ void lru_free (struct lru *l);
 void lru_use (struct lru *l, struct lru_elem *e);
 void lru_dispose (struct lru *l, struct lru_elem *e, bool run_dispose_action);
 
-struct lru_elem *lru_pop_least (struct lru *l);
+struct lru_elem *lru_peek_least (struct lru *l);
+#define lru_pop_least(L) \
+({ \
+  __typeof (L) _l = (L); \
+  struct lru_elem *_e = lru_peek_least (_l); \
+  if (_e) \
+    lru_dispose (_l, _e, false); \
+  _e; \
+})
 
 #define lru_is_empty(L) ((L)->item_count == 0)
 #define lru_capacity(L) ((L)->lru_size)
