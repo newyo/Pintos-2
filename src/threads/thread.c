@@ -13,8 +13,11 @@
 #include "threads/vaddr.h"
 #include "../devices/timer.h"
 #ifdef USERPROG
-#include "userprog/process.h"
-#include "filesys/file.h"
+# include "userprog/process.h"
+# include "filesys/file.h"
+#endif
+#ifdef VM
+# include "vm/swap.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -878,7 +881,7 @@ init_thread (struct thread *t, const char *name, int priority)
 #endif
 
 #ifdef VM
-  list_init (&t->swap_pages);
+  swap_init_thread (t);
 #endif
   
   if (!thread_mlfqs)

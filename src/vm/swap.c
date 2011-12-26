@@ -2,6 +2,7 @@
 #include <string.h>
 #include <limits.h>
 #include <list.h>
+#include <hash.h>
 #include <bitmap.h>
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
@@ -18,7 +19,8 @@ struct swapped_page
 {
   struct lru_elem   unmodified_pages_elem;
   struct thread    *thread;
-  struct list_elem  elem;
+  struct list_elem  all_elem;
+  struct hash_elem  hash_elem;
   void             *base;
 };
 
@@ -53,22 +55,16 @@ swap_page_to_sector (swap_t page)
 }
 
 static struct swapped_page *
-swappage_page_of_owner (struct thread *owner, const void *base)
+swappage_page_of_owner (struct thread *owner, void *base)
 {
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
   
-  // TODO: don't iterate but use some hash table
-  struct list_elem *e;
-  for (e = list_begin (&owner->swap_pages);
-       e != list_end (&owner->swap_pages);
-       e = list_next (e))
-    {
-      struct swapped_page *ee = list_entry (e, struct swapped_page, elem);
-      if (ee->base == base)
-        return ee;
-    }
-  return false;
+  struct swapped_page key;
+  memset (&key.hash_elem, 0, sizeof (key.hash_elem));
+  key.base = base;
+  struct hash_elem *e = hash_find (&owner->swap_pages, &key.hash_elem);
+  return e == NULL ? NULL : hash_entry (e, struct swapped_page, hash_elem);
 }
 
 static void swap_dispose_page (struct swapped_page *ee, bool caller_triggered);
@@ -211,7 +207,7 @@ swap_write (swap_t         id,
       
       bitmap_mark (used_pages, i);
       ee->thread = owner;
-      list_push_front (&owner->swap_pages, &ee->elem);
+      hash_insert (&owner->swap_pages, &ee->hash_elem);
       lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
       ee->base = src;
       
@@ -286,7 +282,9 @@ swap_dispose_page (struct swapped_page *ee, bool caller_triggered)
     lru_dispose (&unmodified_pages, &ee->unmodified_pages_elem, false);
   else
     {
-      list_remove (&ee->elem);
+      struct hash_elem *e UNUSED = hash_delete (&ee->thread->swap_pages,
+                                                &ee->hash_elem);
+      ASSERT (e != NULL);
       process_dispose_unmodified_swap_page (ee->thread, &ee->base);
     }
   memset (ee, sizeof (*ee), 0);
@@ -294,9 +292,9 @@ swap_dispose_page (struct swapped_page *ee, bool caller_triggered)
 }
 
 bool
-swap_dispose (struct thread *owner, const void *base_, size_t amount)
+swap_dispose (struct thread *owner, void *base_, size_t amount)
 {
-  const uint8_t *base = base_;
+  uint8_t *base = base_;
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
@@ -325,10 +323,10 @@ swap_dispose (struct thread *owner, const void *base_, size_t amount)
 
 bool
 swap_read_and_retain (struct thread *owner,
-                      const void    *base_,
+                      void          *base_,
                       size_t         length)
 {
-  const uint8_t *base = base_;
+  uint8_t *base = base_;
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
@@ -359,19 +357,42 @@ swap_read_and_retain (struct thread *owner,
   return true;
 }
 
+static unsigned
+swapped_page_hash (const struct hash_elem *e, void *aux UNUSED)
+{
+  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void *))];
+  return (unsigned) hash_entry (e, struct swapped_page, hash_elem)->base;
+}
+
+static bool
+swapped_page_less (const struct hash_elem *a,
+                   const struct hash_elem *b,
+                   void *aux)
+{
+  return swapped_page_hash (a, aux) < swapped_page_hash (b, aux);
+}
+
+void
+swap_init_thread (struct thread *owner)
+{
+  ASSERT (owner != NULL);
+  hash_init (&owner->swap_pages, &swapped_page_hash, &swapped_page_less, NULL);
+}
+
+static void
+swap_clean_sub (struct hash_elem *e, void *aux UNUSED)
+{
+  struct swapped_page *ee = hash_entry (e, struct swapped_page, hash_elem);
+  swap_dispose_page (ee, true);
+}
+
 void
 swap_clean (struct thread *owner)
 {
   ASSERT (owner != NULL);
   
   lock_acquire (&swap_lock);
-  while (!list_empty (&owner->swap_pages))
-    {
-      struct list_elem *e = list_pop_front (&owner->swap_pages);
-      ASSERT (e != NULL);
-      struct swapped_page *ee = list_entry (e, struct swapped_page, elem);
-      swap_dispose_page (ee, true);
-    }
+  hash_destroy (&owner->swap_pages, &swap_clean_sub);
   lock_release (&swap_lock);
 }
 

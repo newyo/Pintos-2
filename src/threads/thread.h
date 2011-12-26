@@ -123,7 +123,7 @@ struct thread
 
 #ifdef VM
     /* Owned by swap.h */
-    struct list swap_pages;
+    struct hash swap_pages;
 #endif
 
     /* Owned by thread.c. */
