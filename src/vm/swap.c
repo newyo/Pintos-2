@@ -64,7 +64,13 @@ swappage_page_of_owner (struct thread *owner, void *base)
   memset (&key.hash_elem, 0, sizeof (key.hash_elem));
   key.base = base;
   struct hash_elem *e = hash_find (&owner->swap_pages, &key.hash_elem);
-  return e == NULL ? NULL : hash_entry (e, struct swapped_page, hash_elem);
+  if (e == NULL)
+    return NULL;
+    
+  struct swapped_page *ee = hash_entry (e, struct swapped_page, hash_elem);
+  ASSERT (ee->thread == owner);
+  ASSERT (ee->base == base);
+  return ee;
 }
 
 static void swap_dispose_page (struct swapped_page *ee, bool caller_triggered);

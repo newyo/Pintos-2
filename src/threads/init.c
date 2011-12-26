@@ -132,7 +132,7 @@ main (void)
 #endif
 
 #ifdef VM
-  swap_init (); // swapping depends on filesystem being started!
+  swap_init ();
 #endif
 
   thread_load_avg = fp_from_int (0);
