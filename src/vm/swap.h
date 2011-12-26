@@ -5,8 +5,6 @@
 #include <stdbool.h>
 #include "threads/thread.h"
 
-extern const char SWAP_FILENAME[];
-
 void swap_init (void);
 
 size_t swap_stats_pages (void);

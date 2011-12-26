@@ -1,20 +1,18 @@
 #include "swap.h"
 #include <string.h>
+#include <limits.h>
 #include <list.h>
 #include <bitmap.h>
-#include "filesys/filesys.h"
-#include "filesys/file.h"
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "userprog/process.h"
+#include "devices/block.h"
 #include "lru.h"
 
 typedef size_t swap_t;
 #define SWAP_FAIL ((swap_t) BITMAP_ERROR)
-
-const char SWAP_FILENAME[] = "swap.dsk";
 
 struct swapped_page
 {
@@ -25,8 +23,11 @@ struct swapped_page
 };
 
 struct lock swap_lock;
-struct file *swap_file;
+struct block *swap_disk;
 size_t swap_pages_count;
+
+#define PG_SECTOR_RATIO (PGSIZE / BLOCK_SECTOR_SIZE)
+char _CASSERT_INT_PG_SECTOR_RATIO[0 - !(PGSIZE % BLOCK_SECTOR_SIZE == 0)];
 
 struct bitmap *used_pages; // false == free
 struct lru unmodified_pages; // list of struct swapped_page
@@ -40,6 +41,15 @@ swapped_page_id (struct swapped_page *cur)
   ASSERT (cur <  swapped_pages_space + swap_pages_count);
   
   return (uintptr_t) (cur - swap_pages_count) / sizeof (*cur);
+}
+
+static block_sector_t
+swap_page_to_sector (swap_t page)
+{
+  ASSERT (page < swap_pages_count);
+  uint64_t result = page * PG_SECTOR_RATIO;
+  ASSERT (result < UINT_MAX);
+  return (swap_t) result;
 }
 
 static struct swapped_page *
@@ -80,11 +90,11 @@ swap_init (void)
 {
   lock_init (&swap_lock);
   
-  swap_file = filesys_open (SWAP_FILENAME);
-  if (!swap_file)
-    PANIC ("Could not set up swapping: Swapfile not found: %s", SWAP_FILENAME);
-  file_deny_write (swap_file);
-  swap_pages_count = file_length (swap_file) / PGSIZE;
+  swap_disk = block_get_role (BLOCK_SWAP);
+  ASSERT (swap_disk != NULL);
+  
+  swap_pages_count = block_size (swap_disk) / PG_SECTOR_RATIO;
+  ASSERT (swap_pages_count > 0);
   
   swapped_pages_space = calloc (swap_pages_count, sizeof (struct swapped_page));
   if (!swapped_pages_space)
@@ -131,6 +141,53 @@ swap_get_disposable_pages (size_t count)
 })
 
 static void
+swap_write_sectors (swap_t start, void *src, size_t len)
+{
+  ASSERT (src != NULL);
+  ASSERT (len > 0);
+  
+  block_sector_t sector = swap_page_to_sector (start);
+  while (len >= BLOCK_SECTOR_SIZE)
+    {
+      block_write (swap_disk, sector, src);
+      src += BLOCK_SECTOR_SIZE;
+      len -= BLOCK_SECTOR_SIZE;
+      ++sector;
+    }
+  if (len > 0)
+    {
+      // cannot write an underfull block
+      uint8_t data[BLOCK_SECTOR_SIZE];
+      memcpy (data, src, len);
+      memset (data+len, 0, BLOCK_SECTOR_SIZE-len);
+      block_write (swap_disk, sector, data);
+    }
+}
+
+static void
+swap_read_sectors (swap_t start, void *base, size_t len)
+{
+  ASSERT (base != NULL);
+  ASSERT (len > 0);
+  
+  block_sector_t sector = swap_page_to_sector (start);
+  while (len >= BLOCK_SECTOR_SIZE)
+    {
+      block_read (swap_disk, sector, base);
+      base += BLOCK_SECTOR_SIZE;
+      len -= BLOCK_SECTOR_SIZE;
+      ++sector;
+    }
+  if (len > 0)
+    {
+      // cannot read an underfull block
+      uint8_t data[BLOCK_SECTOR_SIZE];
+      block_read (swap_disk, sector, data);
+      memcpy (base, data, len);
+    }
+}
+
+static void
 swap_write (swap_t         id,
             struct thread *owner,
             void          *src_,
@@ -145,7 +202,6 @@ swap_write (swap_t         id,
   size_t amount = (length+PGSIZE-1) / PGSIZE;
   ASSERT (are_valid_swap_ids (id, amount));
   
-  file_allow_write (swap_file);
   swap_t i;
   for (i = id; i < id+amount; ++i)
     {
@@ -159,14 +215,11 @@ swap_write (swap_t         id,
       lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
       ee->base = src;
       
-      off_t len = MIN (length, (size_t) PGSIZE);
-      off_t wrote UNUSED = file_write_at (swap_file, src, len, i*PGSIZE);
-      ASSERT (wrote == len);
-      
+      size_t len = MIN (length, (size_t) PGSIZE);
+      swap_write_sectors (i, src, len);
       src += len;
       length -= len;
     }
-  file_deny_write (swap_file);
 }
 
 bool
@@ -181,6 +234,8 @@ swap_alloc_and_write (struct thread *owner,
   ASSERT (length > 0);
   
   ASSERT (intr_get_level () == INTR_ON);
+  
+  lock_acquire (&swap_lock);
   
   size_t amount = (length+PGSIZE-1) / PGSIZE;
   swap_t id = swap_get_disposable_pages (amount);
@@ -212,7 +267,7 @@ swap_alloc_and_write (struct thread *owner,
     }
   for (i = 0; i < amount; ++i)
     {
-      off_t len = MIN (length, (size_t) PGSIZE);
+      size_t len = MIN (length, (size_t) PGSIZE);
       swap_write (ids[i], owner, src, len);
       src += len;
       length -= len;
@@ -292,17 +347,12 @@ swap_read_and_retain (struct thread *owner,
           lock_release (&swap_lock);
           return false;
         }
-        
-      off_t len = MIN (length, (size_t) PGSIZE);
-      off_t wrote UNUSED = file_read_at (swap_file,
-                                         ee->base,
-                                         len,
-                                         swapped_page_id (ee));
-      ASSERT (wrote == len);
+      
+      size_t len = MIN (length, (size_t) PGSIZE);
+      swap_read_sectors (swapped_page_id (ee), ee->base, len);
+      base += len;
       length -= len;
       lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
-      
-      base += PGSIZE;
     }
   while (--amount > 0);
   lock_release (&swap_lock);
