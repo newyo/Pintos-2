@@ -410,10 +410,7 @@ thread_exit (void)
     }
     
   if (t->pagedir)
-    {
-      process_exit ();
-      t->pagedir = NULL;
-    }
+    process_exit ();
   else
     {
       ASSERT (list_empty (&t->lock_list));

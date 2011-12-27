@@ -1,13 +1,13 @@
 #include "lru.h"
 #include <string.h>
 
-#define ASSERT_FILLING(X) \
-({ \
-  __typeof (X) _x = (X); \
-  ASSERT (_x != NULL); \
-  ASSERT (_x->item_count == 0 || list_empty (&_x->lru_list)); \
-  ASSERT (_x->item_count > 0 || !list_empty (&_x->lru_list)); \
-  (void) 0; \
+#define ASSERT_FILLING(X)                                      \
+({                                                             \
+  __typeof (X) _x = (X);                                       \
+  ASSERT (_x != NULL);                                         \
+  ASSERT (_x->item_count == 0 || !list_empty (&_x->lru_list)); \
+  ASSERT (_x->item_count > 0  ||  list_empty (&_x->lru_list)); \
+  (void) 0;                                                    \
 })
 
 void

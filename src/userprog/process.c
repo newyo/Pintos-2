@@ -28,9 +28,8 @@
 struct process_start_aux
 {
   struct semaphore *sema;
-  bool *failed;
-  
-  char file_name[PGSIZE - 2*sizeof (void *)];
+  bool             *failed;
+  char              file_name[PGSIZE - 2*sizeof (void *)];
 } __attribute__ ((packed));
 
 typedef char _CASSERT_SIZEOF_PROCESS_START_AUX_EQ_PGSIZE[
@@ -243,8 +242,10 @@ start_process (void *const aux_)
   } while (0);
 
   /* load exe, allocating stack */
+  printf ("   START_PROCESS TRACE: before load (), %8p\n", thread_current ());
   if (!load (exe, &if_.eip, &if_.esp))
     goto failure;
+  printf ("   START_PROCESS TRACE: after load (), %8p\n", thread_current ());
   
   char *const start = if_.esp;
   char *const end = start - PGSIZE;
@@ -300,12 +301,6 @@ start_process (void *const aux_)
   *aux->failed = 0;
   sema_up (aux->sema);
   palloc_free_page (aux_);
-
-#ifdef VM
-  struct thread *t = thread_current ();
-  vm_init_thread (t);
-  swap_init_thread (t);
-#endif
   
   //debug_hexdump (if_.esp, start);
 
@@ -315,10 +310,13 @@ start_process (void *const aux_)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  printf ("   START_PROCESS SUCCESS: %8p\n", thread_current ());
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
   
 failure:
+  printf ("   START_PROCESS FAILED: %8p\n", thread_current ());
+
   *aux->failed = 1;
   sema_up (aux->sema);
   palloc_free_page (aux_);
@@ -362,6 +360,8 @@ process_exit (void)
   
   struct thread *cur = thread_current ();
   
+  ASSERT (cur->pagedir != NULL);
+  
   if (cur->executable)
     {
       file_close (cur->executable);
@@ -369,13 +369,13 @@ process_exit (void)
     }
   
   // The Pintos tests want us to display the exit code once exited
-  const char *c = strchr (cur->name, ' '); // find space in arguments line if exists
-  int name_len = c != NULL ? (int) (c - cur->name) : (int) sizeof (cur->name);
-  printf ("%.*s: exit(%d)\n", name_len, cur->name, cur->exit_code);
+  const char *c = strchrnul (cur->name, ' ');
+  printf ("%.*s: exit(%d)\n", (int) (c-cur->name), cur->name, cur->exit_code);
   
   while (!list_empty (&cur->lock_list))
     {
-      struct lock *l = list_entry (list_front (&cur->lock_list), struct lock, holder_elem);
+      struct lock *l;
+      l = list_entry (list_front (&cur->lock_list), struct lock, holder_elem);
       lock_release (l);
     }
     
@@ -485,20 +485,21 @@ static bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
-  struct Elf32_Ehdr ehdr;
-  struct file *file = NULL;
-  off_t file_ofs;
   bool success = false;
-  int i;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
+#ifdef VM
+  swap_init_thread (t);
+  vm_init_thread (t);
+#endif
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+  printf ("   START_PROCESS (load) TRACE: filesys_open (), %8p\n", t);
+  struct file *file = filesys_open (file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -507,6 +508,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   t->executable = file; // file will be closed by process_exit
 
   /* Read and verify executable header. */
+  printf ("   START_PROCESS (load) TRACE: before ehdr, %8p\n", t);
+  struct Elf32_Ehdr ehdr;
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
       || ehdr.e_type != 2
@@ -518,9 +521,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
+  printf ("   START_PROCESS (load) TRACE: after ehdr, %8p\n", t);
 
   /* Read program headers. */
-  file_ofs = ehdr.e_phoff;
+  printf ("   START_PROCESS (load) TRACE: before headers, %8p\n", t);
+  off_t file_ofs = ehdr.e_phoff;
+  int i;
   for (i = 0; i < ehdr.e_phnum; i++) 
     {
       struct Elf32_Phdr phdr;
@@ -568,19 +574,24 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
+              printf ("   START_PROCESS (load) TRACE: before load_segment, %8p\n", t);
               if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
+              printf ("   START_PROCESS (load) TRACE: after load_segment, %8p\n", t);
             }
           else
             goto done;
           break;
         }
     }
+  printf ("   START_PROCESS (load) TRACE: after headers, %8p\n", t);
 
+  printf ("   START_PROCESS (load) TRACE: before setup_stack (), %8p\n", t);
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
+  printf ("   START_PROCESS (load) TRACE: after setup_stack (), %8p\n", t);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -662,6 +673,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
+  
+  struct thread *t = thread_current ();
 
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
@@ -672,25 +685,25 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
+      
+      // TODO: implement readonly in enum vm_physical_page_type
+      (void) writable;
+
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL)
+      printf ("   START_PROCESS (load_segment) TRACE: before vm_alloc_and_ensure, %8p\n", t);
+      if (!vm_alloc_and_ensure (t, upage))
         return false;
+      printf ("   START_PROCESS (load_segment) TRACE: after vm_alloc_and_ensure, %8p\n", t);
 
       /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      printf ("   START_PROCESS (load_segment) TRACE: before file_read, %8p\n", t);
+      if (file_read (file, upage, page_read_bytes) != (int) page_read_bytes)
         {
-          palloc_free_page (kpage);
+          vm_dispose (t, upage);
           return false; 
         }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }
+      memset (upage + page_read_bytes, 0, page_zero_bytes);
+      printf ("   START_PROCESS (load_segment) TRACE: after file_read, %8p\n", t);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -705,19 +718,17 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
-  uint8_t *kpage;
-  bool success = false;
+  struct thread *t = thread_current ();
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        *esp = PHYS_BASE;
-      else
-        palloc_free_page (kpage);
-    }
-  return success;
+  if (!vm_alloc_and_ensure (t, ((uint8_t *) PHYS_BASE) - PGSIZE))
+    return false;
+  size_t i;
+  for (i = 1; i < PROCESS_STACK_SIZE/PGSIZE; ++i)
+    if(!vm_alloc_zero (t, ((uint8_t *) PHYS_BASE) - (i+1) * PGSIZE))
+      return false; // don't dispose pages, thread will be killed, anyway
+  
+  *esp = PHYS_BASE;
+  return true;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
@@ -729,7 +740,7 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+static bool UNUSED
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();

@@ -396,7 +396,8 @@ void
 swap_init_thread (struct thread *owner)
 {
   ASSERT (owner != NULL);
-  hash_init (&owner->swap_pages, &swapped_page_hash, &swapped_page_less, NULL);
+  printf ("   INITIALISIERE SWAP FÜR %8p.\n", owner);
+  hash_init (&owner->swap_pages, &swapped_page_hash, &swapped_page_less, owner);
 }
 
 static void
@@ -410,6 +411,7 @@ void
 swap_clean (struct thread *owner)
 {
   ASSERT (owner != NULL);
+  printf ("   CLEANE SWAP VON %8p.\n", owner);
   
   lock_acquire (&swap_lock);
   hash_destroy (&owner->swap_pages, &swap_clean_sub);

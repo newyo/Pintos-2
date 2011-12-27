@@ -10,6 +10,8 @@ void vm_init_thread (struct thread *t);
 void vm_clean (struct thread *t);
 
 bool vm_alloc_zero (struct thread *t, void *addr);
+bool vm_alloc_and_ensure (struct thread *t, void *addr);
+void vm_dispose (struct thread *t, void *addr);
 
 void vm_swap_disposed (struct thread *t, void *base);
 

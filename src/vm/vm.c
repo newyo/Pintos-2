@@ -12,7 +12,7 @@
 #include "threads/synch.h"
 #include "userprog/pagedir.h"
 
-#define MIN_ALLOC_ADDR (1<<16)
+#define MIN_ALLOC_ADDR ((void *) (1<<16))
 
 enum vm_physical_page_type
 {
@@ -39,6 +39,17 @@ struct vm_logical_page
 static bool vm_is_initialized;
 static struct lru pages_lru;
 static struct lock vm_lock;
+
+#define ASSERT_T_ADDR(T,B)       \
+({                               \
+  __typeof (T) _t = (T);         \
+  __typeof (B) _b = (B);         \
+  ASSERT (vm_is_initialized);    \
+  ASSERT (_t != NULL);           \
+  ASSERT (_b >= MIN_ALLOC_ADDR); \
+  ASSERT (pg_ofs (_b) == 0);     \
+  (void) 0;                      \
+})
 
 void
 vm_init (void)
@@ -79,7 +90,20 @@ void
 vm_init_thread (struct thread *t)
 {
   ASSERT (vm_is_initialized);
-  hash_init (&t->swap_pages, &vm_thread_page_hash, &vm_thread_page_less, NULL);
+  ASSERT (t != NULL);
+  
+  printf ("   INITIALISIERE VM FÜR %8p.\n", t);
+  hash_init (&t->vm_pages, &vm_thread_page_hash, &vm_thread_page_less, t);
+}
+
+static void
+vm_clean_sub (struct hash_elem *e, void *aux UNUSED)
+{
+  struct vm_logical_page *ee;
+  ee = hash_entry (e, struct vm_logical_page, thread_elem);
+  
+  // TODO
+  (void) ee;
 }
 
 void
@@ -87,11 +111,12 @@ vm_clean (struct thread *t)
 {
   ASSERT (vm_is_initialized);
   ASSERT (t != NULL);
-  
+  printf ("   CLEANE VM VON %8p.\n", t);
+    
   lock_acquire (&vm_lock);
   enum intr_level old_level = intr_disable ();
   
-  // TODO
+  hash_destroy (&t->vm_pages, &vm_clean_sub);
   
   intr_set_level (old_level);
   lock_release (&vm_lock);
@@ -100,9 +125,7 @@ vm_clean (struct thread *t)
 bool
 vm_alloc_zero (struct thread *t, void *addr)
 {
-  ASSERT (vm_is_initialized);
-  ASSERT ((uintptr_t) addr >= MIN_ALLOC_ADDR);
-  ASSERT (pg_ofs (addr));
+  ASSERT_T_ADDR (t, addr);
   
   lock_acquire (&vm_lock);
   enum intr_level old_level = intr_disable ();
@@ -119,7 +142,7 @@ vm_alloc_zero (struct thread *t, void *addr)
   page->user_addr = addr;
   page->swap_page = SWAP_FAIL;
   
-  hash_insert (&t->swap_pages, &page->thread_elem);
+  hash_insert (&t->vm_pages, &page->thread_elem);
   
   intr_set_level (old_level);
   lock_release (&vm_lock);
@@ -129,9 +152,7 @@ vm_alloc_zero (struct thread *t, void *addr)
 static struct vm_logical_page *
 vm_get_logical_page (struct thread *t, void *base)
 {
-  ASSERT (t != NULL);
-  ASSERT (base != NULL);
-  ASSERT (pg_ofs (base) == 0);
+  ASSERT_T_ADDR (t, base);
   
   struct vm_logical_page key;
   key.user_addr = base;
@@ -150,7 +171,8 @@ vm_get_logical_page (struct thread *t, void *base)
 void
 vm_swap_disposed (struct thread *t, void *base)
 {
-  ASSERT (vm_is_initialized);
+  ASSERT_T_ADDR (t, base);
+  
   // Must not lock vm_lock, as vm_ensure could trigger swap disposal!
   
   // With being inside swaps lock, page cannot have been free'd.
@@ -170,7 +192,7 @@ vm_rescheduled (struct thread *from, struct thread *to UNUSED)
 {
   if (!vm_is_initialized)
     return;
-  if (from->pagedir == NULL)
+  if (from == NULL || from->pagedir == NULL)
     return;
   
   ASSERT (from != NULL);
@@ -215,8 +237,9 @@ vm_swap_in (struct vm_logical_page *ee)
 enum vm_ensure_result
 vm_ensure (struct thread *t, void *base)
 {
-  ASSERT (vm_is_initialized);
+  ASSERT_T_ADDR (t, base);
   ASSERT (intr_get_level () == INTR_ON);
+  
   lock_acquire (&vm_lock);
   
   enum vm_ensure_result result;
@@ -264,4 +287,30 @@ vm_ensure (struct thread *t, void *base)
 end:
   lock_release (&vm_lock);
   return result;
+}
+
+void
+vm_dispose (struct thread *t, void *addr)
+{
+  ASSERT_T_ADDR (t, addr);
+  
+  // TODO
+  (void) t;
+  (void) addr;
+}
+
+bool
+vm_alloc_and_ensure (struct thread *t, void *addr)
+{
+  ASSERT_T_ADDR (t, addr);
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  if (!vm_alloc_zero (t, addr))
+    return false;
+  if (!vm_ensure (t, addr)) // TODO: HIER DRIN IST DER FEHLER !!!
+    {
+      vm_dispose (t, addr);
+      return false;
+    }
+  return true;
 }
