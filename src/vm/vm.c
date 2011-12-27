@@ -2,6 +2,7 @@
 #include <hash.h>
 #include <stddef.h>
 #include <limits.h>
+#include <stdio.h>
 #include "lru.h"
 #include "swap.h"
 #include "threads/vaddr.h"
@@ -35,14 +36,20 @@ struct vm_logical_page
   enum vm_physical_page_type  type;
 };
 
+static bool vm_is_initialized;
 static struct lru pages_lru;
 static struct lock vm_lock;
 
 void
 vm_init (void)
 {
+  ASSERT (!vm_is_initialized);
+  
   lru_init (&pages_lru, 0, NULL, NULL);
   lock_init (&vm_lock);
+  
+  vm_is_initialized = true;
+  printf ("Initialized user's virtual memory.\n");
 }
 
 static unsigned
@@ -57,8 +64,8 @@ vm_thread_page_hash (const struct hash_elem *e, void *aux UNUSED)
 
 static bool
 vm_thread_page_less (const struct hash_elem *a,
-                   const struct hash_elem *b,
-                   void *aux UNUSED)
+                     const struct hash_elem *b,
+                     void *aux UNUSED)
 {
   struct vm_logical_page *aa, *bb;
   aa = hash_entry (a, struct vm_logical_page, thread_elem);
@@ -71,12 +78,14 @@ vm_thread_page_less (const struct hash_elem *a,
 void
 vm_init_thread (struct thread *t)
 {
+  ASSERT (vm_is_initialized);
   hash_init (&t->swap_pages, &vm_thread_page_hash, &vm_thread_page_less, NULL);
 }
 
 void
 vm_clean (struct thread *t)
 {
+  ASSERT (vm_is_initialized);
   ASSERT (t != NULL);
   
   lock_acquire (&vm_lock);
@@ -91,6 +100,7 @@ vm_clean (struct thread *t)
 bool
 vm_alloc_zero (struct thread *t, void *addr)
 {
+  ASSERT (vm_is_initialized);
   ASSERT ((uintptr_t) addr >= MIN_ALLOC_ADDR);
   ASSERT (pg_ofs (addr));
   
@@ -140,6 +150,7 @@ vm_get_logical_page (struct thread *t, void *base)
 void
 vm_swap_disposed (struct thread *t, void *base)
 {
+  ASSERT (vm_is_initialized);
   // Must not lock vm_lock, as vm_ensure could trigger swap disposal!
   
   // With being inside swaps lock, page cannot have been free'd.
@@ -157,32 +168,55 @@ vm_swap_disposed (struct thread *t, void *base)
 void
 vm_rescheduled (struct thread *from, struct thread *to UNUSED)
 {
+  if (!vm_is_initialized)
+    return;
+  if (from->pagedir == NULL)
+    return;
+  
   ASSERT (from != NULL);
   lock_acquire (&vm_lock);
   
-  // TODO: lru for dirty pages
+  // TODO: lru for accessed pages
+  // TODO: swap disposing for dirty pages
   lock_release (&vm_lock);
 }
 
 static bool
 vm_real_alloc (struct vm_logical_page *ee)
 {
-  // TODO: palloc and zero'd page, install it
-  (void) ee;
-  return false;
+  ASSERT (ee != NULL);
+  ASSERT (ee->user_addr != NULL);
+  ASSERT (ee->thread != NULL);
+  
+  void *kpage = palloc_get_page (PAL_USER|PAL_ZERO);
+  if(kpage == NULL)
+    return false;
+    
+  bool result UNUSED;
+  result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
+  ASSERT (result == true);
+  
+  return result;
 }
 
 static bool
 vm_swap_in (struct vm_logical_page *ee)
 {
+  ASSERT (ee != NULL);
+  ASSERT (ee->user_addr != NULL);
+  ASSERT (ee->thread != NULL);
+
   // TODO
-  (void) ee;
+
+  lru_use (&pages_lru, &ee->lru_elem);
   return false;
 }
 
 enum vm_ensure_result
 vm_ensure (struct thread *t, void *base)
 {
+  ASSERT (vm_is_initialized);
+  ASSERT (intr_get_level () == INTR_ON);
   lock_acquire (&vm_lock);
   
   enum vm_ensure_result result;
@@ -225,6 +259,7 @@ vm_ensure (struct thread *t, void *base)
         // VMPPT_USED&VMPPT_SWAPPED_IN imply pagedir_get_page != NULL
         ASSERT (0);
     }
+  lru_use (&pages_lru, &ee->lru_elem);
     
 end:
   lock_release (&vm_lock);

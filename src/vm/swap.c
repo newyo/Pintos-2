@@ -3,6 +3,7 @@
 #include <limits.h>
 #include <list.h>
 #include <hash.h>
+#include <stdio.h>
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
 #include "threads/malloc.h"
@@ -82,6 +83,17 @@ swappage_page_of_owner (struct thread *owner, void *base)
   _x != SWAP_FAIL && _x < swap_pages_count && amount < swap_pages_count; \
 })
 
+static void UNUSED
+swap_needlessly_zero_out_whole_swap_space (void)
+{
+  char zero[BLOCK_SECTOR_SIZE];
+  memset (zero, 0x66, sizeof (zero));
+  
+  block_sector_t i;
+  for (i = 0; i < swap_pages_count; ++i)
+    block_write (swap_disk, i, zero);
+}
+
 void
 swap_init (void)
 {
@@ -101,6 +113,12 @@ swap_init (void)
   if (!used_pages)
     PANIC ("Could not set up swapping: Memory exhausted (2)");
   lru_init (&unmodified_pages, 0, NULL, NULL);
+  
+#ifndef NDEBUG
+  swap_needlessly_zero_out_whole_swap_space ();
+#endif
+  
+  printf ("Initialized swapping.\n");
 }
 
 static void

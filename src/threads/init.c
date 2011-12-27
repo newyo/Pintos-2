@@ -33,6 +33,7 @@
 #endif
 #ifdef VM
 # include "vm/swap.h"
+# include "vm/vm.h"
 #endif
 #ifdef FILESYS
 # include "devices/block.h"
@@ -133,6 +134,7 @@ main (void)
 
 #ifdef VM
   swap_init ();
+  vm_init ();
 #endif
 
   thread_load_avg = fp_from_int (0);
