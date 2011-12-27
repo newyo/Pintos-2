@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <limits.h>
 #include <stdio.h>
+#include <string.h>
 #include "lru.h"
 #include "swap.h"
 #include "threads/vaddr.h"
@@ -13,6 +14,7 @@
 #include "userprog/pagedir.h"
 
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
+#define SWAP_AT_ONCE 32
 
 enum vm_physical_page_type
 {
@@ -20,8 +22,8 @@ enum vm_physical_page_type
   
   VMPPT_EMPTY,        // read from, but never written to -> all zeros
   VMPPT_USED,         // allocated, no swap file equivalent
-  VMPPT_SWAPPED_IN,   // retreived from swap and not dirty or disposed
-  VMPPT_SWAPPED_OUT,  // removed from RAM
+  VMPPT_SWAPPED,      // retreived from swap and not dirty or disposed
+                      // OR removed from RAM
   
   VMPPT_COUNT
 };
@@ -32,7 +34,6 @@ struct vm_logical_page
   struct thread              *thread;      // owner thread
   struct hash_elem            thread_elem; // for thread.vm_pages
   struct lru_elem             lru_elem;    // for pages_lru
-  swap_t                      swap_page;   // swapped from or to
   enum vm_physical_page_type  type;
 };
 
@@ -40,16 +41,15 @@ static bool vm_is_initialized;
 static struct lru pages_lru;
 static struct lock vm_lock;
 
-#define ASSERT_T_ADDR(T,B)       \
-({                               \
-  __typeof (T) _t = (T);         \
-  __typeof (B) _b = (B);         \
-  ASSERT (vm_is_initialized);    \
-  ASSERT (_t != NULL);           \
-  ASSERT (_b >= MIN_ALLOC_ADDR); \
-  ASSERT (pg_ofs (_b) == 0);     \
-  (void) 0;                      \
-})
+static void
+assert_t_addr(struct thread *t, const void *addr)
+{
+  ASSERT (vm_is_initialized);
+  ASSERT (t != NULL);
+  ASSERT (t == thread_current ()); // debug
+  ASSERT (addr >= MIN_ALLOC_ADDR);
+  ASSERT (pg_ofs (addr) == 0);
+}
 
 void
 vm_init (void)
@@ -92,7 +92,7 @@ vm_init_thread (struct thread *t)
   ASSERT (vm_is_initialized);
   ASSERT (t != NULL);
   
-  printf ("   INITIALISIERE VM FÜR %8p.\n", t);
+  //printf ("   INITIALISIERE VM FÜR %8p.\n", t);
   hash_init (&t->vm_pages, &vm_thread_page_hash, &vm_thread_page_less, t);
 }
 
@@ -111,7 +111,7 @@ vm_clean (struct thread *t)
 {
   ASSERT (vm_is_initialized);
   ASSERT (t != NULL);
-  printf ("   CLEANE VM VON %8p.\n", t);
+  //printf ("   CLEANE VM VON %8p.\n", t);
     
   lock_acquire (&vm_lock);
   enum intr_level old_level = intr_disable ();
@@ -125,22 +125,24 @@ vm_clean (struct thread *t)
 bool
 vm_alloc_zero (struct thread *t, void *addr)
 {
-  ASSERT_T_ADDR (t, addr);
+  assert_t_addr (t, addr);
   
   lock_acquire (&vm_lock);
   enum intr_level old_level = intr_disable ();
   
-  struct vm_logical_page *page = calloc (1, sizeof (struct vm_logical_page));
+  //printf ("   ALLOC ZERO: %8p\n", addr);
+  
+  struct vm_logical_page *page = calloc (1, sizeof (*page));
   if (!page)
     {
-      intr_set_level (old_level);
+      //intr_set_level (old_level);
+      lock_release (&vm_lock);
       return false;
     }
     
   page->type      = VMPPT_EMPTY;
   page->thread    = t;
   page->user_addr = addr;
-  page->swap_page = SWAP_FAIL;
   
   hash_insert (&t->vm_pages, &page->thread_elem);
   
@@ -152,7 +154,7 @@ vm_alloc_zero (struct thread *t, void *addr)
 static struct vm_logical_page *
 vm_get_logical_page (struct thread *t, void *base)
 {
-  ASSERT_T_ADDR (t, base);
+  assert_t_addr (t, base);
   
   struct vm_logical_page key;
   key.user_addr = base;
@@ -171,7 +173,7 @@ vm_get_logical_page (struct thread *t, void *base)
 void
 vm_swap_disposed (struct thread *t, void *base)
 {
-  ASSERT_T_ADDR (t, base);
+  assert_t_addr (t, base);
   
   // Must not lock vm_lock, as vm_ensure could trigger swap disposal!
   
@@ -180,27 +182,128 @@ vm_swap_disposed (struct thread *t, void *base)
   struct vm_logical_page *ee = vm_get_logical_page (t, base);
   ASSERT (ee != NULL);
   
-  if (ee->type != VMPPT_SWAPPED_IN)
+  if (ee->type != VMPPT_SWAPPED)
     return;
-  
   ee->type = VMPPT_USED;
-  ee->swap_page = SWAP_FAIL;
 }
 
 void
-vm_rescheduled (struct thread *from, struct thread *to UNUSED)
+vm_tick (struct thread *t)
 {
+  ASSERT (t != NULL);
+  ASSERT (t->pagedir != NULL);
+  ASSERT (intr_get_level () == INTR_OFF);
+  
   if (!vm_is_initialized)
     return;
-  if (from == NULL || from->pagedir == NULL)
-    return;
-  
-  ASSERT (from != NULL);
-  lock_acquire (&vm_lock);
   
   // TODO: lru for accessed pages
   // TODO: swap disposing for dirty pages
-  lock_release (&vm_lock);
+}
+
+static bool
+swap_free_page (void)
+{
+  ASSERT (intr_get_level () == INTR_ON);
+  bool result = false;
+  
+  // No other swap operation, except swap_tick, can disturb this flow,
+  // b/c of vm_lock.
+  //
+  // Schema:
+  //
+  // NO INTERRUPTS:
+  //   1) Search least recently accessed page A.
+  //   2) Allocate a kernel pool page K to buffer the A's content.
+  //   3) Dispose A, remove A from LRU list, mark it as swapped out.
+  // INTERRUPTABLE:
+  //   4) Allocate swap space and write K to it.
+  // IF sWAPPED OUT
+  //   NO INTERRUPTS:
+  //     5) Free K.
+  // OTHERWISE
+  //   NO INTERRUPTS:
+  //     5) Let K become new A, effectively loosing a kernel page to user pages.
+  //        As user page pool is exhausted, A's content would be lost otherwise
+  //        and it's thread had to be killed.
+  //     6) Mark the page as dirty, reenter it into LRU list,
+  //        mark as non swapped.
+  
+  intr_disable ();
+  
+  struct vm_logical_page *ee;
+  for (;;)
+    {
+      struct lru_elem *e = lru_peek_least (&pages_lru);
+      if (!e)
+        goto end;
+      ee = lru_entry (e, struct vm_logical_page, lru_elem);
+      
+      if (ee->type == VMPPT_SWAPPED)
+        {
+          if(pagedir_is_dirty (ee->thread->pagedir, ee->user_addr))
+            {
+              // Page is dirty. Try some other page.
+              pagedir_set_dirty (ee->thread->pagedir, ee->user_addr, false);
+              lru_use (&pages_lru, &ee->lru_elem);
+              ee->type = VMPPT_USED;
+              continue;
+            }
+          else
+            {
+              // Memory is unchanged, just tell swap not to dispose it.
+              // TODO
+              goto end;
+            }
+        }
+      
+      break;
+    }
+    
+  void *buffer = palloc_get_page (0);
+  if (!buffer)
+    goto end;
+    
+  lru_dispose (&pages_lru, &ee->lru_elem, false);
+  void *kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
+  ASSERT (kpage != NULL);
+  memcpy (buffer, kpage, PGSIZE);
+  pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+  ee->type = VMPPT_SWAPPED;
+  
+  intr_enable();
+  result = swap_alloc_and_write (ee->thread, ee->user_addr, buffer, PGSIZE);
+  intr_disable ();
+  
+  if (result)
+    palloc_free_page (buffer);
+  else
+    {
+      pagedir_set_page (ee->thread->pagedir, ee->user_addr, buffer, true);
+      pagedir_set_dirty (ee->thread->pagedir, ee->user_addr, true);
+      lru_use (&pages_lru, &ee->lru_elem);
+      ee->type = VMPPT_USED;
+    }
+  
+end:
+  intr_enable();
+  return result;
+}
+
+static bool
+swap_free_memory (void)
+{
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  size_t freed = 0;
+  while (freed < SWAP_AT_ONCE && !lru_is_empty (&pages_lru))
+    {
+      if (swap_free_page ())
+        ++freed;
+      else
+        break;
+    }
+  return freed > 0;
 }
 
 static bool
@@ -209,12 +312,20 @@ vm_real_alloc (struct vm_logical_page *ee)
   ASSERT (ee != NULL);
   ASSERT (ee->user_addr != NULL);
   ASSERT (ee->thread != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   
-  void *kpage = palloc_get_page (PAL_USER|PAL_ZERO);
-  if(kpage == NULL)
-    return false;
+  void *kpage;
+  for (;;)
+    {
+      kpage = palloc_get_page (PAL_USER|PAL_ZERO);
+      if (kpage != NULL)
+        break;
+        
+      if (!swap_free_memory ())
+        return false;
+    }
     
-  bool result UNUSED;
+  bool result;
   result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
   ASSERT (result == true);
   
@@ -230,14 +341,13 @@ vm_swap_in (struct vm_logical_page *ee)
 
   // TODO
 
-  lru_use (&pages_lru, &ee->lru_elem);
   return false;
 }
 
 enum vm_ensure_result
 vm_ensure (struct thread *t, void *base)
 {
-  ASSERT_T_ADDR (t, base);
+  assert_t_addr (t, base);
   ASSERT (intr_get_level () == INTR_ON);
   
   lock_acquire (&vm_lock);
@@ -272,14 +382,13 @@ vm_ensure (struct thread *t, void *base)
         result = vm_real_alloc (ee) ? VMER_OK : VMER_OOM;
         break;
         
-      case VMPPT_SWAPPED_OUT:
+      case VMPPT_SWAPPED:
         result = vm_swap_in (ee) ? VMER_OK : VMER_OOM;
         break;
       
       case VMPPT_USED:
-      case VMPPT_SWAPPED_IN:
       default:
-        // VMPPT_USED&VMPPT_SWAPPED_IN imply pagedir_get_page != NULL
+        // VMPPT_USED implies pagedir_get_page != NULL
         ASSERT (0);
     }
   lru_use (&pages_lru, &ee->lru_elem);
@@ -292,7 +401,7 @@ end:
 void
 vm_dispose (struct thread *t, void *addr)
 {
-  ASSERT_T_ADDR (t, addr);
+  assert_t_addr (t, addr);
   
   // TODO
   (void) t;
@@ -302,15 +411,17 @@ vm_dispose (struct thread *t, void *addr)
 bool
 vm_alloc_and_ensure (struct thread *t, void *addr)
 {
-  ASSERT_T_ADDR (t, addr);
+  assert_t_addr (t, addr);
   ASSERT (intr_get_level () == INTR_ON);
   
   if (!vm_alloc_zero (t, addr))
     return false;
-  if (!vm_ensure (t, addr)) // TODO: HIER DRIN IST DER FEHLER !!!
-    {
-      vm_dispose (t, addr);
-      return false;
-    }
-  return true;
+    
+  enum vm_ensure_result result = vm_ensure (t, addr);
+  if (result == VMER_OK)
+    return true;
+    
+  ASSERT (result == VMER_OOM);
+  vm_dispose (t, addr);
+  return false;
 }

@@ -242,10 +242,8 @@ start_process (void *const aux_)
   } while (0);
 
   /* load exe, allocating stack */
-  printf ("   START_PROCESS TRACE: before load (), %8p\n", thread_current ());
   if (!load (exe, &if_.eip, &if_.esp))
     goto failure;
-  printf ("   START_PROCESS TRACE: after load (), %8p\n", thread_current ());
   
   char *const start = if_.esp;
   char *const end = start - PGSIZE;
@@ -310,12 +308,10 @@ start_process (void *const aux_)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-  printf ("   START_PROCESS SUCCESS: %8p\n", thread_current ());
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
   
 failure:
-  printf ("   START_PROCESS FAILED: %8p\n", thread_current ());
 
   *aux->failed = 1;
   sema_up (aux->sema);
@@ -498,7 +494,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 #endif
 
   /* Open executable file. */
-  printf ("   START_PROCESS (load) TRACE: filesys_open (), %8p\n", t);
   struct file *file = filesys_open (file_name);
   if (file == NULL) 
     {
@@ -508,7 +503,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   t->executable = file; // file will be closed by process_exit
 
   /* Read and verify executable header. */
-  printf ("   START_PROCESS (load) TRACE: before ehdr, %8p\n", t);
   struct Elf32_Ehdr ehdr;
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -521,10 +515,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
-  printf ("   START_PROCESS (load) TRACE: after ehdr, %8p\n", t);
 
   /* Read program headers. */
-  printf ("   START_PROCESS (load) TRACE: before headers, %8p\n", t);
   off_t file_ofs = ehdr.e_phoff;
   int i;
   for (i = 0; i < ehdr.e_phnum; i++) 
@@ -574,24 +566,19 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              printf ("   START_PROCESS (load) TRACE: before load_segment, %8p\n", t);
               if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
-              printf ("   START_PROCESS (load) TRACE: after load_segment, %8p\n", t);
             }
           else
             goto done;
           break;
         }
     }
-  printf ("   START_PROCESS (load) TRACE: after headers, %8p\n", t);
 
-  printf ("   START_PROCESS (load) TRACE: before setup_stack (), %8p\n", t);
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
-  printf ("   START_PROCESS (load) TRACE: after setup_stack (), %8p\n", t);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -690,20 +677,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       (void) writable;
 
       /* Get a page of memory. */
-      printf ("   START_PROCESS (load_segment) TRACE: before vm_alloc_and_ensure, %8p\n", t);
       if (!vm_alloc_and_ensure (t, upage))
         return false;
-      printf ("   START_PROCESS (load_segment) TRACE: after vm_alloc_and_ensure, %8p\n", t);
 
       /* Load this page. */
-      printf ("   START_PROCESS (load_segment) TRACE: before file_read, %8p\n", t);
       if (file_read (file, upage, page_read_bytes) != (int) page_read_bytes)
         {
           vm_dispose (t, upage);
           return false; 
         }
       memset (upage + page_read_bytes, 0, page_zero_bytes);
-      printf ("   START_PROCESS (load_segment) TRACE: after file_read, %8p\n", t);
 
       /* Advance. */
       read_bytes -= page_read_bytes;

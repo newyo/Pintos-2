@@ -194,6 +194,11 @@ thread_tick (void)
 #endif
         kernel_ticks++;
     }
+    
+#ifdef VM
+  if (t->pagedir != NULL)
+    vm_tick (t);
+#endif
 
   if(thread_mlfqs && ((timer_ticks () % TIMER_FREQ) == 0))
     {
@@ -1025,7 +1030,6 @@ schedule (void)
 
   if (cur != next)
     prev = switch_threads (cur, next);
-  vm_rescheduled (cur, next);
   thread_schedule_tail (prev);
 }
 

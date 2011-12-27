@@ -15,7 +15,7 @@ void vm_dispose (struct thread *t, void *addr);
 
 void vm_swap_disposed (struct thread *t, void *base);
 
-void vm_rescheduled (struct thread *from, struct thread *to);
+void vm_tick (struct thread *t);
 
 enum vm_ensure_result
 {

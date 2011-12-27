@@ -221,11 +221,10 @@ swap_read_sectors (swap_t start, void *base, size_t len)
 static void
 swap_write (swap_t         id,
             struct thread *owner,
-            void          *src_,
+            void          *base,
+            void          *src,
             size_t         length)
 {
-  uint8_t *src = src_;
-  
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (src != NULL);
@@ -245,10 +244,11 @@ swap_write (swap_t         id,
       ee->thread = owner;
       hash_insert (&owner->swap_pages, &ee->hash_elem);
       lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
-      ee->base = src;
+      ee->base = base;
       
       size_t len = MIN (length, (size_t) PGSIZE);
       swap_write_sectors (i, src, len);
+      base += len;
       src += len;
       length -= len;
     }
@@ -256,11 +256,13 @@ swap_write (swap_t         id,
 
 bool
 swap_alloc_and_write (struct thread *owner,
+                      void          *base,
                       void          *src,
                       size_t         length)
 {
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
+  ASSERT (base != NULL);
   ASSERT (src != NULL);
   ASSERT ((uintptr_t) src % PGSIZE == 0);
   ASSERT (length > 0);
@@ -273,7 +275,7 @@ swap_alloc_and_write (struct thread *owner,
   swap_t id = swap_get_disposable_pages (amount);
   if (id != SWAP_FAIL)
     {
-      swap_write (id, owner, src, length);
+      swap_write (id, owner, base, src, length);
       lock_release (&swap_lock);
       return true;
     }
@@ -300,7 +302,8 @@ swap_alloc_and_write (struct thread *owner,
   for (i = 0; i < amount; ++i)
     {
       size_t len = MIN (length, (size_t) PGSIZE);
-      swap_write (ids[i], owner, src, len);
+      swap_write (ids[i], owner, base, src, len);
+      base += len;
       src += len;
       length -= len;
     }
@@ -396,7 +399,7 @@ void
 swap_init_thread (struct thread *owner)
 {
   ASSERT (owner != NULL);
-  printf ("   INITIALISIERE SWAP FÜR %8p.\n", owner);
+  //printf ("   INITIALISIERE SWAP FÜR %8p.\n", owner);
   hash_init (&owner->swap_pages, &swapped_page_hash, &swapped_page_less, owner);
 }
 
@@ -411,7 +414,7 @@ void
 swap_clean (struct thread *owner)
 {
   ASSERT (owner != NULL);
-  printf ("   CLEANE SWAP VON %8p.\n", owner);
+  //printf ("   CLEANE SWAP VON %8p.\n", owner);
   
   lock_acquire (&swap_lock);
   hash_destroy (&owner->swap_pages, &swap_clean_sub);
