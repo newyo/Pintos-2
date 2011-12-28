@@ -60,6 +60,7 @@ swappage_page_of_owner (struct thread *owner, void *base)
   
   struct swapped_page key;
   memset (&key.hash_elem, 0, sizeof (key.hash_elem));
+  key.thread = owner;
   key.base = base;
   struct hash_elem *e = hash_find (&owner->swap_pages, &key.hash_elem);
   if (e == NULL)
@@ -381,18 +382,22 @@ swap_read_and_retain (struct thread *owner,
 }
 
 static unsigned
-swapped_page_hash (const struct hash_elem *e, void *aux UNUSED)
+swapped_page_hash (const struct hash_elem *e, void *t)
 {
   typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void *))];
-  return (unsigned) hash_entry (e, struct swapped_page, hash_elem)->base;
+  ASSERT (e != NULL);
+  ASSERT (t != NULL);
+  struct swapped_page *ee = hash_entry (e, struct swapped_page, hash_elem)
+  ASSERT (ee->owner == t);
+  return (unsigned) ee->base;
 }
 
 static bool
 swapped_page_less (const struct hash_elem *a,
                    const struct hash_elem *b,
-                   void *aux)
+                   void *t)
 {
-  return swapped_page_hash (a, aux) < swapped_page_hash (b, aux);
+  return swapped_page_hash (a, t) < swapped_page_hash (b, t);
 }
 
 void
