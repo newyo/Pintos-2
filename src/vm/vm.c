@@ -213,77 +213,89 @@ swap_free_page (void)
   // Schema:
   //
   // NO INTERRUPTS:
-  //   1) Search least recently accessed page A.
-  //   2) Allocate a kernel pool page K to buffer the A's content.
+  //   1) Search least recently accessed user page A, with kernel page K.
+  //   2) If A was swapped in
+  //     2.1) IF NOT DIRTY A:
+  //       2.1.1) Remove dispose A and free K.
+  //       2.1.2) Remove A from LRU list.
+  //       2.2.3) Tell swap A was swapped out and cannot be disposed.
+  //     2.2) Otherwise:
+  //       2.2.1) Mark A as not dirty, tell LRU A was used.
+  //       2.2.2) Tell swap A is dirty.
+  //       2.2.3) Go back to (1).
   //   3) Dispose A, remove A from LRU list, mark it as swapped out.
+  //      (Dispose A here, so that another thread had an page fault,
+  //      if referencing A.)
   // INTERRUPTABLE:
-  //   4) Allocate swap space and write K to it.
-  // IF sWAPPED OUT
-  //   NO INTERRUPTS:
-  //     5) Free K.
-  // OTHERWISE
-  //   NO INTERRUPTS:
-  //     5) Let K become new A, effectively loosing a kernel page to user pages.
-  //        As user page pool is exhausted, A's content would be lost otherwise
-  //        and it's thread had to be killed.
-  //     6) Mark the page as dirty, reenter it into LRU list,
-  //        mark as non swapped.
+  //   4) Try allocate swap space and write K to it.
+  // NO INTERRUPTS:
+  //   IF (4) WORKED:
+  //     5.1.1) Free K.
+  //   OTHERWISE:
+  //     5.2.1) Set A -> K in pagedir again.
   
   intr_disable ();
   
   struct vm_logical_page *ee;
+  void *kpage;
   for (;;)
     {
+      // (1)
       struct lru_elem *e = lru_peek_least (&pages_lru);
       if (!e)
         goto end;
       ee = lru_entry (e, struct vm_logical_page, lru_elem);
+      kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
+      ASSERT (kpage != NULL);
       
+      // (2)
       if (ee->type == VMPPT_SWAPPED)
         {
-          if(pagedir_is_dirty (ee->thread->pagedir, ee->user_addr))
+          if(!pagedir_is_dirty (ee->thread->pagedir, ee->user_addr))
             {
-              // Page is dirty. Try some other page.
-              pagedir_set_dirty (ee->thread->pagedir, ee->user_addr, false);
-              lru_use (&pages_lru, &ee->lru_elem);
-              ee->type = VMPPT_USED;
-              continue;
+              // (2.1.1)
+              pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+              palloc_free_page (kpage);
+              // (2.1.2)
+              lru_dispose (&pages_lru, &ee->lru_elem, false);
+              // (2.1.3)
+              // TODO: telling
+              result = true;
+              goto end;
             }
           else
             {
-              // Memory is unchanged, just tell swap not to dispose it.
-              // TODO
-              goto end;
+              // Page is dirty. Try some other page.
+              // (2.2.1);
+              pagedir_set_dirty (ee->thread->pagedir, ee->user_addr, false);
+              lru_use (&pages_lru, &ee->lru_elem);
+              ee->type = VMPPT_USED;
+              // (2.2.2);
+              bool swap_result UNUSED;
+              swap_result = swap_dispose (ee->thread, ee->user_addr, 1);
+              ASSERT (swap_result);
+              // (2.2.3);
+              continue;
             }
         }
       
       break;
     }
-    
-  void *buffer = palloc_get_page (0);
-  if (!buffer)
-    goto end;
-    
-  lru_dispose (&pages_lru, &ee->lru_elem, false);
-  void *kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
-  ASSERT (kpage != NULL);
-  memcpy (buffer, kpage, PGSIZE);
+  
+  // (3)
   pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+  lru_dispose (&pages_lru, &ee->lru_elem, false);
   ee->type = VMPPT_SWAPPED;
   
+  // (4)
   intr_enable();
-  result = swap_alloc_and_write (ee->thread, ee->user_addr, buffer, PGSIZE);
+  result = swap_alloc_and_write (ee->thread, ee->user_addr, kpage, PGSIZE);
   intr_disable ();
   
-  if (result)
-    palloc_free_page (buffer);
-  else
-    {
-      pagedir_set_page (ee->thread->pagedir, ee->user_addr, buffer, true);
-      pagedir_set_dirty (ee->thread->pagedir, ee->user_addr, true);
-      lru_use (&pages_lru, &ee->lru_elem);
-      ee->type = VMPPT_USED;
-    }
+  if (result) // (5.1.1)
+    palloc_free_page (kpage);
+  else // (5.2.1)
+    pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
   
 end:
   intr_enable();

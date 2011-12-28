@@ -40,7 +40,7 @@ swapped_page_id (struct swapped_page *cur)
   ASSERT (cur >= swapped_pages_space);
   ASSERT (cur <  swapped_pages_space + swap_pages_count);
   
-  return (uintptr_t) (cur - swap_pages_count) / sizeof (*cur);
+  return (uintptr_t) (cur - swapped_pages_space) / sizeof (*cur);
 }
 
 static block_sector_t
@@ -436,4 +436,30 @@ swap_stats_full_pages (void)
   size_t allocated = bitmap_count (used_pages, 0, swap_pages_count, true);
   size_t unmodified = lru_usage (&unmodified_pages);
   return allocated - unmodified;
+}
+
+bool
+swap_must_retain (struct thread *owner,
+                  void          *base,
+                  size_t         amount)
+{
+  ASSERT (owner != NULL);
+  ASSERT (base != NULL);
+  ASSERT ((uintptr_t) base % PGSIZE == 0);
+  ASSERT (amount > 0);
+  
+  lock_acquire (&swap_lock);
+  do
+    {
+      struct swapped_page *ee = swappage_page_of_owner (owner, base);
+      if (!ee)
+        {
+          lock_release (&swap_lock);
+          return false;
+        }
+      lru_dispose (&unmodified_pages, &ee->unmodified_pages_elem, false);
+    }
+  while (--amount > 0);
+  lock_release (&swap_lock);
+  return true;
 }

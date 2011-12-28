@@ -30,6 +30,9 @@ bool swap_read_and_retain (struct thread *owner,
 bool swap_dispose (struct thread *owner,
                    void          *base,
                    size_t         amount);
+bool swap_must_retain (struct thread *owner,
+                       void          *base,
+                       size_t         amount);
 
 // May have interrupts enabled.
 
