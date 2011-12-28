@@ -64,26 +64,24 @@ vm_init (void)
 }
 
 static unsigned
-vm_thread_page_hash (const struct hash_elem *e, void *aux UNUSED)
+vm_thread_page_hash (const struct hash_elem *e, void *t)
 {
   typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void *))];
+  ASSERT (t != NULL);
   
-  struct vm_logical_page *ee;
-  ee = hash_entry (e, struct vm_logical_page, thread_elem);
+  struct vm_logical_page *ee = hash_entry (e, struct vm_logical_page,
+                                           thread_elem);
+  ASSERT (ee->thread == t);
+  
   return (unsigned) ee->user_addr;
 }
 
 static bool
 vm_thread_page_less (const struct hash_elem *a,
                      const struct hash_elem *b,
-                     void *aux UNUSED)
+                     void *t)
 {
-  struct vm_logical_page *aa, *bb;
-  aa = hash_entry (a, struct vm_logical_page, thread_elem);
-  bb = hash_entry (b, struct vm_logical_page, thread_elem);
-  ASSERT (aa->thread != NULL && bb->thread != NULL);
-  ASSERT (aa->thread == bb->thread);
-  return (unsigned) aa->user_addr < (unsigned) bb->user_addr;
+  return vm_thread_page_hash (a,t) < vm_thread_page_hash (b,t);
 }
 
 void
@@ -99,6 +97,8 @@ vm_init_thread (struct thread *t)
 static void
 vm_clean_sub (struct hash_elem *e, void *aux UNUSED)
 {
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  
   struct vm_logical_page *ee;
   ee = hash_entry (e, struct vm_logical_page, thread_elem);
   
@@ -155,6 +155,7 @@ static struct vm_logical_page *
 vm_get_logical_page (struct thread *t, void *base)
 {
   assert_t_addr (t, base);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
   
   struct vm_logical_page key;
   key.user_addr = base;
@@ -174,6 +175,7 @@ void
 vm_swap_disposed (struct thread *t, void *base)
 {
   assert_t_addr (t, base);
+  lock_held_by_current_thread (&vm_lock);
   
   // Must not lock vm_lock, as vm_ensure could trigger swap disposal!
   
@@ -193,6 +195,7 @@ vm_tick (struct thread *t)
   ASSERT (t != NULL);
   ASSERT (t->pagedir != NULL);
   ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (intr_context ());
   
   if (!vm_is_initialized)
     return;
@@ -205,6 +208,8 @@ static bool
 swap_free_page (void)
 {
   ASSERT (intr_get_level () == INTR_ON);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  
   bool result = false;
   
   // No other swap operation, except swap_tick, can disturb this flow,
@@ -306,6 +311,7 @@ static bool
 swap_free_memory (void)
 {
   ASSERT (intr_get_level () == INTR_ON);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
   
   size_t freed = 0;
   while (freed < SWAP_AT_ONCE && !lru_is_empty (&pages_lru))
@@ -350,6 +356,7 @@ vm_swap_in (struct vm_logical_page *ee)
   ASSERT (ee != NULL);
   ASSERT (ee->user_addr != NULL);
   ASSERT (ee->thread != NULL);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
 
   // TODO
 
