@@ -387,8 +387,8 @@ swapped_page_hash (const struct hash_elem *e, void *t)
   typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void *))];
   ASSERT (e != NULL);
   ASSERT (t != NULL);
-  struct swapped_page *ee = hash_entry (e, struct swapped_page, hash_elem)
-  ASSERT (ee->owner == t);
+  struct swapped_page *ee = hash_entry (e, struct swapped_page, hash_elem);
+  ASSERT (ee->thread == t);
   return (unsigned) ee->base;
 }
 
