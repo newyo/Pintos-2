@@ -176,8 +176,6 @@ vm_swap_disposed (struct thread *t, void *base)
   assert_t_addr (t, base);
   lock_held_by_current_thread (&vm_lock);
   
-  // Must not lock vm_lock, as vm_ensure could trigger swap disposal!
-  
   // With being inside swaps lock, page cannot have been free'd.
   // No need to disable interrupts.
   struct vm_logical_page *ee = vm_get_logical_page (t, base);
@@ -270,15 +268,15 @@ swap_free_page (void)
           else
             {
               // Page is dirty. Try some other page.
-              // (2.2.1);
+              // (2.2.1)
               pagedir_set_dirty (ee->thread->pagedir, ee->user_addr, false);
               lru_use (&pages_lru, &ee->lru_elem);
               ee->type = VMPPT_USED;
-              // (2.2.2);
+              // (2.2.2)
               bool swap_result UNUSED;
               swap_result = swap_dispose (ee->thread, ee->user_addr, 1);
               ASSERT (swap_result);
-              // (2.2.3);
+              // (2.2.3)
               continue;
             }
         }
@@ -292,7 +290,7 @@ swap_free_page (void)
   ee->type = VMPPT_SWAPPED;
   
   // (4)
-  intr_enable();
+  intr_enable ();
   result = swap_alloc_and_write (ee->thread, ee->user_addr, kpage, PGSIZE);
   intr_disable ();
   
