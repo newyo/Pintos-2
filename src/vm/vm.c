@@ -46,7 +46,6 @@ assert_t_addr(struct thread *t, const void *addr)
 {
   ASSERT (vm_is_initialized);
   ASSERT (t != NULL);
-  ASSERT (t == thread_current ()); // debug
   ASSERT (addr >= MIN_ALLOC_ADDR);
   ASSERT (pg_ofs (addr) == 0);
 }
