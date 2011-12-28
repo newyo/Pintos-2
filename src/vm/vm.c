@@ -261,7 +261,7 @@ swap_free_page (void)
               // (2.1.2)
               lru_dispose (&pages_lru, &ee->lru_elem, false);
               // (2.1.3)
-              // TODO: telling
+              swap_must_retain (ee->thread, ee->user_addr, 1);
               result = true;
               goto end;
             }
