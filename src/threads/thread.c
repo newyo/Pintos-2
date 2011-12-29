@@ -1007,6 +1007,16 @@ reschedule_ready_lists (void)
     }
 }
 
+#define ASSERT_STACK_NOT_EXCEEDED(T)          \
+({                                            \
+  const struct thread *_t = (T);              \
+  const uintptr_t _s = (uintptr_t) _t->stack; \
+  const uintptr_t _n = (uintptr_t) _t;        \
+  ASSERT (_s <  _n + PGSIZE);                 \
+  ASSERT (_s >= _n + sizeof (struct thread)); \
+  (void) 0;                                   \
+})
+
 /* Schedules a new process.  At entry, interrupts must be off and
    the running process's state must have been changed from
    running to some other state.  This function finds another
@@ -1029,7 +1039,10 @@ schedule (void)
   ASSERT (is_thread (next));
 
   if (cur != next)
-    prev = switch_threads (cur, next);
+    {
+      ASSERT_STACK_NOT_EXCEEDED (next);
+      prev = switch_threads (cur, next);
+    }
   thread_schedule_tail (prev);
 }
 
