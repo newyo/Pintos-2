@@ -90,6 +90,16 @@ static void sleep_wakeup (void);
 static int thread_get_priority_of (struct thread *t);
 static void thread_recalculate_recent_cpu (struct thread *t, void *aux);
 
+#define ASSERT_STACK_NOT_EXCEEDED(T)          \
+({                                            \
+  const struct thread *_t = (T);              \
+  const uintptr_t _s = (uintptr_t) _t->stack; \
+  const uintptr_t _n = (uintptr_t) _t;        \
+  ASSERT (_s <= _n + PGSIZE);                 \
+  ASSERT (_s >= _n + sizeof (struct thread)); \
+  (void) 0;                                   \
+})
+
 static inline struct thread *
 thread_list_entry (const struct list_elem *e)
 {
@@ -180,6 +190,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
+  ASSERT_STACK_NOT_EXCEEDED (t);
 
   /* Update statistics. */
   if (t == idle_thread)
@@ -1008,16 +1019,6 @@ reschedule_ready_lists (void)
     }
 }
 
-#define ASSERT_STACK_NOT_EXCEEDED(T)          \
-({                                            \
-  const struct thread *_t = (T);              \
-  const uintptr_t _s = (uintptr_t) _t->stack; \
-  const uintptr_t _n = (uintptr_t) _t;        \
-  ASSERT (_s <= _n + PGSIZE);                 \
-  ASSERT (_s >= _n + sizeof (struct thread)); \
-  (void) 0;                                   \
-})
-
 /* Schedules a new process.  At entry, interrupts must be off and
    the running process's state must have been changed from
    running to some other state.  This function finds another
@@ -1033,6 +1034,7 @@ schedule (void)
   
   reschedule_ready_lists();
   struct thread *cur = running_thread ();
+  ASSERT_STACK_NOT_EXCEEDED (cur);
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
 
@@ -1041,7 +1043,6 @@ schedule (void)
 
   if (cur != next)
     {
-      ASSERT_STACK_NOT_EXCEEDED (cur);
       ASSERT_STACK_NOT_EXCEEDED (next);
       prev = switch_threads (cur, next);
     }
