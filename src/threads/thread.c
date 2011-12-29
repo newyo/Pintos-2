@@ -954,8 +954,16 @@ thread_schedule_tail (struct thread *prev)
     }
 }
 
-// TODO: we don't need 64 lists ...
-static struct thread *
+static bool
+thread_prio_less (const struct list_elem *a, const struct list_elem *b,
+				void *aux UNUSED)
+{
+ struct thread *aa = thread_list_entry (a);
+ struct thread *bb = thread_list_entry (b);
+ return thread_get_priority_of (aa) < thread_get_priority_of (bb);
+}
+
+	static struct thread *
 next_thread_to_run (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
@@ -963,15 +971,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   
-  bool t_less (const struct list_elem *a, const struct list_elem *b,
-               void *aux UNUSED)
-  {
-    struct thread *aa = thread_list_entry (a);
-    struct thread *bb = thread_list_entry (b);
-    return thread_get_priority_of (aa) < thread_get_priority_of (bb);
-  }
-    
-  struct list_elem *e = list_max (&ready_list, &t_less, NULL);
+  struct list_elem *e = list_max (&ready_list, &thread_prio_less, NULL);
   list_remove (e);
   return thread_list_entry (e);
 }
