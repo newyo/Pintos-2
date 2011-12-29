@@ -135,7 +135,6 @@ page_fault (struct intr_frame *f)
      (#PF)". */
   void *fault_addr;  /* Fault address. */
   asm ("movl %%cr2, %0" : "=r" (fault_addr));
-  void *fault_page = pg_round_down (fault_addr);
 
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
@@ -171,7 +170,7 @@ page_fault (struct intr_frame *f)
   // so it's not an access violation
     
   struct thread *t = thread_current ();;
-  switch (vm_ensure (t, fault_page))
+  switch (vm_ensure (t, pg_round_down (fault_addr)))
     {
       case VMER_OK:
         return;
