@@ -133,8 +133,8 @@ vm_clean (struct thread *t)
   
   hash_destroy (&t->vm_pages, &vm_clean_sub);
   
-  intr_set_level (old_level);
   lock_release (&vm_lock);
+  intr_set_level (old_level);
 }
 
 bool
@@ -150,8 +150,8 @@ vm_alloc_zero (struct thread *t, void *addr)
   struct vm_logical_page *page = calloc (1, sizeof (*page));
   if (!page)
     {
-      //intr_set_level (old_level);
       lock_release (&vm_lock);
+      intr_set_level (old_level);
       return false;
     }
     
@@ -161,8 +161,8 @@ vm_alloc_zero (struct thread *t, void *addr)
   
   hash_insert (&t->vm_pages, &page->thread_elem);
   
-  intr_set_level (old_level);
   lock_release (&vm_lock);
+  intr_set_level (old_level);
   return true;
 }
 
@@ -441,8 +441,8 @@ vm_dispose (struct thread *t, void *addr)
   struct vm_logical_page *ee = vm_get_logical_page (t, addr);
   vm_dispose_real (ee);
   
-  intr_set_level (old_level);
   lock_release (&vm_lock);
+  intr_set_level (old_level);
 }
 
 bool
