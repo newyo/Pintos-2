@@ -325,7 +325,6 @@ swap_dispose (struct thread *owner, void *base_, size_t amount)
 {
   uint8_t *base = base_;
   
-  ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
   ASSERT ((uintptr_t) base % PGSIZE == 0);
