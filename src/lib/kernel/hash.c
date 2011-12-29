@@ -25,6 +25,10 @@ bool
 hash_init (struct hash *h,
            hash_hash_func *hash, hash_less_func *less, void *aux) 
 {
+  ASSERT (h != NULL);
+  ASSERT (hash != NULL);
+  ASSERT (less != NULL);
+  
   h->elem_cnt = 0;
   h->bucket_cnt = 4;
   h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
@@ -53,6 +57,8 @@ hash_init (struct hash *h,
 void
 hash_clear (struct hash *h, hash_action_func *destructor) 
 {
+  ASSERT (h != NULL);
+  
   size_t i;
 
   for (i = 0; i < h->bucket_cnt; i++) 
@@ -86,6 +92,8 @@ hash_clear (struct hash *h, hash_action_func *destructor)
 void
 hash_destroy (struct hash *h, hash_action_func *destructor) 
 {
+  ASSERT (h != NULL);
+  
   if (destructor != NULL)
     hash_clear (h, destructor);
   free (h->buckets);
@@ -98,6 +106,9 @@ hash_destroy (struct hash *h, hash_action_func *destructor)
 struct hash_elem *
 hash_insert (struct hash *h, struct hash_elem *new)
 {
+  ASSERT (h != NULL);
+  ASSERT (new != NULL);
+  
   struct list *bucket = find_bucket (h, new);
   struct hash_elem *old = find_elem (h, bucket, new);
 
@@ -114,6 +125,9 @@ hash_insert (struct hash *h, struct hash_elem *new)
 struct hash_elem *
 hash_replace (struct hash *h, struct hash_elem *new) 
 {
+  ASSERT (h != NULL);
+  ASSERT (new != NULL);
+  
   struct list *bucket = find_bucket (h, new);
   struct hash_elem *old = find_elem (h, bucket, new);
 
@@ -131,6 +145,9 @@ hash_replace (struct hash *h, struct hash_elem *new)
 struct hash_elem *
 hash_find (struct hash *h, struct hash_elem *e) 
 {
+  ASSERT (h != NULL);
+  ASSERT (e != NULL);
+  
   return find_elem (h, find_bucket (h, e), e);
 }
 
@@ -144,6 +161,9 @@ hash_find (struct hash *h, struct hash_elem *e)
 struct hash_elem *
 hash_delete (struct hash *h, struct hash_elem *e)
 {
+  ASSERT (h != NULL);
+  ASSERT (e != NULL);
+  
   struct hash_elem *found = find_elem (h, find_bucket (h, e), e);
   if (found != NULL) 
     {
@@ -164,6 +184,7 @@ hash_apply (struct hash *h, hash_action_func *action)
 {
   size_t i;
   
+  ASSERT (h != NULL);
   ASSERT (action != NULL);
 
   for (i = 0; i < h->bucket_cnt; i++) 
@@ -240,6 +261,8 @@ hash_next (struct hash_iterator *i)
 struct hash_elem *
 hash_cur (struct hash_iterator *i) 
 {
+  ASSERT (i != NULL);
+  
   return i->elem;
 }
 
@@ -247,6 +270,8 @@ hash_cur (struct hash_iterator *i)
 size_t
 hash_size (struct hash *h) 
 {
+  ASSERT (h != NULL);
+  
   return h->elem_cnt;
 }
 
@@ -254,6 +279,8 @@ hash_size (struct hash *h)
 bool
 hash_empty (struct hash *h) 
 {
+  ASSERT (h != NULL);
+  
   return h->elem_cnt == 0;
 }
 
@@ -265,6 +292,9 @@ hash_empty (struct hash *h)
 unsigned
 hash_bytes (const void *buf_, size_t size)
 {
+  ASSERT (buf_ != NULL);
+  ASSERT (size > 0);
+  
   /* Fowler-Noll-Vo 32-bit hash, for bytes. */
   const unsigned char *buf = buf_;
   unsigned hash;
@@ -282,6 +312,8 @@ hash_bytes (const void *buf_, size_t size)
 unsigned
 hash_string (const char *s_) 
 {
+  ASSERT (s_ != NULL);
+  
   const unsigned char *s = (const unsigned char *) s_;
   unsigned hash;
 
@@ -305,6 +337,9 @@ hash_int (int i)
 static struct list *
 find_bucket (struct hash *h, struct hash_elem *e) 
 {
+  ASSERT (h != NULL);
+  ASSERT (e != NULL);
+  
   size_t bucket_idx = h->hash (e, h->aux) & (h->bucket_cnt - 1);
   return &h->buckets[bucket_idx];
 }
@@ -314,6 +349,10 @@ find_bucket (struct hash *h, struct hash_elem *e)
 static struct hash_elem *
 find_elem (struct hash *h, struct list *bucket, struct hash_elem *e) 
 {
+  ASSERT (h != NULL);
+  ASSERT (bucket != NULL);
+  ASSERT (e != NULL);
+  
   struct list_elem *i;
 
   for (i = list_begin (bucket); i != list_end (bucket); i = list_next (i)) 
@@ -351,6 +390,8 @@ is_power_of_2 (size_t x)
 static void
 rehash (struct hash *h) 
 {
+  ASSERT (h != NULL);
+  
   size_t old_bucket_cnt, new_bucket_cnt;
   struct list *new_buckets, *old_buckets;
   size_t i;
@@ -416,6 +457,10 @@ rehash (struct hash *h)
 static void
 insert_elem (struct hash *h, struct list *bucket, struct hash_elem *e) 
 {
+  ASSERT (h != NULL);
+  ASSERT (bucket != NULL);
+  ASSERT (e != NULL);
+  
   h->elem_cnt++;
   list_push_front (bucket, &e->list_elem);
 }
@@ -424,6 +469,9 @@ insert_elem (struct hash *h, struct list *bucket, struct hash_elem *e)
 static void
 remove_elem (struct hash *h, struct hash_elem *e) 
 {
+  ASSERT (h != NULL);
+  ASSERT (e != NULL);
+  
   h->elem_cnt--;
   list_remove (&e->list_elem);
 }
