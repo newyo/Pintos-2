@@ -94,15 +94,31 @@ vm_init_thread (struct thread *t)
 }
 
 static void
-vm_clean_sub (struct hash_elem *e, void *aux UNUSED)
+vm_dispose_real (struct vm_logical_page *ee)
 {
   ASSERT (lock_held_by_current_thread (&vm_lock));
+  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (ee != NULL);
+  
+  if (ee->type == VMPPT_SWAPPED)
+    swap_dispose (ee->thread, ee->user_addr, 1);
+  pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+  lru_dispose (&pages_lru, &ee->lru_elem, false);
+  hash_delete (&ee->thread->vm_pages, &ee->thread_elem);
+}
+
+static void
+vm_clean_sub (struct hash_elem *e, void *t)
+{
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (e != NULL);
   
   struct vm_logical_page *ee;
   ee = hash_entry (e, struct vm_logical_page, thread_elem);
+  ASSERT (ee->thread == t);
   
-  // TODO
-  (void) ee;
+  vm_dispose_real (ee);
 }
 
 void
@@ -419,9 +435,14 @@ vm_dispose (struct thread *t, void *addr)
 {
   assert_t_addr (t, addr);
   
-  // TODO
-  (void) t;
-  (void) addr;
+  lock_acquire (&vm_lock);
+  enum intr_level old_level = intr_disable ();
+  
+  struct vm_logical_page *ee = vm_get_logical_page (t, addr);
+  vm_dispose_real (ee);
+  
+  intr_set_level (old_level);
+  lock_release (&vm_lock);
 }
 
 bool
