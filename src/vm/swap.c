@@ -126,7 +126,7 @@ static void
 swap_dispose_page_real (struct swapped_page *ee)
 {
   ASSERT (ee != NULL);
-  memset (ee, sizeof (*ee), 0);
+  memset (ee, 0, sizeof (*ee));
   bitmap_reset (used_pages, swapped_page_id (ee));
 }
 
