@@ -27,7 +27,7 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
-static struct list ready_list[PRI_MAX + 1];
+static struct list ready_list;
 
 static struct list sleep_list;
 #ifdef USERPROG
@@ -119,9 +119,8 @@ static bool
 ready_lists_arent_messed_up (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
-  int prio;
-  for (prio = PRI_MIN; prio <= PRI_MAX; ++prio)
-    list_foldl (&ready_list[prio], ready_lists_arent_messed_up_sub, NULL);
+  
+  list_foldl (&ready_list, ready_lists_arent_messed_up_sub, NULL);
 #ifdef USERPROG
   list_foldl (&zombie_list, ready_lists_arent_messed_up_sub, NULL);
 #endif
@@ -148,12 +147,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
 
-  int i;
-  for (i = PRI_MIN; i <= PRI_MAX; ++i)
-    {
-      list_init (&ready_list[i]);
-    }
-
+  list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleep_list);
 #if USERPROG
@@ -165,6 +159,8 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+    
+  printf ("Initialized threading.\n");
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -358,8 +354,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  int priority = thread_get_priority_of (t);
-  list_push_back (&ready_list[priority], &t->elem);
+  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   
   ASSERT (ready_lists_arent_messed_up ());
@@ -489,10 +484,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    {
-      int priority = thread_get_priority_of (cur);
-      list_push_back (&ready_list[priority], &cur->elem);
-    }
+    list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -763,7 +755,7 @@ thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
   if (t->status == THREAD_RUNNING)
     {
       list_remove (&t->elem);
-      list_push_back (&ready_list[result], &t->elem);
+      list_push_back (&ready_list, &t->elem);
     }
   ASSERT (ready_lists_arent_messed_up ());
   
@@ -789,10 +781,7 @@ thread_get_ready_threads (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
   
-  int result = 0;
-  int prio;
-  for (prio = PRI_MIN; prio <= PRI_MAX; ++prio)
-    result += list_size (&ready_list[prio]);
+  int result = list_size (&ready_list);
   if (thread_current () != idle_thread)
     ++result;
   ASSERT (ready_lists_arent_messed_up ());
@@ -919,23 +908,6 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
-/* Chooses and returns the next thread to be scheduled.  Should
-   return a thread from the run queue, unless the run queue is
-   empty.  (If the running thread can continue running, then it
-   will be in the run queue.)  If the run queue is empty, return
-   idle_thread. */
-static struct thread *
-next_thread_to_run (void) 
-{
-  ASSERT (intr_get_level () == INTR_OFF);
-  
-  int i;
-  for (i = PRI_MAX; PRI_MIN <= i; --i)
-    if (!list_empty (&ready_list[i]))
-      return thread_list_entry (list_pop_front (&ready_list[i]));
-  return idle_thread;
-}
-
 /* Completes a thread switch by activating the new thread's page
    tables, and, if the previous thread is dying, destroying it.
 
@@ -983,40 +955,25 @@ thread_schedule_tail (struct thread *prev)
 }
 
 // TODO: we don't need 64 lists ...
-static void
-reschedule_ready_lists (void)
+static struct thread *
+next_thread_to_run (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
   
-  int prio;
-  struct list reschedule[PRI_MAX-PRI_MIN+1];
-  for(prio = PRI_MIN; prio <= PRI_MAX; ++prio)
-    list_init (&reschedule[prio]);
+  if (list_empty (&ready_list))
+    return idle_thread;
+  
+  bool t_less (const struct list_elem *a, const struct list_elem *b,
+               void *aux UNUSED)
+  {
+    struct thread *aa = thread_list_entry (a);
+    struct thread *bb = thread_list_entry (b);
+    return thread_get_priority_of (aa) < thread_get_priority_of (bb);
+  }
     
-  struct list_elem *e, *end, *next;
-  for (prio = PRI_MAX; prio >= PRI_MIN; --prio)
-    {
-      end = list_end (&ready_list[prio]);
-      for (e = list_begin (&ready_list[prio]); e != end; e = next)
-        {
-          next = list_next (e);
-          int actual_prio = thread_get_priority_of (thread_list_entry (e));
-          if (actual_prio == prio)
-            continue;
-          list_remove (e);
-          list_push_back (&reschedule[actual_prio], e);
-        }
-    }
-      
-  for(prio = PRI_MIN; prio <= PRI_MAX; ++prio)
-    {
-      end = list_end (&reschedule[prio]);
-      for (e = list_begin (&reschedule[prio]); e != end; e = next)
-        {
-          next = list_remove (e);
-          list_push_back (&ready_list[prio], e);
-        }
-    }
+  struct list_elem *e = list_max (&ready_list, &t_less, NULL);
+  list_remove (e);
+  return thread_list_entry (e);
 }
 
 /* Schedules a new process.  At entry, interrupts must be off and
@@ -1032,7 +989,6 @@ schedule (void)
   sleep_wakeup ();
   ASSERT (intr_get_level () == INTR_OFF);
   
-  reschedule_ready_lists();
   struct thread *cur = running_thread ();
   ASSERT_STACK_NOT_EXCEEDED (cur);
   struct thread *next = next_thread_to_run ();
