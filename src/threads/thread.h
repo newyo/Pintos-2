@@ -15,11 +15,13 @@
 /* States in a thread's life cycle. */
 enum thread_status
   {
-    THREAD_RUNNING,     /* Running thread. */
+    THREAD_RUNNING = 1, /* Running thread. */
     THREAD_READY,       /* Not running but ready to run. */
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
     THREAD_ZOMBIE,      /* Waiting for parent's wait. Braaaaiiins!! */
-    THREAD_DYING        /* About to be destroyed. */
+    THREAD_DYING,       /* About to be destroyed. */
+    
+    THREAD_MAX
   };
 
 /* Thread identifier type.
