@@ -42,7 +42,7 @@ static struct lru pages_lru;
 static struct lock vm_lock;
 
 static void
-assert_t_addr(struct thread *t, const void *addr)
+assert_t_addr (struct thread *t, const void *addr)
 {
   ASSERT (vm_is_initialized);
   ASSERT (t != NULL);

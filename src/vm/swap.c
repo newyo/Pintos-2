@@ -416,10 +416,12 @@ swap_init_thread (struct thread *owner)
 }
 
 static void
-swap_clean_sub (struct hash_elem *e, void *aux UNUSED)
+swap_clean_sub (struct hash_elem *e, void *t)
 {
+  ASSERT (e != NULL);
   struct swapped_page *ee = hash_entry (e, struct swapped_page, hash_elem);
-  swap_dispose_page (ee);
+  ASSERT (ee->thread == t);
+  swap_dispose_page_real (ee);
 }
 
 void
