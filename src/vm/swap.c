@@ -123,16 +123,23 @@ swap_init (void)
 }
 
 static void
+swap_dispose_page_real (struct swapped_page *ee)
+{
+  ASSERT (ee != NULL);
+  memset (ee, sizeof (*ee), 0);
+  bitmap_reset (used_pages, swapped_page_id (ee));
+}
+
+static void
 swap_dispose_page (struct swapped_page *ee)
 {
   ASSERT (ee != NULL);
   
-  struct hash_elem *e UNUSED = hash_delete (&ee->thread->swap_pages,
-                                            &ee->hash_elem);
+  struct hash_elem *e UNUSED;
+  e = hash_delete (&ee->thread->swap_pages, &ee->hash_elem);
   ASSERT (e != NULL);
   
-  memset (ee, sizeof (*ee), 0);
-  bitmap_reset (used_pages, swapped_page_id (ee));
+  swap_dispose_page_real (ee);
 }
 
 static swap_t
