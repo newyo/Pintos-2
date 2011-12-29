@@ -245,14 +245,23 @@ swap_write (swap_t         id,
   for (i = id; i < id+amount; ++i)
     {
       struct swapped_page *ee = &swapped_pages_space[i];
-      ASSERT (ee->thread == NULL);
-      ASSERT (!bitmap_test (used_pages, i));
-      
-      bitmap_mark (used_pages, i);
-      ee->thread = owner;
-      hash_insert (&owner->swap_pages, &ee->hash_elem);
+      if (ee->thread == NULL)
+        {
+          ASSERT (ee->base == NULL);
+          ASSERT (!bitmap_test (used_pages, i));
+          
+          bitmap_mark (used_pages, i);
+          ee->thread = owner;
+          ee->base = base;
+          hash_insert (&owner->swap_pages, &ee->hash_elem);
+        }
+      else
+        {
+          ASSERT (ee->thread == owner);
+          ASSERT (ee->base == NULL);
+          ASSERT (bitmap_test (used_pages, i));
+        }
       lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
-      ee->base = base;
       
       size_t len = MIN (length, (size_t) PGSIZE);
       swap_write_sectors (i, src, len);
