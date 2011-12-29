@@ -1012,7 +1012,7 @@ reschedule_ready_lists (void)
   const struct thread *_t = (T);              \
   const uintptr_t _s = (uintptr_t) _t->stack; \
   const uintptr_t _n = (uintptr_t) _t;        \
-  ASSERT (_s <  _n + PGSIZE);                 \
+  ASSERT (_s <= _n + PGSIZE);                 \
   ASSERT (_s >= _n + sizeof (struct thread)); \
   (void) 0;                                   \
 })
@@ -1040,6 +1040,7 @@ schedule (void)
 
   if (cur != next)
     {
+      ASSERT_STACK_NOT_EXCEEDED (cur);
       ASSERT_STACK_NOT_EXCEEDED (next);
       prev = switch_threads (cur, next);
     }
