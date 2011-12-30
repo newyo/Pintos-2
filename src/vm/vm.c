@@ -307,7 +307,7 @@ swap_free_page (void)
   
   // (4)
   intr_enable ();
-  result = swap_alloc_and_write (ee->thread, ee->user_addr, kpage, PGSIZE);
+  result = swap_alloc_and_write (ee->thread, ee->user_addr, kpage);
   intr_disable ();
   
   if (result) // (5.1.1)

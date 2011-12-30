@@ -257,8 +257,9 @@ swap_write (swap_t         id,
         }
       else
         {
+          printf (" ee->thread=%8p, owner=%8p\n", ee->thread, owner);
           ASSERT (ee->thread == owner);
-          ASSERT (ee->base == NULL);
+          ASSERT (ee->base == base);
           ASSERT (bitmap_test (used_pages, i));
         }
       lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
@@ -274,57 +275,28 @@ swap_write (swap_t         id,
 bool
 swap_alloc_and_write (struct thread *owner,
                       void          *base,
-                      void          *src,
-                      size_t         length)
+                      void          *src)
 {
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
+  ASSERT (pg_ofs (base) == 0);
   ASSERT (src != NULL);
-  ASSERT ((uintptr_t) src % PGSIZE == 0);
-  ASSERT (length > 0);
-  
-  ASSERT (intr_get_level () == INTR_ON);
   
   lock_acquire (&swap_lock);
   
-  size_t amount = (length+PGSIZE-1) / PGSIZE;
-  swap_t id = swap_get_disposable_pages (amount);
-  if (id != SWAP_FAIL)
+  struct swapped_page *ee = swappage_page_of_owner (owner, base);
+  if (ee != NULL)
     {
-      swap_write (id, owner, base, src, length);
+      swap_write (swapped_page_id (ee), owner, base, src, PGSIZE);
       lock_release (&swap_lock);
       return true;
     }
   
-  // Could not find `amount` adjactent swap pages.
-  // Break it down to many pages atomically.
-  // Find enough pages and write then or write nothing at all.
-  // We don't have to care about the retreived swap_ts,
-  // b/c if they are not written to, they stay marked free in the used_pages.
-  swap_t *ids = calloc (amount, sizeof (swap_t));
-  if (!ids)
+  swap_t id = swap_get_disposable_pages (1);
+  if (id == SWAP_FAIL)
     return false;
-  size_t i;
-  for (i = 0; i < amount; ++i)
-    {
-      id = swap_get_disposable_pages (1);
-      if (id == SWAP_FAIL)
-        {
-          free (ids);
-          lock_release (&swap_lock);
-          return false;
-        }
-    }
-  for (i = 0; i < amount; ++i)
-    {
-      size_t len = MIN (length, (size_t) PGSIZE);
-      swap_write (ids[i], owner, base, src, len);
-      base += len;
-      src += len;
-      length -= len;
-    }
-  free (ids);
+  swap_write (id, owner, base, src, PGSIZE);
   lock_release (&swap_lock);
   return true;
 }
