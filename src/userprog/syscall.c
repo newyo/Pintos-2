@@ -15,6 +15,9 @@
 #include "threads/synch.h"
 #include "lib/user/syscall.h"
 #include "devices/input.h"
+#ifdef VM
+# include "vm/vm.h"
+#endif
 
 static void syscall_handler (struct intr_frame *);
 
@@ -41,14 +44,17 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-#define _SYSCALL_HANDLER_ARGS void              *arg1 UNUSED, \
-                              void              *arg2 UNUSED, \
-                              void              *arg3 UNUSED, \
-                              struct intr_frame *if_  UNUSED
+#define _SYSCALL_HANDLER_ARGS struct vm_ensure_group *g,           \
+                              void                   *arg1 UNUSED, \
+                              void                   *arg2 UNUSED, \
+                              void                   *arg3 UNUSED, \
+                              struct intr_frame      *if_  UNUSED
 
 static bool
-is_user_memory (const void *addr, unsigned size)
+ensure_user_memory (struct vm_ensure_group *g, void *addr, unsigned size)
 {
+  ASSERT (g != NULL);
+  
   if (size == 0) // nothing to read
     return true;
   if (addr >= PHYS_BASE) // start points to kernelspace
@@ -59,18 +65,23 @@ is_user_memory (const void *addr, unsigned size)
     return false;
   if ((void *) end > PHYS_BASE) // end points to kernelspace
     return false;
-  struct thread *t = thread_current ();
+    
   intptr_t i;
-  for (i = start & ~(PGSIZE-1); i < end; i += PGSIZE) // look for all tangented pages
-    if (pagedir_get_page (t->pagedir, (void *) i) == NULL)
+  // look for all tangented pages
+  for (i = start & ~(PGSIZE-1); i < end; i += PGSIZE)
+    if (!vm_ensure_group_add (g, (void *) i))
       return false;
+    
   return true;
 }
 
 
 static void __attribute__ ((noreturn))
-kill_segv (void)
+kill_segv (struct vm_ensure_group *g)
 {
+  ASSERT (g != NULL);
+  
+  vm_ensure_group_destroy (g);
   thread_exit ();
 }
 
@@ -81,22 +92,23 @@ kill_segv (void)
  * \return -1, if (hits) invalid memory
  */
 static signed
-user_strlen (const char *c)
+user_strlen (struct vm_ensure_group *g, char *c)
 {
+  ASSERT (g != NULL);
+  
   if (!c)
     return -1;
   
   signed result = 0;
-  struct thread *t = thread_current ();
   for (;;)
     {
       if ((void *) c >= PHYS_BASE)
         return -1;
       
-      const char *downfrom = (const char *) ((intptr_t) c & ~(PGSIZE-1));
-      const char *upto     = (const char *) ((intptr_t) c |  (PGSIZE-1));
+      char *downfrom = (char *) ((intptr_t) c & ~(PGSIZE-1));
+      char *upto     = (char *) ((intptr_t) c |  (PGSIZE-1));
       
-      if (pagedir_get_page (t->pagedir, downfrom) == NULL)
+      if (!vm_ensure_group_add (g, downfrom))
         return -1;
       while (c <= upto)
         if (*(c++))
@@ -110,17 +122,25 @@ static void
 syscall_handler_SYS_HALT (_SYSCALL_HANDLER_ARGS)
 {
   // void halt (void) NO_RETURN;
+  vm_ensure_group_destroy (g);
   shutdown_power_off ();
 }
+
+#define ENSURE_USER_ARGS(COUNT)                               \
+({                                                            \
+  if (!ensure_user_memory (g, arg1, sizeof (arg1) * (COUNT))) \
+    kill_segv (g);                                            \
+  (void) 0;                                                   \
+})
 
 static void
 syscall_handler_SYS_EXIT (_SYSCALL_HANDLER_ARGS)
 {
   // void exit (int status) NO_RETURN;
-  if (!is_user_memory (arg1, sizeof (arg1)))
-    kill_segv();
+  ENSURE_USER_ARGS (1);
   
   thread_current ()->exit_code = *(int *) arg1;
+  vm_ensure_group_destroy (g);
   thread_exit ();
 }
 
@@ -128,24 +148,24 @@ static void
 syscall_handler_SYS_EXEC (_SYSCALL_HANDLER_ARGS)
 {
   // pid_t exec (const char *file);
-  if (!is_user_memory (arg1, sizeof (arg1)))
-    kill_segv();
+  ENSURE_USER_ARGS (1);
   
-  const char *file = *(const char **) arg1;
-  signed len = user_strlen (file);
+  char *file = *(char **) arg1;
+  signed len = user_strlen (g, file);
   if (len < 0)
-    kill_segv ();
+    kill_segv (g);
   if_->eax = SYNC (process_execute (file));
+  vm_ensure_group_destroy (g);
 }
 
 static void
 syscall_handler_SYS_WAIT (_SYSCALL_HANDLER_ARGS)
 {
   // int wait (pid_t);
-  if (!is_user_memory (arg1, sizeof (arg1)))
-    kill_segv();
+  ENSURE_USER_ARGS (1);
   
   tid_t child = *(tid_t *) arg1;
+  vm_ensure_group_destroy (g);
   if_->eax = process_wait (child);
 }
 
@@ -153,56 +173,56 @@ static void
 syscall_handler_SYS_CREATE (_SYSCALL_HANDLER_ARGS)
 {
   // bool create (const char *file, unsigned initial_size);
-  if (!is_user_memory (arg1, sizeof (arg1) * 2))
-    kill_segv();
+  ENSURE_USER_ARGS (2);
   
-  const char *filename = *(const char **) arg1;
-  signed len = user_strlen (filename);
+  char *filename = *(char **) arg1;
+  signed len = user_strlen (g, filename);
   if (len < 0)
-    kill_segv ();
+    kill_segv (g);
   if_->eax = SYNC (filesys_create (filename, *(unsigned *) arg2));
+  vm_ensure_group_destroy (g);
 }
 
 static void
 syscall_handler_SYS_REMOVE (_SYSCALL_HANDLER_ARGS)
 {
   // bool remove (const char *file);
-  if (!is_user_memory (arg1, sizeof (arg1)))
-    kill_segv();
+  ENSURE_USER_ARGS (1);
   
-  const char *filename = *(const char **) arg1;
-  signed len = user_strlen (filename);
+  char *filename = *(char **) arg1;
+  signed len = user_strlen (g, filename);
   if (len < 0)
-    kill_segv ();
+    kill_segv (g);
   if_->eax = SYNC (filesys_remove (filename));
+  vm_ensure_group_destroy (g);
 }
 
 static void
 syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
 {
   // int open (const char *file);
-  if (!is_user_memory (arg1, sizeof (arg1)))
-    kill_segv();
+  ENSURE_USER_ARGS (1);
   
-  const char *filename = *(const char **) arg1;
-  signed len = user_strlen (filename);
+  char *filename = *(char **) arg1;
+  signed len = user_strlen (g, filename);
   if (len < 0)
-    kill_segv ();
+    kill_segv (g);
   struct fd *fd = calloc (1, sizeof (*fd));
   if (!fd)
     {
       if_->eax = -ENOMEM;
+      vm_ensure_group_destroy (g);
       return;
     }
   
-  struct thread *current_thread = thread_current ();
   for (fd->fd = 3; fd->fd < INT_MAX; ++fd->fd)
-      if (hash_find (&current_thread->fds, &fd->elem) == NULL)
-        break;
+    if (hash_find (&g->thread->fds, &fd->elem) == NULL)
+      break;
   if (fd->fd == INT_MAX)
     {
       free (fd);
       if_->eax = -ENFILE;
+      vm_ensure_group_destroy (g);
       return;
     }
   
@@ -211,11 +231,13 @@ syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
     {
       free (fd);
       if_->eax = -ENOENT;
+      vm_ensure_group_destroy (g);
       return;
     }
 
-  hash_insert (&current_thread->fds, &fd->elem);
+  hash_insert (&g->thread->fds, &fd->elem);
   if_->eax = fd->fd;
+  vm_ensure_group_destroy (g);
 }
 
 static struct fd *
@@ -232,10 +254,10 @@ static void
 syscall_handler_SYS_FILESIZE (_SYSCALL_HANDLER_ARGS)
 {
   // int filesize (int fd);
-  if (!is_user_memory (arg1, sizeof (arg1)))
-    kill_segv();
+  ENSURE_USER_ARGS (1);
   
   struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  vm_ensure_group_destroy (g);
   if_->eax = fd_data ? SYNC (file_length (fd_data->file)) : -1;
 }
 
@@ -243,15 +265,14 @@ static void
 syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
 {
   // int read (int fd, void *buffer, unsigned length);
-  if (!is_user_memory (arg1, sizeof (arg1) * 3))
-    kill_segv();
+  ENSURE_USER_ARGS (3);
   
   unsigned fd = *(unsigned *) arg1;
   char *buffer = *(void **) arg2;
   unsigned length = *(unsigned *) arg3;
   
-  if (!is_user_memory (buffer, length))
-    kill_segv ();
+  if (!ensure_user_memory (g, buffer, length))
+    kill_segv (g);
     
   if (fd != 0)
     {
@@ -259,6 +280,7 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
       if (!fd_data)
         {
           if_->eax = -EBADF;
+          vm_ensure_group_destroy (g);
           return;
         }
       if_->eax = SYNC (file_read (fd_data->file, buffer, length));
@@ -277,30 +299,32 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
       *dest = '\0';
       lock_release (&stdin_lock);
     }
+  vm_ensure_group_destroy (g);
 }
 
 static void
 syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
 {
   // int write (int fd, const void *buffer, unsigned length);
-  if (!is_user_memory (arg1, sizeof (arg1) * 3))
-    kill_segv();
+  ENSURE_USER_ARGS (3);
   
   unsigned fd = *(unsigned *) arg1;
-  const char *buffer = *(const void **) arg2;
+  char *buffer = *(void **) arg2;
   unsigned length = *(unsigned *) arg3;
   
-  if (!is_user_memory (buffer, length))
-    kill_segv ();
+  if (!ensure_user_memory (g, buffer, length))
+    kill_segv (g);
   else if (fd == 0 || fd >= INT_MAX)
     {
       if_->eax = -EBADF;
+      vm_ensure_group_destroy (g);
       return;
     }
   else if (fd == 1 || fd == 2)
     {
       putbuf (buffer, length);
       if_->eax = length;
+      vm_ensure_group_destroy (g);
       return;
     }
   
@@ -311,26 +335,27 @@ syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
       if (!thread_is_file_currently_executed (fd_data->file))
         if_->eax = file_write (fd_data->file, buffer, length);
       else
-        if_->eax = 0; // returning 0 does not make any sense at all
+        if_->eax = 0;
       lock_release (&filesys_lock);
     }
   else
     if_->eax = -EBADF;
+  vm_ensure_group_destroy (g);
 }
 
 static void
 syscall_handler_SYS_SEEK (_SYSCALL_HANDLER_ARGS)
 {
   // void seek (int fd, unsigned position);
-  if (!is_user_memory (arg1, sizeof (arg1) * 2))
-    kill_segv();
+  ENSURE_USER_ARGS (2);
   
   unsigned fd = *(unsigned *) arg1;
   unsigned position = *(unsigned *) arg2;
+  vm_ensure_group_destroy (g);
   
   struct fd *fd_data = retrieve_fd (fd);
   if (!fd_data)
-    kill_segv ();
+    kill_segv (g);
   SYNC_VOID (file_seek (fd_data->file, position));
 }
 
@@ -338,12 +363,12 @@ static void
 syscall_handler_SYS_TELL (_SYSCALL_HANDLER_ARGS)
 {
   // unsigned tell (int fd);
-  if (!is_user_memory (arg1, sizeof (arg1)))
-    kill_segv();
+  ENSURE_USER_ARGS (1);
   
   struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
   if (!fd_data)
-    kill_segv ();
+    kill_segv (g);
+  vm_ensure_group_destroy (g);
   if_->eax = SYNC (file_tell (fd_data->file));
 }
 
@@ -351,16 +376,15 @@ static void
 syscall_handler_SYS_CLOSE (_SYSCALL_HANDLER_ARGS)
 {
   // void close (int fd);
-  if (!is_user_memory (arg1, sizeof (arg1)))
-    kill_segv();
+  ENSURE_USER_ARGS (1);
   
-  struct fd search;
-  memset (&search, 0, sizeof (search));
-  search.fd = *(unsigned *) arg1;
-  struct hash_elem *e = hash_delete (&thread_current ()->fds, &search.elem);
-  if (!e)
-    kill_segv ();
-  struct fd *fd_data = hash_entry (e, struct fd, elem);
+  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  if (!fd_data)
+    kill_segv (g);
+  
+  hash_delete_found (&g->thread->fds, &fd_data->elem);
+  vm_ensure_group_destroy (g);
+  
   SYNC_VOID (file_close (fd_data->file));
   free (fd_data);
 }
@@ -369,57 +393,74 @@ static void
 syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
+  
+  kill_segv (g);
 }
 
 static void
 syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
+  
+  kill_segv (g);
 }
 
 static void
 syscall_handler_SYS_CHDIR (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
+  
+  kill_segv (g);
 }
 
 static void
 syscall_handler_SYS_MKDIR (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
+  
+  kill_segv (g);
 }
 
 static void
 syscall_handler_SYS_READDIR (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
+  
+  kill_segv (g);
 }
 
 static void
 syscall_handler_SYS_ISDIR (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
+  
+  kill_segv (g);
 }
 
 static void
 syscall_handler_SYS_INUMBER (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
+  
+  kill_segv (g);
 }
 
 static void
 syscall_handler (struct intr_frame *if_) 
 {
+  struct vm_ensure_group g;
+  vm_ensure_group_init (&g, thread_current ());
+  
   int  *nr       = &((int   *) if_->esp)[0];
   void *arg1     = &((void **) if_->esp)[1];
   void *arg2     = &((void **) if_->esp)[2];
   void *arg3     = &((void **) if_->esp)[3];
   
-  if (!is_user_memory (nr, sizeof (nr)))
-    kill_segv();
+  if (!ensure_user_memory (&g, nr, sizeof (nr)))
+    kill_segv (&g);
   
   #define _HANDLE(NAME) case NAME: \
-                          syscall_handler_##NAME (arg1, arg2, arg3, if_); \
+                          syscall_handler_##NAME (&g, arg1, arg2, arg3, if_); \
                           break;
   
   switch (*nr) {
