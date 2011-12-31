@@ -2,6 +2,7 @@
 #define VM_H__
 
 #include <stdbool.h>
+#include <hash.h>
 #include "threads/thread.h"
 
 void vm_init (void);
@@ -26,5 +27,15 @@ enum vm_ensure_result
   VMER_LENGTH
 };
 enum vm_ensure_result vm_ensure (struct thread *t, void *base);
+
+struct vm_ensure_group
+{
+  struct thread *thread;
+  struct hash    entries;
+};
+void vm_ensure_group_init (struct vm_ensure_group *, struct thread *);
+void vm_ensure_group_destroy (struct vm_ensure_group *);
+bool vm_ensure_group_add (struct vm_ensure_group *, void *);
+bool vm_ensure_group_remove (struct vm_ensure_group *, void *);
 
 #endif

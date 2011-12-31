@@ -14,7 +14,7 @@
 #include "userprog/pagedir.h"
 
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
-#define SWAP_AT_ONCE 32
+#define SWAP_AT_ONCE 1
 
 enum vm_physical_page_type
 {
@@ -461,4 +461,146 @@ vm_alloc_and_ensure (struct thread *t, void *addr)
   ASSERT (result == VMER_OOM);
   vm_dispose (t, addr);
   return false;
+}
+
+struct vm_ensure_group_entry
+{
+  struct hash_elem        elem;
+  struct vm_logical_page *page;
+};
+
+static struct vm_ensure_group_entry *
+vm_ensure_group_get (struct vm_ensure_group *g, void *base,
+                     struct vm_logical_page **page_)
+{
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  ASSERT (g != NULL);
+  ASSERT (base != NULL);
+  ASSERT (pg_ofs (base) == 0);
+  
+  *page_ = vm_get_logical_page (g->thread, base);
+  if (!page_)
+    return NULL;
+  
+  struct vm_ensure_group_entry key;
+  memset (&key, 0, sizeof (key));
+  key.page = *page_;
+  
+  struct hash_elem *e = hash_find (&g->entries, &key.elem);
+  if (e == NULL)
+    return NULL;
+  return hash_entry (e, struct vm_ensure_group_entry, elem);
+}
+
+static unsigned
+vm_ensure_group_hash (const struct hash_elem *e, void *t)
+{
+  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void *))];
+  
+  ASSERT (e != NULL);
+  struct vm_ensure_group_entry *ee;
+  ee = hash_entry (e, struct vm_ensure_group_entry, elem);
+  ASSERT (ee->page != NULL);
+  ASSERT (ee->page->thread == t);
+  
+  return (unsigned) ee->page;
+}
+
+/* Compares the value of two hash elements A and B, given
+   auxiliary data AUX.  Returns true if A is less than B, or
+   false if A is greater than or equal to B. */
+static bool
+vm_ensure_group_less (const struct hash_elem *a,
+                      const struct hash_elem *b,
+                      void *t)
+{
+  return vm_ensure_group_hash (a,t) < vm_ensure_group_hash (b,t);
+}
+
+void
+vm_ensure_group_init (struct vm_ensure_group *g, struct thread *t)
+{
+  ASSERT (g != NULL);
+  ASSERT (t != NULL);
+  
+  memset (g, 0, sizeof (*g));
+  g->thread = t;
+  hash_init (&g->entries, &vm_ensure_group_hash, &vm_ensure_group_less, t);
+}
+
+static void
+vm_ensure_group_dispose_real (struct hash_elem *e, void *t)
+{
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  
+  ASSERT (e != NULL);
+  struct vm_ensure_group_entry *ee;
+  ee = hash_entry (e, struct vm_ensure_group_entry, elem);
+  ASSERT (ee->page != NULL);
+  ASSERT (ee->page->thread == t);
+  
+  lru_use (&pages_lru, &ee->page->lru_elem);
+  free (ee);
+}
+
+void
+vm_ensure_group_destroy (struct vm_ensure_group *g)
+{
+  ASSERT (g != NULL);
+  
+  lock_acquire (&vm_lock);
+  hash_destroy (&g->entries, &vm_ensure_group_dispose_real);
+  lock_release (&vm_lock);
+}
+
+bool
+vm_ensure_group_add (struct vm_ensure_group *g, void *base)
+{
+  ASSERT (g != NULL);
+  ASSERT (base != NULL);
+  
+  lock_acquire (&vm_lock);
+  
+  struct vm_logical_page *page;
+  struct vm_ensure_group_entry *entry = vm_ensure_group_get (g, base, &page);
+  if (entry != NULL)
+    {
+      lock_release (&vm_lock);
+      return true;
+    }
+  if (page == NULL)
+    {
+      lock_release (&vm_lock);
+      return false;
+    }
+  
+  entry = calloc (1, sizeof (*entry));
+  entry->page = page;
+  hash_insert (&g->entries, &entry->elem);
+  lru_dispose (&pages_lru, &page->lru_elem, false);
+  
+  lock_release (&vm_lock);
+  return true;
+}
+
+bool
+vm_ensure_group_remove (struct vm_ensure_group *g, void *base)
+{
+  ASSERT (g != NULL);
+  ASSERT (base != NULL);
+  
+  lock_acquire (&vm_lock);
+  
+  struct vm_logical_page *page;
+  struct vm_ensure_group_entry *entry = vm_ensure_group_get (g, base, &page);
+  if (entry != NULL)
+    {
+      hash_delete_found (&g->entries, &entry->elem);
+      vm_ensure_group_dispose_real (&entry->elem, g->thread);
+      lock_release (&vm_lock);
+      return true;
+    }
+    
+  lock_release (&vm_lock);
+  return page != NULL;
 }
