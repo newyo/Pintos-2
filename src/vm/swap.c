@@ -17,7 +17,6 @@ struct swapped_page
 {
   struct lru_elem   unmodified_pages_elem;
   struct thread    *thread;
-  struct list_elem  all_elem;
   struct hash_elem  hash_elem;
   void             *base;
 };
