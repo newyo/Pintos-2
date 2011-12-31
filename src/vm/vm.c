@@ -382,7 +382,9 @@ vm_ensure (struct thread *t, void *base)
   assert_t_addr (t, base);
   ASSERT (intr_get_level () == INTR_ON);
   
-  lock_acquire (&vm_lock);
+  bool outer_lock = lock_held_by_current_thread (&vm_lock);
+  if (!outer_lock)
+    lock_acquire (&vm_lock);
   
   enum vm_ensure_result result;
   if (base == NULL)
@@ -426,7 +428,8 @@ vm_ensure (struct thread *t, void *base)
   lru_use (&pages_lru, &ee->lru_elem);
     
 end:
-  lock_release (&vm_lock);
+  if (!outer_lock)
+    lock_release (&vm_lock);
   return result;
 }
 
