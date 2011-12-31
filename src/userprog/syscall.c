@@ -69,7 +69,7 @@ ensure_user_memory (struct vm_ensure_group *g, void *addr, unsigned size)
   intptr_t i;
   // look for all tangented pages
   for (i = start & ~(PGSIZE-1); i < end; i += PGSIZE)
-    if (!vm_ensure_group_add (g, (void *) i))
+    if (vm_ensure_group_add (g, (void *) i) != VMER_OK)
       return false;
     
   return true;
@@ -108,7 +108,7 @@ user_strlen (struct vm_ensure_group *g, char *c)
       char *downfrom = (char *) ((intptr_t) c & ~(PGSIZE-1));
       char *upto     = (char *) ((intptr_t) c |  (PGSIZE-1));
       
-      if (!vm_ensure_group_add (g, downfrom))
+      if (vm_ensure_group_add (g, downfrom) != VMER_OK)
         return -1;
       while (c <= upto)
         if (*(c++))

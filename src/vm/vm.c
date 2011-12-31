@@ -407,8 +407,8 @@ vm_ensure (struct thread *t, void *base)
   switch (ee->type)
     {
       case VMPPT_UNUSED:
-        result = VMER_SEGV;
-        break;
+        // VMPPT_UNUSED is a transient state and cannot occur
+        PANIC ("ee->type == VMPPT_UNUSED");
         
       case VMPPT_EMPTY:
         result = vm_real_alloc (ee) ? VMER_OK : VMER_OOM;
@@ -421,7 +421,7 @@ vm_ensure (struct thread *t, void *base)
       case VMPPT_USED:
       default:
         // VMPPT_USED implies pagedir_get_page != NULL
-        ASSERT (0);
+        PANIC ("ee->type == VMPPT_USED, but pagedir_get_page (...) == NULL");
     }
   lru_use (&pages_lru, &ee->lru_elem);
     
@@ -531,6 +531,7 @@ static void
 vm_ensure_group_dispose_real (struct hash_elem *e, void *t)
 {
   ASSERT (lock_held_by_current_thread (&vm_lock));
+  ASSERT (intr_get_level () == INTR_OFF);
   
   ASSERT (e != NULL);
   struct vm_ensure_group_entry *ee;
@@ -548,29 +549,39 @@ vm_ensure_group_destroy (struct vm_ensure_group *g)
   ASSERT (g != NULL);
   
   lock_acquire (&vm_lock);
+  enum intr_level old_level = intr_disable ();
+  
   hash_destroy (&g->entries, &vm_ensure_group_dispose_real);
+  
   lock_release (&vm_lock);
+  intr_set_level (old_level);
 }
 
-bool
+enum vm_ensure_result
 vm_ensure_group_add (struct vm_ensure_group *g, void *base)
 {
   ASSERT (g != NULL);
   ASSERT (base != NULL);
   
   lock_acquire (&vm_lock);
+    
+  enum vm_ensure_result result = vm_ensure (g->thread, base);
+  if (result != VMER_OK)
+    {
+      lock_release (&vm_lock);
+      return result;
+    }
+  
+  enum intr_level old_level = intr_disable ();
   
   struct vm_logical_page *page;
   struct vm_ensure_group_entry *entry = vm_ensure_group_get (g, base, &page);
   if (entry != NULL)
-    {
-      lock_release (&vm_lock);
-      return true;
-    }
+    goto end;
   if (page == NULL)
     {
-      lock_release (&vm_lock);
-      return false;
+      result = VMER_SEGV;
+      goto end;
     }
   
   entry = calloc (1, sizeof (*entry));
@@ -578,8 +589,10 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *base)
   hash_insert (&g->entries, &entry->elem);
   lru_dispose (&pages_lru, &page->lru_elem, false);
   
+end:
   lock_release (&vm_lock);
-  return true;
+  intr_set_level (old_level);
+  return VMER_OK;
 }
 
 bool
@@ -589,6 +602,7 @@ vm_ensure_group_remove (struct vm_ensure_group *g, void *base)
   ASSERT (base != NULL);
   
   lock_acquire (&vm_lock);
+  enum intr_level old_level = intr_disable ();
   
   struct vm_logical_page *page;
   struct vm_ensure_group_entry *entry = vm_ensure_group_get (g, base, &page);
@@ -597,9 +611,11 @@ vm_ensure_group_remove (struct vm_ensure_group *g, void *base)
       hash_delete_found (&g->entries, &entry->elem);
       vm_ensure_group_dispose_real (&entry->elem, g->thread);
       lock_release (&vm_lock);
+      intr_set_level (old_level);
       return true;
     }
     
   lock_release (&vm_lock);
+  intr_set_level (old_level);
   return page != NULL;
 }
