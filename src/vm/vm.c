@@ -470,16 +470,18 @@ struct vm_ensure_group_entry
 };
 
 static struct vm_ensure_group_entry *
-vm_ensure_group_get (struct vm_ensure_group *g, void *base,
+vm_ensure_group_get (struct vm_ensure_group *g,
+                     void *base,
                      struct vm_logical_page **page_)
 {
   ASSERT (lock_held_by_current_thread (&vm_lock));
   ASSERT (g != NULL);
   ASSERT (base != NULL);
+  ASSERT (page_ != NULL);
   ASSERT (pg_ofs (base) == 0);
   
   *page_ = vm_get_logical_page (g->thread, base);
-  if (!page_)
+  if (!*page_)
     return NULL;
   
   struct vm_ensure_group_entry key;
@@ -506,9 +508,6 @@ vm_ensure_group_hash (const struct hash_elem *e, void *t)
   return (unsigned) ee->page;
 }
 
-/* Compares the value of two hash elements A and B, given
-   auxiliary data AUX.  Returns true if A is less than B, or
-   false if A is greater than or equal to B. */
 static bool
 vm_ensure_group_less (const struct hash_elem *a,
                       const struct hash_elem *b,
