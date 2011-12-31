@@ -168,7 +168,7 @@ swap_get_disposable_pages (size_t count)
       ee = lru_entry (e, struct swapped_page, unmodified_pages_elem);
       ASSERT (ee != NULL);
       
-      vm_swap_disposed (ee->thread, &ee->base);
+      vm_swap_disposed (ee->thread, ee->base);
       swap_dispose_page (ee);
       
       return swapped_page_id (ee);
@@ -238,6 +238,8 @@ swap_write (swap_t         id,
 {
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
+  ASSERT (base != NULL);
+  ASSERT (pg_ofs (base) == 0);
   ASSERT (src != NULL);
   ASSERT (length > 0);
   
@@ -311,7 +313,7 @@ swap_dispose (struct thread *owner, void *base_, size_t amount)
   
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
-  ASSERT ((uintptr_t) base % PGSIZE == 0);
+  ASSERT (pg_ofs (base) == 0);
   ASSERT (amount > 0);
   ASSERT (amount <= swap_pages_count);
   
@@ -344,7 +346,7 @@ swap_read_and_retain (struct thread *owner,
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
-  ASSERT ((uintptr_t) base % PGSIZE == 0);
+  ASSERT (pg_ofs (base) == 0);
   
   size_t amount = (length+PGSIZE-1) / PGSIZE;
   ASSERT (amount > 0);
