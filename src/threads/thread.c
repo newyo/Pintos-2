@@ -428,10 +428,7 @@ thread_exit (void)
     }
   
   if (t->parent == NULL)
-    {
-      ASSERT (!list_is_interior (&t->parent_elem));
-      t->status = THREAD_DYING;
-    }
+    t->status = THREAD_DYING;
   else
     {
       ASSERT (list_is_interior (&t->parent_elem));
