@@ -126,6 +126,10 @@ static void
 swap_dispose_page_real (struct swapped_page *ee)
 {
   ASSERT (ee != NULL);
+  ASSERT (ee->thread != NULL);
+  ASSERT (ee->base != NULL);
+  
+  lru_dispose (&unmodified_pages, &ee->unmodified_pages_elem, false);
   memset (ee, 0, sizeof (*ee));
   bitmap_reset (used_pages, swapped_page_id (ee));
 }
