@@ -166,11 +166,18 @@ hash_delete (struct hash *h, struct hash_elem *e)
   
   struct hash_elem *found = find_elem (h, find_bucket (h, e), e);
   if (found != NULL) 
-    {
-      remove_elem (h, found);
-      rehash (h); 
-    }
+    hash_delete_found (h, found);
   return found;
+}
+
+void
+hash_delete_found (struct hash *h, struct hash_elem *found)
+{
+  ASSERT (h != NULL);
+  ASSERT (found != NULL);
+  
+  remove_elem (h, found);
+  rehash (h); 
 }
 
 /* Calls ACTION for each element in hash table H in arbitrary
