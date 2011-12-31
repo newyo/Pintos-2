@@ -372,6 +372,7 @@ process_exit (void)
     {
       struct lock *l;
       l = list_entry (list_front (&cur->lock_list), struct lock, holder_elem);
+      ASSERT (is_user_vaddr (l));
       lock_release (l);
     }
     
