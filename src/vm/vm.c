@@ -105,6 +105,8 @@ vm_dispose_real (struct vm_logical_page *ee)
   pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
   lru_dispose (&pages_lru, &ee->lru_elem, false);
   hash_delete (&ee->thread->vm_pages, &ee->thread_elem);
+  
+  free (ee);
 }
 
 static void
