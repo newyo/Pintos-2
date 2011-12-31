@@ -387,7 +387,7 @@ vm_ensure (struct thread *t, void *base)
     lock_acquire (&vm_lock);
   
   enum vm_ensure_result result;
-  if (base == NULL)
+  if (base < MIN_ALLOC_ADDR)
     {
       result = VMER_SEGV;
       goto end;
