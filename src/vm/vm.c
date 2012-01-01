@@ -487,7 +487,7 @@ vm_ensure (struct thread *t, void *base)
         PANIC ("ee->type == VMPPT_USED, but pagedir_get_page (...) == NULL");
     }
     
-  if (result)
+  if (result == VMER_OK)
     {
       ASSERT (pagedir_get_page (t->pagedir, base) != NULL);
       lru_use (&pages_lru, &ee->lru_elem);
