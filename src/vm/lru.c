@@ -42,15 +42,15 @@ lru_use (struct lru *l, struct lru_elem *e)
 {
   assert_filling (l);
   ASSERT (e != NULL);
-  if (e->lru_magic == 0)
+  if (e->lru_list == NULL)
     {
-      e->lru_magic = LRU_MAGIC;
+      e->lru_list = l;
       ++l->item_count;
       if (l->lru_size > 0 && l->item_count > l->lru_size)
         lru_dispose (l, lru_peek_least (l), true);
     }
   else
-    ASSERT (e->lru_magic == LRU_MAGIC);
+    ASSERT (e->lru_list == l);
   list_push_front (&l->lru_list, &e->elem);
   assert_filling (l);
 }
@@ -61,14 +61,14 @@ lru_dispose (struct lru *l, struct lru_elem *e, bool run_dispose_action)
   assert_filling (l);
   
   ASSERT (e != NULL);
-  if (e->lru_magic == 0)
+  if (e->lru_list == NULL)
     return;
   
-  ASSERT (e->lru_magic == LRU_MAGIC);
+  ASSERT (e->lru_list == l);
   ASSERT (list_is_interior (&e->elem));
   
   list_remove (&e->elem);
-  e->lru_magic = 0;
+  e->lru_list = NULL;
   
   --l->item_count;
   if (run_dispose_action && l->dispose_action != NULL)

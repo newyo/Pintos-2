@@ -6,24 +6,23 @@
 #include <debug.h>
 #include <list.h>
 
-#define LRU_MAGIC ('L'<<24 | 'R'<<16 | 'U'<<8)
-
+struct lru;
 struct lru_elem
 {
   void             *datum;
   struct list_elem  elem;
-  uint32_t          lru_magic;
+  struct lru       *lru_list;
   char              end[0];
 };
 
-#define lru_entry(LIST_ELEM, STRUCT, MEMBER) \
-({ \
-  typedef __typeof (STRUCT) _t; \
-  __typeof (LIST_ELEM) _e = (LIST_ELEM); \
-  ASSERT (_e != NULL); \
-  ASSERT (_e->lru_magic == LRU_MAGIC || !list_is_interior (&_e->elem)); \
-  ASSERT (_e->lru_magic == 0         ||  list_is_interior (&_e->elem)); \
-  (_t*) ((uint8_t*)&_e->end - offsetof (_t, MEMBER.end)); \
+#define lru_entry(LIST_ELEM, STRUCT, MEMBER)                      \
+({                                                                \
+  typedef __typeof (STRUCT) _t;                                   \
+  __typeof (LIST_ELEM) _e = (LIST_ELEM);                          \
+  ASSERT (_e != NULL);                                            \
+  ASSERT (_e->lru_list != NULL || !list_is_interior (&_e->elem)); \
+  ASSERT (_e->lru_list == NULL ||  list_is_interior (&_e->elem)); \
+  (_t*) ((uint8_t*)&_e->end - offsetof (_t, MEMBER.end));         \
 })
 
 typedef void lru_dispose_action (struct lru_elem *e, void *aux);
