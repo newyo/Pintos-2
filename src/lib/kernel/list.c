@@ -65,6 +65,7 @@ list_init (struct list *list)
   list->tail.prev = &list->head;
   list->tail.next = NULL;
   list->tail.magic = LIST_ELEM_MAGIC__;
+  list->list_magic = LIST_MAGIC;
 }
 
 /* Returns the beginning of LIST.  */
@@ -72,6 +73,7 @@ struct list_elem *
 list_begin (struct list *list)
 {
   ASSERT (list != NULL);
+  ASSERT (list->list_magic == LIST_MAGIC);
   ASSERT (is_list_elem (list->head.next));
   return list->head.next;
 }
@@ -96,6 +98,7 @@ struct list_elem *
 list_end (struct list *list)
 {
   ASSERT (list != NULL);
+  ASSERT (list->list_magic == LIST_MAGIC);
   ASSERT (is_list_elem (&list->tail));
   return &list->tail;
 }
@@ -106,6 +109,7 @@ struct list_elem *
 list_rbegin (struct list *list) 
 {
   ASSERT (list != NULL);
+  ASSERT (list->list_magic == LIST_MAGIC);
   ASSERT (is_list_elem (list->tail.prev));
   return list->tail.prev;
 }
@@ -138,6 +142,7 @@ struct list_elem *
 list_rend (struct list *list) 
 {
   ASSERT (list != NULL);
+  ASSERT (list->list_magic == LIST_MAGIC);
   ASSERT (is_list_elem (&list->head));
   return &list->head;
 }
@@ -157,6 +162,7 @@ struct list_elem *
 list_head (struct list *list) 
 {
   ASSERT (list != NULL);
+  ASSERT (list->list_magic == LIST_MAGIC);
   ASSERT (is_list_elem (&list->head));
   return &list->head;
 }
@@ -166,6 +172,7 @@ struct list_elem *
 list_tail (struct list *list) 
 {
   ASSERT (list != NULL);
+  ASSERT (list->list_magic == LIST_MAGIC);
   ASSERT (is_list_elem (&list->tail));
   return &list->tail;
 }
@@ -421,6 +428,7 @@ list_sort (struct list *list, list_less_func *less, void *aux)
   size_t output_run_cnt;        /* Number of runs output in current pass. */
 
   ASSERT (list != NULL);
+  ASSERT (list->list_magic == LIST_MAGIC);
   ASSERT (less != NULL);
 
   /* Pass over the list repeatedly, merging adjacent runs of
@@ -463,6 +471,7 @@ list_insert_ordered (struct list *list, struct list_elem *elem,
   struct list_elem *e;
 
   ASSERT (list != NULL);
+  ASSERT (list->list_magic == LIST_MAGIC);
   ASSERT (elem != NULL);
   ASSERT (less != NULL);
   
@@ -484,6 +493,7 @@ list_unique (struct list *list, struct list *duplicates,
   struct list_elem *elem, *next;
 
   ASSERT (list != NULL);
+  ASSERT (list->list_magic == LIST_MAGIC);
   ASSERT (less != NULL);
   if (list_empty (list))
     return;

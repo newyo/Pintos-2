@@ -89,6 +89,8 @@
 #define LIST_ELEM_MAGIC__ (0xC0FFEE)
 #define BAD_LIST_ELEM_MAGIC__ (0xBADC0FFE)
 
+#define LIST_MAGIC (('L'<<24) + ('I'<<16) + ('S'<<8) + 'T')
+
 /* List element. */
 struct list_elem 
   {
@@ -104,10 +106,12 @@ struct list
   {
     struct list_elem head;      /* List head. */
     struct list_elem tail;      /* List tail. */
+    uint32_t         list_magic;
   };
 
 static inline bool
-is_list_elem(const struct list_elem *elem) {
+is_list_elem (const struct list_elem *elem)
+{
   if(!elem) {
     return false;
   }
@@ -138,7 +142,8 @@ is_list_elem(const struct list_elem *elem) {
 
        struct list my_list = LIST_INITIALIZER (my_list); */
 #define LIST_INITIALIZER(NAME) { { NULL, &(NAME).tail, LIST_ELEM_MAGIC__ }, \
-                                 { &(NAME).head, NULL, LIST_ELEM_MAGIC__ } }
+                                 { &(NAME).head, NULL, LIST_ELEM_MAGIC__ }, \
+                                 LIST_MAGIC }
 
 void list_init (struct list *);
 

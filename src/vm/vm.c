@@ -595,8 +595,7 @@ vm_ensure_group_dispose_real (struct hash_elem *e, void *t)
   ASSERT (ee->page->thread == t);
   ASSERT (ee->page->vmlp_magic == VMLP_MAGIC);
   
-  if (ee->page->type == VMPPT_SWAPPED)
-    lru_use (&pages_lru, &ee->page->lru_elem);
+  lru_use (&pages_lru, &ee->page->lru_elem);
     
   free (ee);
 }
