@@ -30,6 +30,16 @@ enum vm_ensure_result
 };
 enum vm_ensure_result vm_ensure (struct thread *t, void *base, void **kpage_);
 
+enum vm_is_readonly_result
+{
+  VMIR_INVALID,
+  VMIR_READONLY,
+  VMIR_READWRITE,
+  
+  VMIR_LENGTH
+};
+enum vm_is_readonly_result vm_is_readonly (struct thread *t, void *base);
+
 struct vm_ensure_group
 {
   struct thread *thread;

@@ -531,6 +531,18 @@ vm_alloc_and_ensure (struct thread *t, void *addr, bool readonly)
   return NULL;
 }
 
+enum vm_is_readonly_result
+vm_is_readonly (struct thread *t, void *base)
+{
+  assert_t_addr (t, base);
+  lock_acquire (&vm_lock);
+  
+  struct vm_logical_page *ee = vm_get_logical_page (t, base);
+    
+  lock_release (&vm_lock);
+  return ee ? ee->readonly ? VMIR_READONLY : VMIR_READWRITE : VMIR_INVALID;
+}
+
 struct vm_ensure_group_entry
 {
   struct hash_elem        elem;

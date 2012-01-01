@@ -51,7 +51,10 @@ syscall_init (void)
                               struct intr_frame      *if_  UNUSED
 
 static bool
-ensure_user_memory (struct vm_ensure_group *g, void *addr, unsigned size)
+ensure_user_memory (struct vm_ensure_group *g,
+                    void *addr,
+                    unsigned size,
+                    bool for_writing)
 {
   ASSERT (g != NULL);
   
@@ -70,8 +73,15 @@ ensure_user_memory (struct vm_ensure_group *g, void *addr, unsigned size)
   // look for all tangented pages
   void *kpage;
   for (i = start & ~(PGSIZE-1); i < end; i += PGSIZE)
-    if (vm_ensure_group_add (g, (void *) i, &kpage) != VMER_OK)
-      return false;
+    {
+      enum vm_is_readonly_result r = vm_is_readonly (g->thread, (void *) i);
+      if (r == VMIR_INVALID)
+        return false;
+      if (for_writing && r == VMIR_READONLY)
+        return false;
+      if (vm_ensure_group_add (g, (void *) i, &kpage) != VMER_OK)
+        return false;
+    }
     
   return true;
 }
@@ -128,11 +138,11 @@ syscall_handler_SYS_HALT (_SYSCALL_HANDLER_ARGS)
   shutdown_power_off ();
 }
 
-#define ENSURE_USER_ARGS(COUNT)                               \
-({                                                            \
-  if (!ensure_user_memory (g, arg1, sizeof (arg1) * (COUNT))) \
-    kill_segv (g);                                            \
-  (void) 0;                                                   \
+#define ENSURE_USER_ARGS(COUNT)                                      \
+({                                                                   \
+  if (!ensure_user_memory (g, arg1, sizeof (arg1) * (COUNT), false)) \
+    kill_segv (g);                                                   \
+  (void) 0;                                                          \
 })
 
 static void
@@ -273,7 +283,7 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
   char *buffer = *(void **) arg2;
   unsigned length = *(unsigned *) arg3;
   
-  if (!ensure_user_memory (g, buffer, length))
+  if (!ensure_user_memory (g, buffer, length, true))
     kill_segv (g);
     
   if (fd != 0)
@@ -285,6 +295,7 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
           vm_ensure_group_destroy (g);
           return;
         }
+        
       if_->eax = SYNC (file_read (fd_data->file, buffer, length));
     }
   else
@@ -314,7 +325,7 @@ syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
   char *buffer = *(void **) arg2;
   unsigned length = *(unsigned *) arg3;
   
-  if (!ensure_user_memory (g, buffer, length))
+  if (!ensure_user_memory (g, buffer, length, false))
     kill_segv (g);
   else if (fd == 0 || fd >= INT_MAX)
     {
@@ -458,7 +469,7 @@ syscall_handler (struct intr_frame *if_)
   void *arg2     = &((void **) if_->esp)[2];
   void *arg3     = &((void **) if_->esp)[3];
   
-  if (!ensure_user_memory (&g, nr, sizeof (nr)))
+  if (!ensure_user_memory (&g, nr, sizeof (nr), false))
     kill_segv (&g);
   
   #define _HANDLE(NAME) case NAME: \
