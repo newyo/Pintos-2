@@ -371,7 +371,8 @@ vm_alloc_kpage (void)
 {
   ASSERT (intr_get_level () == INTR_ON);
   
-  for (;;)
+  signed retry;
+  for (retry = 32; retry > 0; --retry)
     {
       void *kpage = palloc_get_page (PAL_USER);
       if (kpage != NULL)
@@ -379,6 +380,7 @@ vm_alloc_kpage (void)
       if (!swap_free_memory ())
         return NULL;
     }
+  return NULL;
 }
 
 static bool
@@ -400,7 +402,8 @@ vm_real_alloc (struct vm_logical_page *ee)
   result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
   if (!result)
     palloc_free_page (kpage);
-  memset (kpage, 0, PGSIZE);
+  else
+    memset (kpage, 0, PGSIZE);
   
   return result;
 }

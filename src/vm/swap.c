@@ -87,7 +87,7 @@ static void UNUSED
 swap_needlessly_zero_out_whole_swap_space (void)
 {
   char zero[BLOCK_SECTOR_SIZE];
-  memset (zero, 0x66, sizeof (zero));
+  memset (zero, 0xCC, sizeof (zero));
   
   block_sector_t i;
   for (i = 0; i < swap_pages_count; ++i)
@@ -207,15 +207,6 @@ swap_write_sectors (swap_t start, void *src, size_t len)
 }
 
 static void
-swap_read_sectors (swap_t start, void *dest)
-{
-  ASSERT (start < swap_pages_count);
-  ASSERT (dest != NULL);
-  
-  block_read (swap_disk, swap_page_to_sector (start), dest);
-}
-
-static void
 swap_write (swap_t         id,
             struct thread *owner,
             void          *base,
@@ -331,6 +322,7 @@ swap_read_and_retain (struct thread *owner,
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
   ASSERT (pg_ofs (base) == 0);
+  ASSERT (dest != NULL);
   
   lock_acquire (&swap_lock);
   
@@ -341,7 +333,7 @@ swap_read_and_retain (struct thread *owner,
       return false;
     }
   
-  swap_read_sectors (swapped_page_id (ee), dest);
+  block_read (swap_disk, swap_page_to_sector (swapped_page_id (ee)), dest);
   lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
   
   lock_release (&swap_lock);
