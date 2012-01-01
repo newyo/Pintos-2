@@ -207,26 +207,12 @@ swap_write_sectors (swap_t start, void *src, size_t len)
 }
 
 static void
-swap_read_sectors (swap_t start, void *base, size_t len)
+swap_read_sectors (swap_t start, void *dest)
 {
-  ASSERT (base != NULL);
-  ASSERT (len > 0);
+  ASSERT (start < swap_pages_count);
+  ASSERT (dest != NULL);
   
-  block_sector_t sector = swap_page_to_sector (start);
-  while (len >= BLOCK_SECTOR_SIZE)
-    {
-      block_read (swap_disk, sector, base);
-      base += BLOCK_SECTOR_SIZE;
-      len -= BLOCK_SECTOR_SIZE;
-      ++sector;
-    }
-  if (len > 0)
-    {
-      // cannot read an underfull block
-      uint8_t data[BLOCK_SECTOR_SIZE];
-      block_read (swap_disk, sector, data);
-      memcpy (base, data, len);
-    }
+  block_read (swap_disk, swap_page_to_sector (start), dest);
 }
 
 static void
@@ -338,37 +324,26 @@ swap_dispose (struct thread *owner, void *base_, size_t amount)
 
 bool
 swap_read_and_retain (struct thread *owner,
-                      void          *base_,
-                      size_t         length)
+                      void          *base,
+                      void          *dest)
 {
-  uint8_t *base = base_;
-  
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (base != NULL);
   ASSERT (pg_ofs (base) == 0);
   
-  size_t amount = (length+PGSIZE-1) / PGSIZE;
-  ASSERT (amount > 0);
-  ASSERT (amount <= swap_pages_count);
-  
   lock_acquire (&swap_lock);
-  do
+  
+  struct swapped_page *ee = swappage_page_of_owner (owner, base);
+  if (!ee)
     {
-      struct swapped_page *ee = swappage_page_of_owner (owner, base);
-      if (!ee)
-        {
-          lock_release (&swap_lock);
-          return false;
-        }
-      
-      size_t len = MIN (length, (size_t) PGSIZE);
-      swap_read_sectors (swapped_page_id (ee), ee->base, len);
-      base += len;
-      length -= len;
-      lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
+      lock_release (&swap_lock);
+      return false;
     }
-  while (--amount > 0);
+  
+  swap_read_sectors (swapped_page_id (ee), dest);
+  lru_use (&unmodified_pages, &ee->unmodified_pages_elem);
+  
   lock_release (&swap_lock);
   return true;
 }

@@ -25,7 +25,7 @@ bool swap_alloc_and_write (struct thread *owner,
                            void          *src);
 bool swap_read_and_retain (struct thread *owner,
                            void          *base,
-                           size_t         length);
+                           void          *dest);
 bool swap_dispose (struct thread *owner,
                    void          *base,
                    size_t         amount);
