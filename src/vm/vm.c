@@ -389,10 +389,12 @@ vm_real_alloc (struct vm_logical_page *ee)
   ASSERT (ee->thread != NULL);
   ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   ASSERT (lock_held_by_current_thread (&vm_lock));
-  ASSERT (pagedir_get_page (ee->thread->pagedir, upage) == NULL);
+  ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
   void *kpage = vm_alloc_kpage ();
+  if (!kpage)
+    return false;
   
   bool result;
   result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
@@ -412,12 +414,14 @@ vm_swap_in (struct vm_logical_page *ee)
   ASSERT (ee->thread != NULL);
   ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   ASSERT (lock_held_by_current_thread (&vm_lock));
-  ASSERT (pagedir_get_page (ee->thread->pagedir, upage) == NULL);
+  ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
   void *kpage = vm_alloc_kpage ();
+  if (!kpage)
+    return false;
+    
   bool result;
-  
   result = swap_read_and_retain (ee->thread, ee->user_addr, kpage);
   ASSERT (result == true);
   if (!result)
