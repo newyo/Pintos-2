@@ -384,69 +384,77 @@ vm_alloc_kpage (void)
 }
 
 static bool
-vm_real_alloc (struct vm_logical_page *ee)
+vm_real_alloc (struct vm_logical_page *ee, void **kpage_)
 {
   ASSERT (ee != NULL);
   ASSERT (ee->user_addr != NULL);
   ASSERT (ee->thread != NULL);
   ASSERT (ee->vmlp_magic == VMLP_MAGIC);
+  ASSERT (kpage_ != NULL);
   ASSERT (lock_held_by_current_thread (&vm_lock));
   ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
-  void *kpage = vm_alloc_kpage ();
-  if (!kpage)
+  *kpage_ = vm_alloc_kpage ();
+  if (!*kpage_)
     return false;
   
   bool result;
-  result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
+  result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, *kpage_, true);
   if (!result)
-    palloc_free_page (kpage);
-  else
-    memset (kpage, 0, PGSIZE);
+    goto fail;
+    
+  memset (*kpage_, 0, PGSIZE);
+  return true;
   
-  return result;
+fail:
+  palloc_free_page (*kpage_);
+  *kpage_ = NULL;
+  return false;
 }
 
 static bool
-vm_swap_in (struct vm_logical_page *ee)
+vm_swap_in (struct vm_logical_page *ee, void **kpage_)
 {
   ASSERT (ee != NULL);
   ASSERT (ee->user_addr != NULL);
   ASSERT (ee->thread != NULL);
   ASSERT (ee->vmlp_magic == VMLP_MAGIC);
+  ASSERT (kpage_ != NULL);
   ASSERT (lock_held_by_current_thread (&vm_lock));
   ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
-  void *kpage = vm_alloc_kpage ();
-  if (!kpage)
+  *kpage_ = vm_alloc_kpage ();
+  if (!*kpage_)
     return false;
     
   bool result;
-  result = swap_read_and_retain (ee->thread, ee->user_addr, kpage);
+  result = swap_read_and_retain (ee->thread, ee->user_addr, *kpage_);
   ASSERT (result == true);
   if (!result)
     goto fail;
   
-  result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
+  result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, *kpage_, true);
   if (!result)
     goto fail;
   
   return true;
   
 fail:
-  palloc_free_page (kpage);
+  palloc_free_page (*kpage_);
+  *kpage_ = NULL;
   return false;
 }
 
 enum vm_ensure_result
-vm_ensure (struct thread *t, void *base)
+vm_ensure (struct thread *t, void *base, void **kpage_)
 {
   if (base < MIN_ALLOC_ADDR)
     return VMER_SEGV;
     
   assert_t_addr (t, base);
+  ASSERT (kpage_ != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
   bool outer_lock = lock_held_by_current_thread (&vm_lock);
@@ -455,7 +463,8 @@ vm_ensure (struct thread *t, void *base)
   
   enum vm_ensure_result result;
   
-  if (pagedir_get_page (t->pagedir, base) != NULL)
+  *kpage_ = pagedir_get_page (t->pagedir, base);
+  if (*kpage_ != NULL)
     {
       result = VMER_OK;
       goto end;
@@ -475,11 +484,11 @@ vm_ensure (struct thread *t, void *base)
         PANIC ("ee->type == VMPPT_UNUSED");
         
       case VMPPT_EMPTY:
-        result = vm_real_alloc (ee) ? VMER_OK : VMER_OOM;
+        result = vm_real_alloc (ee, kpage_) ? VMER_OK : VMER_OOM;
         break;
         
       case VMPPT_SWAPPED:
-        result = vm_swap_in (ee) ? VMER_OK : VMER_OOM;
+        result = vm_swap_in (ee, kpage_) ? VMER_OK : VMER_OOM;
         break;
       
       case VMPPT_USED:
@@ -489,10 +498,7 @@ vm_ensure (struct thread *t, void *base)
     }
     
   if (result == VMER_OK)
-    {
-      ASSERT (pagedir_get_page (t->pagedir, base) != NULL);
-      lru_use (&pages_lru, &ee->lru_elem);
-    }
+    lru_use (&pages_lru, &ee->lru_elem);
     
 end:
   if (!outer_lock)
@@ -515,7 +521,7 @@ vm_dispose (struct thread *t, void *addr)
   intr_set_level (old_level);
 }
 
-bool
+void *
 vm_alloc_and_ensure (struct thread *t, void *addr)
 {
   assert_t_addr (t, addr);
@@ -523,14 +529,15 @@ vm_alloc_and_ensure (struct thread *t, void *addr)
   
   if (!vm_alloc_zero (t, addr))
     return false;
-    
-  enum vm_ensure_result result = vm_ensure (t, addr);
+  
+  void *kpage;
+  enum vm_ensure_result result = vm_ensure (t, addr, &kpage);
   if (result == VMER_OK)
-    return true;
+    return kpage;
     
   ASSERT (result == VMER_OOM);
   vm_dispose (t, addr);
-  return false;
+  return NULL;
 }
 
 struct vm_ensure_group_entry
@@ -628,14 +635,14 @@ vm_ensure_group_destroy (struct vm_ensure_group *g)
 }
 
 enum vm_ensure_result
-vm_ensure_group_add (struct vm_ensure_group *g, void *base)
+vm_ensure_group_add (struct vm_ensure_group *g, void *base, void **kpage_)
 {
   ASSERT (g != NULL);
   ASSERT (base != NULL);
   
   lock_acquire (&vm_lock);
     
-  enum vm_ensure_result result = vm_ensure (g->thread, base);
+  enum vm_ensure_result result = vm_ensure (g->thread, base, kpage_);
   if (result != VMER_OK)
     {
       lock_release (&vm_lock);

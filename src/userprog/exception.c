@@ -175,7 +175,8 @@ page_fault (struct intr_frame *f)
     }
     
   struct thread *t = thread_current ();
-  enum vm_ensure_result r = vm_ensure (t, pg_round_down (fault_addr));
+  void *kpage;
+  enum vm_ensure_result r = vm_ensure (t, pg_round_down (fault_addr), &kpage);
   switch (r)
     {
       case VMER_OK:
