@@ -74,7 +74,7 @@ list_begin (struct list *list)
 {
   ASSERT (list != NULL);
   ASSERT (list->list_magic == LIST_MAGIC);
-  ASSERT (is_list_elem (list->head.next));
+  //ASSERT (is_list_elem (list->head.next));
   return list->head.next;
 }
 
@@ -99,7 +99,7 @@ list_end (struct list *list)
 {
   ASSERT (list != NULL);
   ASSERT (list->list_magic == LIST_MAGIC);
-  ASSERT (is_list_elem (&list->tail));
+  //ASSERT (is_list_elem (&list->tail));
   return &list->tail;
 }
 
