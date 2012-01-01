@@ -388,10 +388,12 @@ vm_real_alloc (struct vm_logical_page *ee)
   ASSERT (ee->user_addr != NULL);
   ASSERT (ee->thread != NULL);
   ASSERT (ee->vmlp_magic == VMLP_MAGIC);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  ASSERT (pagedir_get_page (ee->thread->pagedir, upage) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
   void *kpage = vm_alloc_kpage ();
-    
+  
   bool result;
   result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
   ASSERT (result == true);
@@ -410,6 +412,7 @@ vm_swap_in (struct vm_logical_page *ee)
   ASSERT (ee->thread != NULL);
   ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   ASSERT (lock_held_by_current_thread (&vm_lock));
+  ASSERT (pagedir_get_page (ee->thread->pagedir, upage) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
   void *kpage = vm_alloc_kpage ();
@@ -479,7 +482,12 @@ vm_ensure (struct thread *t, void *base)
         // VMPPT_USED implies pagedir_get_page != NULL
         PANIC ("ee->type == VMPPT_USED, but pagedir_get_page (...) == NULL");
     }
-  lru_use (&pages_lru, &ee->lru_elem);
+    
+  if (result)
+    {
+      ASSERT (pagedir_get_page (t->pagedir, base) != NULL);
+      lru_use (&pages_lru, &ee->lru_elem);
+    }
     
 end:
   if (!outer_lock)
