@@ -23,6 +23,7 @@
 #ifdef VM
 # include "vm/swap.h"
 # include "vm/vm.h"
+# include "vm/mmap.h"
 #endif
 
 struct process_start_aux
@@ -376,6 +377,10 @@ process_exit (void)
       lock_release (l);
     }
     
+#ifdef VM
+  mmap_clean (cur);
+#endif
+    
   hash_destroy (&cur->fds, fd_free);
 
 #ifdef VM
@@ -492,6 +497,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 #ifdef VM
   swap_init_thread (t);
   vm_init_thread (t);
+  mmap_init_thread (t);
 #endif
 
   /* Open executable file. */

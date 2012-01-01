@@ -6,6 +6,7 @@
 #include <string.h>
 #include "lru.h"
 #include "swap.h"
+#include "mmap.h"
 #include "threads/vaddr.h"
 #include "threads/palloc.h"
 #include "threads/malloc.h"

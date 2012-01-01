@@ -124,9 +124,10 @@ struct thread
 #endif
 
 #ifdef VM
-    /* Owned by swap.h */
+    /* Owned by vm */
     struct hash swap_pages;
     struct hash vm_pages;
+    struct list mmap_regions;
 #endif
 
     /* Owned by thread.c. */
