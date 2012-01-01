@@ -398,7 +398,6 @@ vm_real_alloc (struct vm_logical_page *ee)
   
   bool result;
   result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
-  ASSERT (result == true);
   if (!result)
     palloc_free_page (kpage);
   memset (kpage, 0, PGSIZE);
@@ -428,7 +427,6 @@ vm_swap_in (struct vm_logical_page *ee)
     goto fail;
   
   result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
-  ASSERT (result == true);
   if (!result)
     goto fail;
   
