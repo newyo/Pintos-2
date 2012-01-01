@@ -372,9 +372,25 @@ vm_swap_in (struct vm_logical_page *ee)
   ASSERT (ee->user_addr != NULL);
   ASSERT (ee->thread != NULL);
   ASSERT (lock_held_by_current_thread (&vm_lock));
-
-  // TODO
-
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  void *kpage = vm_alloc_kpage ();
+  bool result;
+  
+  result = swap_read_and_retain (ee->thread, ee->user_addr, kpage);
+  ASSERT (result == true);
+  if (!result)
+    goto fail;
+  
+  result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
+  ASSERT (result == true);
+  if (!result)
+    goto fail;
+  
+  return true;
+  
+fail:
+  palloc_free_page (kpage);
   return false;
 }
 
