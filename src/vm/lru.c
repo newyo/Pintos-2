@@ -1,14 +1,13 @@
 #include "lru.h"
 #include <string.h>
 
-#define ASSERT_FILLING(X)                                      \
-({                                                             \
-  __typeof (X) _x = (X);                                       \
-  ASSERT (_x != NULL);                                         \
-  ASSERT (_x->item_count == 0 || !list_empty (&_x->lru_list)); \
-  ASSERT (_x->item_count > 0  ||  list_empty (&_x->lru_list)); \
-  (void) 0;                                                    \
-})
+static inline void
+assert_filling (struct lru *l)
+{
+  ASSERT (l != NULL);
+  ASSERT (l->item_count == 0 || !list_empty (&l->lru_list));
+  ASSERT (l->item_count > 0  ||  list_empty (&l->lru_list));
+}
 
 void
 lru_init (struct lru         *l,
@@ -28,19 +27,20 @@ lru_init (struct lru         *l,
 void
 lru_free (struct lru *l)
 {
-  ASSERT_FILLING (l);
+  assert_filling (l);
   while (!list_empty (&l->lru_list))
     {
       struct list_elem *e = list_front (&l->lru_list);
       ASSERT (e != NULL);
       lru_dispose (l, list_entry (e, struct lru_elem, elem), true);
     }
+  assert_filling (l);
 }
 
 void
 lru_use (struct lru *l, struct lru_elem *e)
 {
-  ASSERT_FILLING (l);
+  assert_filling (l);
   ASSERT (e != NULL);
   if (e->lru_magic == 0)
     {
@@ -52,12 +52,13 @@ lru_use (struct lru *l, struct lru_elem *e)
   else
     ASSERT (e->lru_magic == LRU_MAGIC);
   list_push_front (&l->lru_list, &e->elem);
+  assert_filling (l);
 }
 
 void
 lru_dispose (struct lru *l, struct lru_elem *e, bool run_dispose_action)
 {
-  ASSERT_FILLING (l);
+  assert_filling (l);
   
   ASSERT (e != NULL);
   if (e->lru_magic == 0)
@@ -73,13 +74,13 @@ lru_dispose (struct lru *l, struct lru_elem *e, bool run_dispose_action)
   if (run_dispose_action && l->dispose_action != NULL)
     l->dispose_action (e, l->aux);
   
-  ASSERT_FILLING (l);
+  assert_filling (l);
 }
 
 struct lru_elem *
 lru_peek_least (struct lru *l)
 {
-  ASSERT_FILLING (l);
+  assert_filling (l);
   if (l->item_count == 0)
     return NULL;
   return list_entry (list_back (&l->lru_list), struct lru_elem, elem);
