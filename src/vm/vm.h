@@ -12,8 +12,8 @@ void vm_clean (struct thread *t);
 
 // vm_(alloc_and_)ensure return kpage or NULL, if failed
 
-bool vm_alloc_zero (struct thread *t, void *addr);
-void *vm_alloc_and_ensure (struct thread *t, void *addr);
+bool vm_alloc_zero (struct thread *t, void *addr, bool readonly);
+void *vm_alloc_and_ensure (struct thread *t, void *addr, bool readonly);
 void vm_dispose (struct thread *t, void *addr);
 
 void vm_swap_disposed (struct thread *t, void *base);

@@ -669,21 +669,18 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      
-      // TODO: implement readonly in enum vm_physical_page_type
-      (void) writable;
-
       /* Get a page of memory. */
-      if (!vm_alloc_and_ensure (t, upage))
+      void *kpage = vm_alloc_and_ensure (t, upage, !writable);
+      if (kpage == NULL)
         return false;
 
       /* Load this page. */
-      if (file_read (file, upage, page_read_bytes) != (int) page_read_bytes)
+      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
           vm_dispose (t, upage);
           return false; 
         }
-      memset (upage + page_read_bytes, 0, page_zero_bytes);
+      memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -700,11 +697,11 @@ setup_stack (void **esp)
 {
   struct thread *t = thread_current ();
 
-  if (!vm_alloc_and_ensure (t, ((uint8_t *) PHYS_BASE) - PGSIZE))
+  if (!vm_alloc_and_ensure (t, ((uint8_t *) PHYS_BASE) - PGSIZE, false))
     return false;
   size_t i;
   for (i = 1; i < PROCESS_STACK_SIZE/PGSIZE; ++i)
-    if(!vm_alloc_zero (t, ((uint8_t *) PHYS_BASE) - (i+1) * PGSIZE))
+    if(!vm_alloc_zero (t, ((uint8_t *) PHYS_BASE) - (i+1) * PGSIZE, false))
       return false; // don't dispose pages, thread will be killed, anyway
   
   *esp = PHYS_BASE;

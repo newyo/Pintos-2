@@ -29,6 +29,7 @@ enum vm_physical_page_type
   
   VMPPT_COUNT
 };
+typedef char _CASSERT_VMPPT_SIZE[0 - !((VMPPT_COUNT&0x7F) == VMPPT_COUNT)];
 
 struct vm_logical_page
 {
@@ -36,8 +37,13 @@ struct vm_logical_page
   struct thread              *thread;      // owner thread
   struct hash_elem            thread_elem; // for thread.vm_pages
   struct lru_elem             lru_elem;    // for pages_lru
-  enum vm_physical_page_type  type;
   uint32_t                    vmlp_magic;
+  
+  struct
+  {
+    bool                        readonly :1;
+    enum vm_physical_page_type  type     :7;
+  };
 };
 
 static bool vm_is_initialized;
@@ -167,7 +173,7 @@ vm_clean (struct thread *t)
 }
 
 bool
-vm_alloc_zero (struct thread *t, void *addr)
+vm_alloc_zero (struct thread *t, void *addr, bool readonly)
 {
   assert_t_addr (t, addr);
   
@@ -188,6 +194,7 @@ vm_alloc_zero (struct thread *t, void *addr)
   page->thread     = t;
   page->user_addr  = addr;
   page->vmlp_magic = VMLP_MAGIC;
+  page->readonly   = !!readonly;
   
   hash_insert (&t->vm_pages, &page->thread_elem);
   
@@ -367,8 +374,14 @@ swap_free_memory (void)
 }
 
 static void *
-vm_alloc_kpage (void)
+vm_alloc_kpage (struct vm_logical_page *ee)
 {
+  ASSERT (ee != NULL);
+  ASSERT (ee->user_addr != NULL);
+  ASSERT (ee->thread != NULL);
+  ASSERT (ee->vmlp_magic == VMLP_MAGIC);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
   signed retry;
@@ -376,6 +389,15 @@ vm_alloc_kpage (void)
     {
       void *kpage = palloc_get_page (PAL_USER);
       if (kpage != NULL)
+        {
+          if (!pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
+                                 !ee->readonly))
+            {
+              palloc_free_page (kpage);
+              return NULL;
+            }
+          return kpage;
+        }
         return kpage;
       if (!swap_free_memory ())
         return NULL;
@@ -386,65 +408,34 @@ vm_alloc_kpage (void)
 static bool
 vm_real_alloc (struct vm_logical_page *ee, void **kpage_)
 {
-  ASSERT (ee != NULL);
-  ASSERT (ee->user_addr != NULL);
-  ASSERT (ee->thread != NULL);
-  ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   ASSERT (kpage_ != NULL);
-  ASSERT (lock_held_by_current_thread (&vm_lock));
-  ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
-  ASSERT (intr_get_level () == INTR_ON);
   
-  *kpage_ = vm_alloc_kpage ();
+  *kpage_ = vm_alloc_kpage (ee);
   if (!*kpage_)
     return false;
-  
-  bool result;
-  result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, *kpage_, true);
-  if (!result)
-    goto fail;
     
   memset (*kpage_, 0, PGSIZE);
   return true;
-  
-fail:
-  palloc_free_page (*kpage_);
-  *kpage_ = NULL;
-  return false;
 }
 
 static bool
 vm_swap_in (struct vm_logical_page *ee, void **kpage_)
 {
-  ASSERT (ee != NULL);
-  ASSERT (ee->user_addr != NULL);
-  ASSERT (ee->thread != NULL);
-  ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   ASSERT (kpage_ != NULL);
-  ASSERT (lock_held_by_current_thread (&vm_lock));
-  ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
-  ASSERT (intr_get_level () == INTR_ON);
   
-  *kpage_ = vm_alloc_kpage ();
+  *kpage_ = vm_alloc_kpage (ee);
   if (!*kpage_)
     return false;
     
-  bool result;
-  result = swap_read_and_retain (ee->thread, ee->user_addr, *kpage_);
+  bool result = swap_read_and_retain (ee->thread, ee->user_addr, *kpage_);
   ASSERT (result == true);
   if (!result)
-    goto fail;
-  
-  result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, *kpage_, true);
-  if (!result)
-    goto fail;
-  
+    {
+      palloc_free_page (*kpage_);
+      *kpage_ = NULL;
+      return false;
+    }
   return true;
-  
-fail:
-  palloc_free_page (*kpage_);
-  *kpage_ = NULL;
-  return false;
 }
 
 enum vm_ensure_result
@@ -522,12 +513,12 @@ vm_dispose (struct thread *t, void *addr)
 }
 
 void *
-vm_alloc_and_ensure (struct thread *t, void *addr)
+vm_alloc_and_ensure (struct thread *t, void *addr, bool readonly)
 {
   assert_t_addr (t, addr);
   ASSERT (intr_get_level () == INTR_ON);
   
-  if (!vm_alloc_zero (t, addr))
+  if (!vm_alloc_zero (t, addr, readonly))
     return false;
   
   void *kpage;
