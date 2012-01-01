@@ -16,6 +16,8 @@
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
 #define SWAP_AT_ONCE 1
 
+#define VMLP_MAGIC (('V'<<24) + ('M'<<16) + ('L'<<8) + 'P')
+
 enum vm_physical_page_type
 {
   VMPPT_UNUSED = 0,   // this physical page is not used, yet
@@ -35,6 +37,7 @@ struct vm_logical_page
   struct hash_elem            thread_elem; // for thread.vm_pages
   struct lru_elem             lru_elem;    // for pages_lru
   enum vm_physical_page_type  type;
+  uint32_t                    vmlp_magic;
 };
 
 static bool vm_is_initialized;
@@ -62,17 +65,25 @@ vm_init (void)
   printf ("Initialized user's virtual memory.\n");
 }
 
+static inline struct vm_logical_page *
+vmlp_entry (const struct hash_elem *e, void *t)
+{
+  if (e == NULL)
+    return NULL;
+  struct vm_logical_page *ee = hash_entry (e, struct vm_logical_page,
+                                           thread_elem);
+  ASSERT (t == NULL || ee->thread == t);
+  ASSERT (ee->vmlp_magic == VMLP_MAGIC);
+  return ee;
+}
+
 static unsigned
 vm_thread_page_hash (const struct hash_elem *e, void *t)
 {
   typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void *))];
+  
   ASSERT (t != NULL);
-  
-  struct vm_logical_page *ee = hash_entry (e, struct vm_logical_page,
-                                           thread_elem);
-  ASSERT (ee->thread == t);
-  
-  return (unsigned) ee->user_addr;
+  return (unsigned) vmlp_entry (e,t)->user_addr;
 }
 
 static bool
@@ -99,6 +110,7 @@ vm_dispose_real (struct vm_logical_page *ee)
   ASSERT (lock_held_by_current_thread (&vm_lock));
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (ee != NULL);
+  ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   
   lru_dispose (&pages_lru, &ee->lru_elem, false);
   hash_delete (&ee->thread->vm_pages, &ee->thread_elem);
@@ -133,9 +145,7 @@ vm_clean_sub (struct hash_elem *e, void *t)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (e != NULL);
   
-  struct vm_logical_page *ee;
-  ee = hash_entry (e, struct vm_logical_page, thread_elem);
-  ASSERT (ee->thread == t);
+  struct vm_logical_page *ee = vmlp_entry (e,t);
   
   vm_dispose_real (ee);
 }
@@ -174,9 +184,10 @@ vm_alloc_zero (struct thread *t, void *addr)
       return false;
     }
     
-  page->type      = VMPPT_EMPTY;
-  page->thread    = t;
-  page->user_addr = addr;
+  page->type       = VMPPT_EMPTY;
+  page->thread     = t;
+  page->user_addr  = addr;
+  page->vmlp_magic = VMLP_MAGIC;
   
   hash_insert (&t->vm_pages, &page->thread_elem);
   
@@ -194,10 +205,10 @@ vm_get_logical_page (struct thread *t, void *base)
   struct vm_logical_page key;
   key.user_addr = base;
   key.thread = t;
+  key.vmlp_magic = VMLP_MAGIC;
+  
   struct hash_elem *e = hash_find (&t->vm_pages, &key.thread_elem);
-  if (e == NULL)
-    return NULL;
-  return hash_entry (e, struct vm_logical_page, thread_elem);
+  return vmlp_entry (e,t);
 }
 
 /* Called when swap needed room and disposed an unchanged page.
@@ -376,6 +387,7 @@ vm_real_alloc (struct vm_logical_page *ee)
   ASSERT (ee != NULL);
   ASSERT (ee->user_addr != NULL);
   ASSERT (ee->thread != NULL);
+  ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   ASSERT (intr_get_level () == INTR_ON);
   
   void *kpage = vm_alloc_kpage ();
@@ -396,6 +408,7 @@ vm_swap_in (struct vm_logical_page *ee)
   ASSERT (ee != NULL);
   ASSERT (ee->user_addr != NULL);
   ASSERT (ee->thread != NULL);
+  ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   ASSERT (lock_held_by_current_thread (&vm_lock));
   ASSERT (intr_get_level () == INTR_ON);
   
@@ -514,8 +527,8 @@ struct vm_ensure_group_entry
 };
 
 static struct vm_ensure_group_entry *
-vm_ensure_group_get (struct vm_ensure_group *g,
-                     void *base,
+vm_ensure_group_get (struct vm_ensure_group  *g,
+                     void                    *base,
                      struct vm_logical_page **page_)
 {
   ASSERT (lock_held_by_current_thread (&vm_lock));
@@ -533,8 +546,6 @@ vm_ensure_group_get (struct vm_ensure_group *g,
   key.page = *page_;
   
   struct hash_elem *e = hash_find (&g->entries, &key.elem);
-  if (e == NULL)
-    return NULL;
   return hash_entry (e, struct vm_ensure_group_entry, elem);
 }
 
@@ -582,8 +593,11 @@ vm_ensure_group_dispose_real (struct hash_elem *e, void *t)
   ee = hash_entry (e, struct vm_ensure_group_entry, elem);
   ASSERT (ee->page != NULL);
   ASSERT (ee->page->thread == t);
+  ASSERT (ee->page->vmlp_magic == VMLP_MAGIC);
   
-  lru_use (&pages_lru, &ee->page->lru_elem);
+  if (ee->page->type == VMPPT_SWAPPED)
+    lru_use (&pages_lru, &ee->page->lru_elem);
+    
   free (ee);
 }
 
