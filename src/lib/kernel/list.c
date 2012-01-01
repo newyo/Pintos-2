@@ -74,7 +74,7 @@ list_begin (struct list *list)
 {
   ASSERT (list != NULL);
   ASSERT (list->list_magic == LIST_MAGIC);
-  //ASSERT (is_list_elem (list->head.next));
+  ASSERT (list->head.next == NULL || is_list_elem (list->head.next));
   return list->head.next;
 }
 
@@ -85,7 +85,7 @@ struct list_elem *
 list_next (struct list_elem *elem)
 {
   ASSERT (is_head (elem) || list_is_interior (elem));
-  ASSERT (is_list_elem (elem->next));
+  ASSERT (elem->next == NULL || is_list_elem (elem->next));
   return elem->next;
 }
 
@@ -99,7 +99,7 @@ list_end (struct list *list)
 {
   ASSERT (list != NULL);
   ASSERT (list->list_magic == LIST_MAGIC);
-  //ASSERT (is_list_elem (&list->tail));
+  ASSERT (is_list_elem (&list->tail));
   return &list->tail;
 }
 
@@ -110,7 +110,7 @@ list_rbegin (struct list *list)
 {
   ASSERT (list != NULL);
   ASSERT (list->list_magic == LIST_MAGIC);
-  ASSERT (is_list_elem (list->tail.prev));
+  ASSERT (list->tail.prev == NULL || is_list_elem (list->tail.prev));
   return list->tail.prev;
 }
 
@@ -121,7 +121,7 @@ struct list_elem *
 list_prev (struct list_elem *elem)
 {
   ASSERT (list_is_interior (elem) || is_tail (elem));
-  ASSERT (is_list_elem (elem->prev));
+  ASSERT (elem->prev == NULL || is_list_elem (elem->prev));
   return elem->prev;
 }
 
