@@ -100,11 +100,28 @@ vm_dispose_real (struct vm_logical_page *ee)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (ee != NULL);
   
-  if (ee->type == VMPPT_SWAPPED)
-    swap_dispose (ee->thread, ee->user_addr, 1);
-  pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
   lru_dispose (&pages_lru, &ee->lru_elem, false);
   hash_delete (&ee->thread->vm_pages, &ee->thread_elem);
+  
+  switch (ee->type)
+    {
+    case VMPPT_USED:
+    case VMPPT_EMPTY:
+      break;
+      
+    case VMPPT_SWAPPED:
+      (void) swap_dispose (ee->thread, ee->user_addr, 1);
+      break;
+      
+    default:
+      PANIC ("ee->type == %d", ee->type);
+    }
+    
+  void *kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
+  if (kpage == NULL)
+    return;
+  pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+  palloc_free_page (kpage);
   
   free (ee);
 }
@@ -199,8 +216,7 @@ vm_swap_disposed (struct thread *t, void *base)
   struct vm_logical_page *ee = vm_get_logical_page (t, base);
   ASSERT (ee != NULL);
   
-  if (ee->type != VMPPT_SWAPPED)
-    return;
+  ASSERT (ee->type == VMPPT_SWAPPED);
   ee->type = VMPPT_USED;
 }
 
@@ -339,6 +355,21 @@ swap_free_memory (void)
   return freed > 0;
 }
 
+static void *
+vm_alloc_kpage (void)
+{
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  for (;;)
+    {
+      void *kpage = palloc_get_page (PAL_USER);
+      if (kpage != NULL)
+        return kpage;
+      if (!swap_free_memory ())
+        return NULL;
+    }
+}
+
 static bool
 vm_real_alloc (struct vm_logical_page *ee)
 {
@@ -347,20 +378,14 @@ vm_real_alloc (struct vm_logical_page *ee)
   ASSERT (ee->thread != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
-  void *kpage;
-  for (;;)
-    {
-      kpage = palloc_get_page (PAL_USER|PAL_ZERO);
-      if (kpage != NULL)
-        break;
-        
-      if (!swap_free_memory ())
-        return false;
-    }
+  void *kpage = vm_alloc_kpage ();
     
   bool result;
   result = pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
   ASSERT (result == true);
+  if (!result)
+    palloc_free_page (kpage);
+  memset (kpage, 0, PGSIZE);
   
   return result;
 }
