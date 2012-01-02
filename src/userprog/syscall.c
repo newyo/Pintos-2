@@ -405,17 +405,29 @@ syscall_handler_SYS_CLOSE (_SYSCALL_HANDLER_ARGS)
 static void
 syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // mapid_t mmap (int fd, void *addr);
+  ENSURE_USER_ARGS (2);
   
-  kill_segv (g);
+  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  void *base = *(void **) arg2;
+  vm_ensure_group_destroy (g);
+  
+  if (fd_data)
+    if_->eax = vm_mmap_open (g->thread, base, fd_data->file);
+  else
+    if_->eax = MAP_FAILED;
 }
 
 static void
 syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // void munmap (mapid_t);
+  ENSURE_USER_ARGS (1);
   
-  kill_segv (g);
+  mapid_t map = *(mapid_t *) arg2;
+  vm_ensure_group_destroy (g);
+  
+  if_->eax = vm_mmap_close (g->thread, map);
 }
 
 static void

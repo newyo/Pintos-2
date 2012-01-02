@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <hash.h>
 #include "threads/thread.h"
+#include "filesys/file.h"
+
+typedef int mapid_t;
+#define MAP_FAILED ((mapid_t) -1)
 
 void vm_init (void);
 
@@ -29,6 +33,9 @@ enum vm_ensure_result
   VMER_LENGTH
 };
 enum vm_ensure_result vm_ensure (struct thread *t, void *base, void **kpage_);
+
+mapid_t vm_mmap_open (struct thread *t, void *base, struct file *file);
+bool vm_mmap_close (struct thread *t, mapid_t map);
 
 enum vm_is_readonly_result
 {
