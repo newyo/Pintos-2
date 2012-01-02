@@ -13,7 +13,6 @@
 #include "filesys/file.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
-#include "lib/user/syscall.h"
 #include "devices/input.h"
 #ifdef VM
 # include "vm/vm.h"
