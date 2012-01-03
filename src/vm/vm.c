@@ -510,13 +510,18 @@ vm_dispose (struct thread *t, void *addr)
 {
   assert_t_addr (t, addr);
   
-  lock_acquire (&vm_lock);
+  bool outer_lock = lock_held_by_current_thread (&vm_lock);
+  if (!outer_lock)
+    lock_acquire (&vm_lock);
+    
   enum intr_level old_level = intr_disable ();
   
   struct vm_logical_page *ee = vm_get_logical_page (t, addr);
   vm_dispose_real (ee);
   
-  lock_release (&vm_lock);
+  if (!outer_lock)
+    lock_release (&vm_lock);
+  
   intr_set_level (old_level);
 }
 
@@ -544,6 +549,8 @@ vm_alloc_and_ensure (struct thread *t, void *addr, bool readonly)
     
   ASSERT (result == VMER_OOM);
   vm_dispose (t, addr);
+  lock_release (&vm_lock);
+  
   return NULL;
 }
 
