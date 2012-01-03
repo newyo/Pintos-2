@@ -15,11 +15,11 @@
 #include "userprog/pagedir.h"
 
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
-#define SWAP_AT_ONCE 1
+#define SWAP_AT_ONCE 3
 
 #define VMLP_MAGIC (('V'<<16) + ('L'<<8) + 'P')
 
-enum vm_physical_page_type
+enum vm_page_type
 {
   VMPPT_UNUSED = 0,   // this physical page is not used, yet
   
@@ -32,18 +32,18 @@ enum vm_physical_page_type
 };
 typedef char _CASSERT_VMPPT_SIZE[0 - !(VMPPT_COUNT < 128)];
 
-struct vm_logical_page
+struct vm_page
 {
-  void                       *user_addr;   // virtual address
-  struct thread              *thread;      // owner thread
-  struct hash_elem            thread_elem; // for thread.vm_pages
-  struct lru_elem             lru_elem;    // for pages_lru
+  void                *user_addr;   // virtual address
+  struct thread       *thread;      // owner thread
+  struct hash_elem     thread_elem; // for thread.vm_pages
+  struct lru_elem      lru_elem;    // for pages_lru
   
   struct
   {
-    uint32_t                    vmlp_magic :24;
-    bool                        readonly   :1;
-    enum vm_physical_page_type  type       :7;
+    uint32_t           vmlp_magic :24;
+    bool               readonly   :1;
+    enum vm_page_type  type       :7;
   };
 };
 
@@ -72,13 +72,12 @@ vm_init (void)
   printf ("Initialized user's virtual memory.\n");
 }
 
-static inline struct vm_logical_page *
+static inline struct vm_page *
 vmlp_entry (const struct hash_elem *e, void *t)
 {
   if (e == NULL)
     return NULL;
-  struct vm_logical_page *ee = hash_entry (e, struct vm_logical_page,
-                                           thread_elem);
+  struct vm_page *ee = hash_entry (e, struct vm_page, thread_elem);
   ASSERT (t == NULL || ee->thread == t);
   ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   return ee;
@@ -112,7 +111,7 @@ vm_init_thread (struct thread *t)
 }
 
 static void
-vm_dispose_real (struct vm_logical_page *ee)
+vm_dispose_real (struct vm_page *ee)
 {
   ASSERT (lock_held_by_current_thread (&vm_lock));
   ASSERT (intr_get_level () == INTR_OFF);
@@ -152,7 +151,7 @@ vm_clean_sub (struct hash_elem *e, void *t)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (e != NULL);
   
-  struct vm_logical_page *ee = vmlp_entry (e,t);
+  struct vm_page *ee = vmlp_entry (e,t);
   
   vm_dispose_real (ee);
 }
@@ -187,7 +186,7 @@ vm_alloc_zero (struct thread *t, void *addr, bool readonly)
   
   //printf ("   ALLOC ZERO: %8p\n", addr);
   
-  struct vm_logical_page *page = calloc (1, sizeof (*page));
+  struct vm_page *page = calloc (1, sizeof (*page));
   if (!page)
     {
       result = false;
@@ -211,13 +210,13 @@ end:
   return result;
 }
 
-static struct vm_logical_page *
+static struct vm_page *
 vm_get_logical_page (struct thread *t, void *base)
 {
   assert_t_addr (t, base);
   ASSERT (lock_held_by_current_thread (&vm_lock));
   
-  struct vm_logical_page key;
+  struct vm_page key;
   key.user_addr = base;
   key.thread = t;
   key.vmlp_magic = VMLP_MAGIC;
@@ -239,7 +238,7 @@ vm_swap_disposed (struct thread *t, void *base)
   
   // With being inside swaps lock, page cannot have been free'd.
   // No need to disable interrupts.
-  struct vm_logical_page *ee = vm_get_logical_page (t, base);
+  struct vm_page *ee = vm_get_logical_page (t, base);
   ASSERT (ee != NULL);
   
   ASSERT (ee->type == VMPPT_SWAPPED);
@@ -298,7 +297,7 @@ swap_free_page (void)
   
   intr_disable ();
   
-  struct vm_logical_page *ee;
+  struct vm_page *ee;
   void *kpage;
   for (;;)
     {
@@ -306,7 +305,7 @@ swap_free_page (void)
       struct lru_elem *e = lru_peek_least (&pages_lru);
       if (!e)
         goto end;
-      ee = lru_entry (e, struct vm_logical_page, lru_elem);
+      ee = lru_entry (e, struct vm_page, lru_elem);
       kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
       ASSERT (kpage != NULL);
       
@@ -382,7 +381,7 @@ swap_free_memory (void)
 }
 
 static void *
-vm_alloc_kpage (struct vm_logical_page *ee)
+vm_alloc_kpage (struct vm_page *ee)
 {
   ASSERT (ee != NULL);
   ASSERT (ee->user_addr != NULL);
@@ -414,7 +413,7 @@ vm_alloc_kpage (struct vm_logical_page *ee)
 }
 
 static bool
-vm_real_alloc (struct vm_logical_page *ee UNUSED, void **kpage_)
+vm_real_alloc (struct vm_page *ee UNUSED, void **kpage_)
 {
   ASSERT (kpage_ != NULL);
   ASSERT (*kpage_ != NULL);
@@ -424,7 +423,7 @@ vm_real_alloc (struct vm_logical_page *ee UNUSED, void **kpage_)
 }
 
 static bool
-vm_swap_in (struct vm_logical_page *ee, void **kpage_)
+vm_swap_in (struct vm_page *ee, void **kpage_)
 {
   ASSERT (kpage_ != NULL);
   ASSERT (*kpage_ != NULL);
@@ -457,7 +456,7 @@ vm_ensure (struct thread *t, void *base, void **kpage_)
       goto end;
     }
     
-  struct vm_logical_page *ee = vm_get_logical_page (t, base);
+  struct vm_page *ee = vm_get_logical_page (t, base);
   if (ee == NULL)
     {
       result = VMER_SEGV;
@@ -516,7 +515,7 @@ vm_dispose (struct thread *t, void *addr)
     
   enum intr_level old_level = intr_disable ();
   
-  struct vm_logical_page *ee = vm_get_logical_page (t, addr);
+  struct vm_page *ee = vm_get_logical_page (t, addr);
   vm_dispose_real (ee);
   
   if (!outer_lock)
@@ -560,7 +559,7 @@ vm_is_readonly (struct thread *t, void *base)
   assert_t_addr (t, base);
   lock_acquire (&vm_lock);
   
-  struct vm_logical_page *ee = vm_get_logical_page (t, base);
+  struct vm_page *ee = vm_get_logical_page (t, base);
     
   lock_release (&vm_lock);
   return ee ? ee->readonly ? VMIR_READONLY : VMIR_READWRITE : VMIR_INVALID;
@@ -569,13 +568,13 @@ vm_is_readonly (struct thread *t, void *base)
 struct vm_ensure_group_entry
 {
   struct hash_elem        elem;
-  struct vm_logical_page *page;
+  struct vm_page *page;
 };
 
 static struct vm_ensure_group_entry *
 vm_ensure_group_get (struct vm_ensure_group  *g,
                      void                    *base,
-                     struct vm_logical_page **page_)
+                     struct vm_page         **page_)
 {
   ASSERT (lock_held_by_current_thread (&vm_lock));
   ASSERT (g != NULL);
@@ -677,7 +676,7 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *base, void **kpage_)
   
   enum intr_level old_level = intr_disable ();
   
-  struct vm_logical_page *page;
+  struct vm_page *page;
   struct vm_ensure_group_entry *entry = vm_ensure_group_get (g, base, &page);
   if (entry != NULL)
     goto end;
@@ -707,7 +706,7 @@ vm_ensure_group_remove (struct vm_ensure_group *g, void *base)
   lock_acquire (&vm_lock);
   enum intr_level old_level = intr_disable ();
   
-  struct vm_logical_page *page;
+  struct vm_page *page;
   struct vm_ensure_group_entry *entry = vm_ensure_group_get (g, base, &page);
   if (entry != NULL)
     {
