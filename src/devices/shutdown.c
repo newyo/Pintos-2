@@ -38,6 +38,7 @@ shutdown (void)
       shutdown_reboot ();
       break;
 
+    case SHUTDOWN_NONE:
     default:
       /* Nothing to do. */
       break;

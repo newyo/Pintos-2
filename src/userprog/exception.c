@@ -191,6 +191,7 @@ page_fault (struct intr_frame *f)
                  write ? "writing" : "reading",
                  user ? "user" : "kernel");
         kill (f);
+      case VMER_LENGTH:
       default:
         ASSERT (0);
     }

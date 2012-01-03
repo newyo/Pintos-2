@@ -1,6 +1,6 @@
 # -*- makefile -*-
 
-$(PROGS): CPPFLAGS += -I$(SRCDIR)/lib/user -I.
+$(PROGS): CPPFLAGS += -I$(SRCDIR)/lib/user -I. -O0 -Wno-strict-aliasing
 
 # Linker flags.
 $(PROGS): LDFLAGS += -nostdlib -static -Wl,-T,$(LDSCRIPT)

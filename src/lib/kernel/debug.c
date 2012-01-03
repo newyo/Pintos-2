@@ -56,22 +56,32 @@ static void
 print_stacktrace(struct thread *t, void *aux UNUSED)
 {
   void *retaddr = NULL, **frame = NULL;
-  const char *status = "UNKNOWN";
+  const char *status;
 
   switch (t->status) {
-    case THREAD_RUNNING:  
+    case THREAD_RUNNING:
       status = "RUNNING";
       break;
 
-    case THREAD_READY:  
+    case THREAD_READY:
       status = "READY";
       break;
 
-    case THREAD_BLOCKED:  
+    case THREAD_BLOCKED:
       status = "BLOCKED";
       break;
 
+    case THREAD_ZOMBIE:
+      status = "ZOMBIE";
+      break;
+
+    case THREAD_DYING:
+      status = "DYING";
+      break;
+
+    case THREAD_MAX:
     default:
+      status = "UNKNOWN";
       break;
   }
 
