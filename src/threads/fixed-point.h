@@ -51,6 +51,19 @@ fp_from_int (int32_t val)
   return result;
 }
 
+static inline fp_t
+fp_from_uint (uint32_t val)
+{
+  // ensure abs(val) does not consume more than _FP_T_INT_LEN bits.
+  ASSERT (!fp_value_exceeds_bits (val, _FP_T_INT_LEN));
+  
+  struct fp_t result;
+  result.signedness = false;
+  result.int_part = val;
+  result.frac_part = 0;
+  return result;
+}
+
 /** rounds to nearest integer */
 static inline int32_t
 fp_round (const fp_t val)

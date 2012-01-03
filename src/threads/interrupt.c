@@ -49,7 +49,7 @@ static bool yield_on_return;    /* Should we yield on interrupt return? */
 
 /* Programmable Interrupt Controller helpers. */
 static void pic_init (void);
-static void pic_end_of_interrupt (int irq);
+static void pic_end_of_interrupt (unsigned irq);
 
 /* Interrupt Descriptor Table helpers. */
 static uint64_t make_intr_gate (void (*) (void), int dpl);
@@ -262,7 +262,7 @@ pic_init (void)
    If we don't acknowledge the IRQ, it will never be delivered to
    us again, so this is important.  */
 static void
-pic_end_of_interrupt (int irq) 
+pic_end_of_interrupt (unsigned irq) 
 {
   ASSERT (irq >= 0x20 && irq < 0x30);
 

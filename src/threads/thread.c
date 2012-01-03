@@ -84,7 +84,7 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 static void thread_recalculate_priorities (struct thread *t, void *aux);
 static void thread_recalculate_load_avg (void);
-static int thread_get_ready_threads (void);
+static size_t thread_get_ready_threads (void);
 
 static void sleep_wakeup (void);
 static int thread_get_priority_of (struct thread *t);
@@ -763,22 +763,24 @@ thread_recalculate_load_avg (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
-  int ready_threads = thread_get_ready_threads ();
+  size_t ready_threads = thread_get_ready_threads ();
   
   /* (59/60)*load_avg + (1/60)*ready_threads */
-  fp_t summand1 = fp_mult (fp_div (fp_from_int (59), fp_from_int (60)), thread_load_avg);
-  fp_t summand2 = fp_mult (fp_div (fp_from_int (1),  fp_from_int (60)), fp_from_int (ready_threads));
+  fp_t summand1 = fp_mult (fp_div (fp_from_uint (59), fp_from_uint (60)),
+                           thread_load_avg);
+  fp_t summand2 = fp_mult (fp_div (fp_from_uint (1),  fp_from_uint (60)),
+                           fp_from_uint (ready_threads));
 
   thread_load_avg = fp_add (summand1, summand2);
   ASSERT (0 <= fp_round (thread_load_avg));
 }
 
-static int
+static size_t
 thread_get_ready_threads (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
   
-  int result = list_size (&ready_list);
+  size_t result = list_size (&ready_list);
   if (thread_current () != idle_thread)
     ++result;
   ASSERT (ready_lists_arent_messed_up ());

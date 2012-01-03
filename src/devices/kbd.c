@@ -205,7 +205,7 @@ map_key (const struct keymap k[], unsigned scancode, uint8_t *c)
     if (scancode >= k->first_scancode
         && scancode < k->first_scancode + strlen (k->chars)) 
       {
-        *c = k->chars[scancode - k->first_scancode];
+        *(char *) c = k->chars[scancode - k->first_scancode];
         return true; 
       }
 

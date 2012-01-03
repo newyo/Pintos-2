@@ -39,7 +39,8 @@ void
 speaker_off (void)
 {
   enum intr_level old_level = intr_disable ();
-  outb (SPEAKER_PORT_GATE, inb (SPEAKER_PORT_GATE) & ~SPEAKER_GATE_ENABLE);
+  outb (SPEAKER_PORT_GATE, (uint8_t) (inb (SPEAKER_PORT_GATE) &
+                                      ~SPEAKER_GATE_ENABLE));
   intr_set_level (old_level);
 }
 

@@ -160,7 +160,8 @@ static void
 bss_init (void) 
 {
   extern char _start_bss, _end_bss;
-  memset (&_start_bss, 0, &_end_bss - &_start_bss);
+  ASSERT (_end_bss >= _start_bss);
+  memset (&_start_bss, 0, (size_t) (&_end_bss - &_start_bss));
 }
 
 /* Populates the base page directory and page table with the
@@ -207,20 +208,18 @@ static char **
 read_command_line (void) 
 {
   static char *argv[LOADER_ARGS_LEN / 2 + 1];
-  char *p, *end;
-  int argc;
-  int i;
 
-  argc = *(uint32_t *) ptov (LOADER_ARG_CNT);
-  p = ptov (LOADER_ARGS);
-  end = p + LOADER_ARGS_LEN;
+  uint32_t argc = *(uint32_t *) ptov (LOADER_ARG_CNT);
+  char *p = ptov (LOADER_ARGS);
+  char *end = p + LOADER_ARGS_LEN;
+  uint32_t i;
   for (i = 0; i < argc; i++) 
     {
       if (p >= end)
         PANIC ("command line arguments overflow");
 
       argv[i] = p;
-      p += strnlen (p, end - p) + 1;
+      p += strnlen (p, (uintptr_t) (end - p)) + 1;
     }
   argv[argc] = NULL;
 
@@ -266,12 +265,12 @@ parse_options (char **argv)
 #endif
 #endif
       else if (!strcmp (name, "-rs"))
-        random_init (atoi (value));
+        random_init ((unsigned) atoi (value));
       else if (!strcmp (name, "-mlfqs"))
         thread_mlfqs = true;
 #ifdef USERPROG
       else if (!strcmp (name, "-ul"))
-        user_page_limit = atoi (value);
+        user_page_limit = (unsigned) atoi (value);
 #endif
       else
         PANIC ("unknown option `%s' (use -h for help)", name);

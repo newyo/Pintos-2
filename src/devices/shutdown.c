@@ -88,8 +88,8 @@ shutdown_reboot (void)
 void
 shutdown_power_off (void)
 {
-  const char s[] = "Shutdown";
-  const char *p;
+  const uint8_t s[] = "Shutdown";
+  const uint8_t *p;
 
 #ifdef FILESYS
   filesys_done ();
