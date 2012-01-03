@@ -317,9 +317,10 @@ swap_free_page (void)
         {
           if(pagedir_is_dirty (ee->thread->pagedir, ee->user_addr))
             {
-              bool result UNUSED;
-              result = mmap_write (ee->thread, ee->user_addr, ee->user_addr);
-              ASSERT (result != false);
+              bool write_result UNUSED = mmap_write (ee->thread,
+                                                     ee->user_addr,
+                                                     kpage);
+              ASSERT (write_result != false);
             }
           pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
           palloc_free_page (kpage);

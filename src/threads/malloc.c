@@ -139,10 +139,7 @@ malloc (size_t size)
       a->desc = d;
       a->free_cnt = d->blocks_per_arena;
       for (i = 0; i < d->blocks_per_arena; i++) 
-        {
-          struct block *b = arena_to_block (a, i);
-          list_push_back (&d->free_list, &b->free_elem);
-        }
+        list_push_back (&d->free_list, &arena_to_block (a, i)->free_elem);
     }
 
   /* Get a block from free list and return it. */
@@ -245,10 +242,7 @@ free (void *p)
 
               ASSERT (a->free_cnt == d->blocks_per_arena);
               for (i = 0; i < d->blocks_per_arena; i++) 
-                {
-                  struct block *b = arena_to_block (a, i);
-                  list_remove (&b->free_elem);
-                }
+                list_remove (&arena_to_block (a, i)->free_elem);
               palloc_free_page (a);
             }
 

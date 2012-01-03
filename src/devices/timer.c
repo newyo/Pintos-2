@@ -87,10 +87,10 @@ timer_elapsed (int64_t then)
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
-timer_sleep (int64_t ticks) 
+timer_sleep (int64_t ticks_) 
 {
   ASSERT (intr_get_level () == INTR_ON);
-  sleep_add (ticks);
+  sleep_add (ticks_);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -214,15 +214,15 @@ real_time_sleep (int64_t num, int32_t denom)
      ---------------------- = NUM * TIMER_FREQ / DENOM ticks. 
      1 s / TIMER_FREQ ticks
   */
-  int64_t ticks = num * TIMER_FREQ / denom;
+  int64_t ticks_ = num * TIMER_FREQ / denom;
 
   ASSERT (intr_get_level () == INTR_ON);
-  if (ticks > 0)
+  if (ticks_ > 0)
     {
       /* We're waiting for at least one full timer tick.  Use
          timer_sleep() because it will yield the CPU to other
          processes. */                
-      timer_sleep (ticks); 
+      timer_sleep (ticks_); 
     }
   else 
     {
