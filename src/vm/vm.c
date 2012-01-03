@@ -27,7 +27,6 @@ enum vm_physical_page_type
   VMPPT_USED,         // allocated, no swap file equivalent
   VMPPT_SWAPPED,      // retreived from swap and not dirty or disposed
                       // OR removed from RAM
-  VMPPT_MMAP,         // mmap'd region
   
   VMPPT_COUNT
 };
@@ -127,7 +126,6 @@ vm_dispose_real (struct vm_logical_page *ee)
     {
     case VMPPT_USED:
     case VMPPT_EMPTY:
-    case VMPPT_MMAP:
       break;
       
     case VMPPT_SWAPPED:
@@ -313,22 +311,7 @@ swap_free_page (void)
       ASSERT (kpage != NULL);
       
       // (2)
-      if (ee->type == VMPPT_MMAP)
-        {
-          if(pagedir_is_dirty (ee->thread->pagedir, ee->user_addr))
-            {
-              bool write_result UNUSED = mmap_write (ee->thread,
-                                                     ee->user_addr,
-                                                     kpage);
-              ASSERT (write_result != false);
-            }
-          pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
-          palloc_free_page (kpage);
-          lru_dispose (&pages_lru, &ee->lru_elem, false);
-          result = true;
-          goto end;
-        }
-      else if (ee->type == VMPPT_SWAPPED)
+      if (ee->type == VMPPT_SWAPPED)
         {
           if(!pagedir_is_dirty (ee->thread->pagedir, ee->user_addr))
             {
@@ -451,17 +434,6 @@ vm_swap_in (struct vm_logical_page *ee, void **kpage_)
   return result;
 }
 
-static bool
-vm_mmap_in (struct vm_logical_page *ee, void **kpage_)
-{
-  ASSERT (kpage_ != NULL);
-  ASSERT (*kpage_ != NULL);
-    
-  bool result = mmap_read (ee->thread, ee->user_addr, *kpage_);
-  ASSERT (result == true);
-  return true;
-}
-
 enum vm_ensure_result
 vm_ensure (struct thread *t, void *base, void **kpage_)
 {
@@ -511,10 +483,6 @@ vm_ensure (struct thread *t, void *base, void **kpage_)
         
       case VMPPT_SWAPPED:
         result = vm_swap_in (ee, kpage_) ? VMER_OK : VMER_OOM;
-        break;
-        
-      case VMPPT_MMAP:
-        result = vm_mmap_in (ee, kpage_) ? VMER_OK : VMER_OOM;
         break;
       
       case VMPPT_USED:
@@ -577,28 +545,6 @@ vm_alloc_and_ensure (struct thread *t, void *addr, bool readonly)
   ASSERT (result == VMER_OOM);
   vm_dispose (t, addr);
   return NULL;
-}
-
-mapid_t
-vm_mmap_open (struct thread *t, void *base, struct file *file)
-{
-  assert_t_addr (t, base);
-  ASSERT (intr_get_level () == INTR_ON);
-  ASSERT (file != NULL);
-  
-  // TODO
-  return MAP_FAILED;
-}
-
-bool
-vm_mmap_close (struct thread *t, mapid_t map)
-{
-  ASSERT (t != NULL);
-  ASSERT (intr_get_level () == INTR_ON);
-  
-  // TODO
-  (void) map;
-  return false;
 }
 
 enum vm_is_readonly_result

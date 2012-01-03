@@ -18,6 +18,8 @@
 # include "vm/vm.h"
 #endif
 
+#define TODO_NO_RETURN NO_RETURN
+
 static void syscall_handler (struct intr_frame *);
 
 static struct lock filesys_lock, stdin_lock;
@@ -401,7 +403,7 @@ syscall_handler_SYS_CLOSE (_SYSCALL_HANDLER_ARGS)
   free (fd_data);
 }
 
-static void
+static void TODO_NO_RETURN
 syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
 {
   // mapid_t mmap (int fd, void *addr);
@@ -411,13 +413,13 @@ syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
   void *base = *(void **) arg2;
   vm_ensure_group_destroy (g);
   
-  if (fd_data)
-    if_->eax = vm_mmap_open (g->thread, base, fd_data->file);
-  else
-    if_->eax = MAP_FAILED;
+  // TODO
+  (void) fd_data;
+  (void) base;
+  thread_exit ();
 }
 
-static void
+static void TODO_NO_RETURN
 syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
 {
   // void munmap (mapid_t);
@@ -426,10 +428,10 @@ syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
   mapid_t map = *(mapid_t *) arg2;
   vm_ensure_group_destroy (g);
   
-  if_->eax = vm_mmap_close (g->thread, map);
+  // TODO
+  (void) map;
+  thread_exit ();
 }
-
-#define TODO_NO_RETURN NO_RETURN
 
 static void TODO_NO_RETURN
 syscall_handler_SYS_CHDIR (_SYSCALL_HANDLER_ARGS)
