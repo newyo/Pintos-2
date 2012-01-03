@@ -506,22 +506,22 @@ select_device_wait (const struct ata_disk *d)
 static void
 interrupt_handler (struct intr_frame *f) 
 {
-  struct channel *c;
-
-  for (c = channels; c < channels + CHANNEL_CNT; c++)
-    if (f->vec_no == c->irq)
-      {
-        if (c->expecting_interrupt) 
-          {
-            inb (reg_status (c));               /* Acknowledge interrupt. */
-            sema_up (&c->completion_wait);      /* Wake up waiter. */
-          }
-        else
-          printf ("%s: unexpected interrupt\n", c->name);
-        return;
-      }
+  int i;
+  for (i = 0; i < CHANNEL_CNT; ++i)
+    {
+      struct channel *c = &channels[i];
+      if (f->vec_no == c->irq)
+        {
+          if (c->expecting_interrupt) 
+            {
+              inb (reg_status (c));               /* Acknowledge interrupt. */
+              sema_up (&c->completion_wait);      /* Wake up waiter. */
+            }
+          else
+            printf ("%s: unexpected interrupt\n", c->name);
+          return;
+        }
+    }
 
   NOT_REACHED ();
 }
-
-

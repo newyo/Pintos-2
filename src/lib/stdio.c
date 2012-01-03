@@ -518,7 +518,7 @@ format_integer (uintmax_t value, bool is_signed, bool negative,
      If the # flag is used with base 8, the result must always
      begin with a zero. */
   precision = c->precision < 0 ? 1 : c->precision;
-  while (cp - buf < precision && cp < buf + sizeof buf - 1)
+  while (cp - buf < precision && (uintptr_t) (cp - buf + 1) < sizeof (buf))
     *cp++ = '0';
   if ((c->flags & POUND) && b->base == 8 && (cp == buf || cp[-1] != '0'))
     *cp++ = '0';
