@@ -71,9 +71,9 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
-static void kernel_thread (thread_func *, void *aux);
+static void kernel_thread (thread_func *, void *aux) NO_RETURN;
 
-static void idle (void *aux UNUSED);
+static void NO_RETURN idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
@@ -796,8 +796,8 @@ thread_get_ready_threads (void)
    blocks.  After that, the idle thread never appears in the
    ready list.  It is returned by next_thread_to_run() as a
    special case when the ready list is empty. */
-static void
-idle (void *idle_started_ UNUSED) 
+static void NO_RETURN
+idle (void *idle_started_ UNUSED)
 {
   struct semaphore *idle_started = idle_started_;
   idle_thread = thread_current ();
@@ -826,8 +826,8 @@ idle (void *idle_started_ UNUSED)
 }
 
 /* Function used as the basis for a kernel thread. */
-static void
-kernel_thread (thread_func *function, void *aux) 
+static void NO_RETURN
+kernel_thread (thread_func *function, void *aux)
 {
   ASSERT (function != NULL);
 
@@ -962,7 +962,7 @@ thread_prio_less (const struct list_elem *a, const struct list_elem *b,
  return thread_get_priority_of (aa) < thread_get_priority_of (bb);
 }
 
-	static struct thread *
+static struct thread *
 next_thread_to_run (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);

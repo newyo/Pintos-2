@@ -1,9 +1,6 @@
 #ifndef __LIB_CTYPE_H
 #define __LIB_CTYPE_H
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshadow"
-
 static inline int islower (int c) { return c >= 'a' && c <= 'z'; }
 static inline int isupper (int c) { return c >= 'A' && c <= 'Z'; }
 static inline int isalpha (int c) { return islower (c) || isupper (c); }
@@ -27,7 +24,5 @@ static inline int ispunct (int c) {
 
 static inline int tolower (int c) { return isupper (c) ? c - 'A' + 'a' : c; }
 static inline int toupper (int c) { return islower (c) ? c - 'a' + 'A' : c; }
-
-#pragma GCC diagnostic pop
 
 #endif /* lib/ctype.h */

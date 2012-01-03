@@ -129,7 +129,7 @@ user_strlen (struct vm_ensure_group *g, char *c)
     }
 }
 
-static void
+static void NO_RETURN
 syscall_handler_SYS_HALT (_SYSCALL_HANDLER_ARGS)
 {
   // void halt (void) NO_RETURN;
@@ -144,7 +144,7 @@ syscall_handler_SYS_HALT (_SYSCALL_HANDLER_ARGS)
   (void) 0;                                                          \
 })
 
-static void
+static void NO_RETURN
 syscall_handler_SYS_EXIT (_SYSCALL_HANDLER_ARGS)
 {
   // void exit (int status) NO_RETURN;
@@ -429,7 +429,9 @@ syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
   if_->eax = vm_mmap_close (g->thread, map);
 }
 
-static void
+#define TODO_NO_RETURN NO_RETURN
+
+static void TODO_NO_RETURN
 syscall_handler_SYS_CHDIR (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
@@ -437,7 +439,7 @@ syscall_handler_SYS_CHDIR (_SYSCALL_HANDLER_ARGS)
   kill_segv (g);
 }
 
-static void
+static void TODO_NO_RETURN
 syscall_handler_SYS_MKDIR (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
@@ -445,7 +447,7 @@ syscall_handler_SYS_MKDIR (_SYSCALL_HANDLER_ARGS)
   kill_segv (g);
 }
 
-static void
+static void TODO_NO_RETURN
 syscall_handler_SYS_READDIR (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
@@ -453,7 +455,7 @@ syscall_handler_SYS_READDIR (_SYSCALL_HANDLER_ARGS)
   kill_segv (g);
 }
 
-static void
+static void TODO_NO_RETURN
 syscall_handler_SYS_ISDIR (_SYSCALL_HANDLER_ARGS)
 {
   //TODO
@@ -461,7 +463,7 @@ syscall_handler_SYS_ISDIR (_SYSCALL_HANDLER_ARGS)
   kill_segv (g);
 }
 
-static void
+static void TODO_NO_RETURN
 syscall_handler_SYS_INUMBER (_SYSCALL_HANDLER_ARGS)
 {
   //TODO

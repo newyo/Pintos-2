@@ -69,7 +69,7 @@ static void paging_init (void);
 static char **read_command_line (void);
 static char **parse_options (char **argv);
 static void run_actions (char **argv);
-static void usage (void);
+static void usage (void) NO_RETURN;
 
 #ifdef FILESYS
 static void locate_block_devices (void);
@@ -357,7 +357,7 @@ run_actions (char **argv)
 
 /* Prints a kernel command line help message and powers off the
    machine. */
-static void
+static void NO_RETURN
 usage (void)
 {
   printf ("\nCommand line syntax: [OPTION...] [ACTION...]\n"

@@ -84,7 +84,7 @@ read_partition_table (struct block *block, block_sector_t sector,
     }
 
   /* Read sector. */
-  ASSERT (sizeof *pt == BLOCK_SECTOR_SIZE);
+  typedef char _CASSERT_SIZE [0 - !(sizeof *pt == BLOCK_SECTOR_SIZE)];
   pt = malloc (sizeof *pt);
   if (pt == NULL)
     PANIC ("Failed to allocate memory for partition table.");
