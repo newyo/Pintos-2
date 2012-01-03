@@ -211,13 +211,13 @@ end:
 }
 
 static struct vm_page *
-vm_get_logical_page (struct thread *t, void *base)
+vm_get_logical_page (struct thread *t, void *user_addr)
 {
-  assert_t_addr (t, base);
+  assert_t_addr (t, user_addr);
   ASSERT (lock_held_by_current_thread (&vm_lock));
   
   struct vm_page key;
-  key.user_addr = base;
+  key.user_addr = user_addr;
   key.thread = t;
   key.vmlp_magic = VMLP_MAGIC;
   
@@ -231,14 +231,14 @@ vm_get_logical_page (struct thread *t, void *base)
  * Might be called with interrupts on!
  */
 void
-vm_swap_disposed (struct thread *t, void *base)
+vm_swap_disposed (struct thread *t, void *user_addr)
 {
-  assert_t_addr (t, base);
+  assert_t_addr (t, user_addr);
   lock_held_by_current_thread (&vm_lock);
   
   // With being inside swaps lock, page cannot have been free'd.
   // No need to disable interrupts.
-  struct vm_page *ee = vm_get_logical_page (t, base);
+  struct vm_page *ee = vm_get_logical_page (t, user_addr);
   ASSERT (ee != NULL);
   
   ASSERT (ee->type == VMPPT_SWAPPED);
@@ -434,12 +434,12 @@ vm_swap_in (struct vm_page *ee, void **kpage_)
 }
 
 enum vm_ensure_result
-vm_ensure (struct thread *t, void *base, void **kpage_)
+vm_ensure (struct thread *t, void *user_addr, void **kpage_)
 {
-  if (base < MIN_ALLOC_ADDR)
+  if (user_addr < MIN_ALLOC_ADDR)
     return VMER_SEGV;
     
-  assert_t_addr (t, base);
+  assert_t_addr (t, user_addr);
   ASSERT (kpage_ != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
@@ -449,14 +449,14 @@ vm_ensure (struct thread *t, void *base, void **kpage_)
   
   enum vm_ensure_result result;
   
-  *kpage_ = pagedir_get_page (t->pagedir, base);
+  *kpage_ = pagedir_get_page (t->pagedir, user_addr);
   if (*kpage_ != NULL)
     {
       result = VMER_OK;
       goto end;
     }
     
-  struct vm_page *ee = vm_get_logical_page (t, base);
+  struct vm_page *ee = vm_get_logical_page (t, user_addr);
   if (ee == NULL)
     {
       result = VMER_SEGV;
@@ -554,12 +554,12 @@ vm_alloc_and_ensure (struct thread *t, void *addr, bool readonly)
 }
 
 enum vm_is_readonly_result
-vm_is_readonly (struct thread *t, void *base)
+vm_is_readonly (struct thread *t, void *user_addr)
 {
-  assert_t_addr (t, base);
+  assert_t_addr (t, user_addr);
   lock_acquire (&vm_lock);
   
-  struct vm_page *ee = vm_get_logical_page (t, base);
+  struct vm_page *ee = vm_get_logical_page (t, user_addr);
     
   lock_release (&vm_lock);
   return ee ? ee->readonly ? VMIR_READONLY : VMIR_READWRITE : VMIR_INVALID;
@@ -573,16 +573,16 @@ struct vm_ensure_group_entry
 
 static struct vm_ensure_group_entry *
 vm_ensure_group_get (struct vm_ensure_group  *g,
-                     void                    *base,
+                     void                    *user_addr,
                      struct vm_page         **page_)
 {
   ASSERT (lock_held_by_current_thread (&vm_lock));
   ASSERT (g != NULL);
-  ASSERT (base != NULL);
+  ASSERT (user_addr != NULL);
   ASSERT (page_ != NULL);
-  ASSERT (pg_ofs (base) == 0);
+  ASSERT (pg_ofs (user_addr) == 0);
   
-  *page_ = vm_get_logical_page (g->thread, base);
+  *page_ = vm_get_logical_page (g->thread, user_addr);
   if (!*page_)
     return NULL;
   
@@ -660,14 +660,14 @@ vm_ensure_group_destroy (struct vm_ensure_group *g)
 }
 
 enum vm_ensure_result
-vm_ensure_group_add (struct vm_ensure_group *g, void *base, void **kpage_)
+vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
 {
   ASSERT (g != NULL);
-  ASSERT (base != NULL);
+  ASSERT (user_addr != NULL);
   
   lock_acquire (&vm_lock);
     
-  enum vm_ensure_result result = vm_ensure (g->thread, base, kpage_);
+  enum vm_ensure_result result = vm_ensure (g->thread, user_addr, kpage_);
   if (result != VMER_OK)
     {
       lock_release (&vm_lock);
@@ -677,7 +677,9 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *base, void **kpage_)
   enum intr_level old_level = intr_disable ();
   
   struct vm_page *page;
-  struct vm_ensure_group_entry *entry = vm_ensure_group_get (g, base, &page);
+  struct vm_ensure_group_entry *entry = vm_ensure_group_get (g,
+                                                             user_addr,
+                                                             &page);
   if (entry != NULL)
     goto end;
   if (page == NULL)
@@ -698,16 +700,18 @@ end:
 }
 
 bool
-vm_ensure_group_remove (struct vm_ensure_group *g, void *base)
+vm_ensure_group_remove (struct vm_ensure_group *g, void *user_addr)
 {
   ASSERT (g != NULL);
-  ASSERT (base != NULL);
+  ASSERT (user_addr != NULL);
   
   lock_acquire (&vm_lock);
   enum intr_level old_level = intr_disable ();
   
   struct vm_page *page;
-  struct vm_ensure_group_entry *entry = vm_ensure_group_get (g, base, &page);
+  struct vm_ensure_group_entry *entry = vm_ensure_group_get (g,
+                                                             user_addr,
+                                                             &page);
   if (entry != NULL)
     {
       hash_delete_found (&g->entries, &entry->elem);

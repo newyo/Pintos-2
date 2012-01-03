@@ -6,6 +6,8 @@
 #include <bitmap.h>
 #include "threads/thread.h"
 
+struct swap_page;
+
 typedef size_t swap_t;
 #define SWAP_FAIL ((swap_t) BITMAP_ERROR)
 
@@ -21,16 +23,16 @@ size_t swap_stats_full_pages (void);
 // Most likely length is PGSIZE and amount is 1, resp.
 
 bool swap_alloc_and_write (struct thread *owner,
-                           void          *base,
+                           void          *user_addr,
                            void          *src);
 bool swap_read_and_retain (struct thread *owner,
-                           void          *base,
+                           void          *user_addr,
                            void          *dest);
 bool swap_dispose (struct thread *owner,
-                   void          *base,
+                   void          *user_addr,
                    size_t         amount);
 bool swap_must_retain (struct thread *owner,
-                       void          *base,
+                       void          *user_addr,
                        size_t         amount);
 
 // May have interrupts enabled.

@@ -127,7 +127,7 @@ struct thread
     /* Owned by vm */
     struct hash swap_pages;
     struct hash vm_pages;
-    struct list mmap_regions;
+    struct hash mmap_aliases;
 #endif
 
     /* Owned by thread.c. */

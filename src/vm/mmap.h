@@ -6,6 +6,11 @@
 #include "filesys/file.h"
 #include "vm/vm.h"
 
+struct mmap_region;
+struct mmap_alias;
+struct mmap_kpage;
+struct mmap_upage;
+
 void mmap_init (void);
 void mmap_init_thread (struct thread *owner);
 void mmap_clean (struct thread *owner);
