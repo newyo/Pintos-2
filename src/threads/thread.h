@@ -187,6 +187,8 @@ struct thread *thread_find_tid (tid_t t);
 #ifdef USERPROG
 void thread_dispel_zombie (struct thread *t);
 bool thread_is_file_currently_executed (struct file *f);
+
+bool thread_activate_pool_statistics (bool yes);
 #endif
 
 #endif /* threads/thread.h */

@@ -60,6 +60,18 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
+#ifdef USERPROG
+static bool tick_print_free;
+
+bool
+thread_activate_pool_statistics (bool yes)
+{
+  bool old = tick_print_free;
+  tick_print_free = yes;
+  return old;
+}
+#endif
+
 fp_t thread_load_avg;
 
 /* Scheduling. */
@@ -141,7 +153,7 @@ ready_lists_arent_messed_up (void)
    It is not safe to call thread_current() until this function
    finishes. */
 void
-thread_init (void) 
+thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
@@ -187,6 +199,27 @@ thread_tick (void)
 {
   struct thread *t = thread_current ();
   ASSERT_STACK_NOT_EXCEEDED (t);
+  
+#ifdef USERPROG
+  if (tick_print_free)
+    {
+      static size_t tickcount = 0;
+      size_t ksize, kfree, usize, ufree;
+      palloc_fill_ratio (&kfree, &ksize, &ufree, &usize);
+      
+      uint32_t kratio = fp_round (fp_percent_from_uint (kfree, ksize));
+      uint32_t uratio = fp_round (fp_percent_from_uint (ufree, usize));
+      
+      UNSAFE_PRINTF ("    %8u. %s    kfree: %4u/% 4d (%2u%%)"
+                                "    ufree: %4u/% 4d (%2u%%)\n",
+                     tickcount++,
+                     t == idle_thread ? "IDLE  " :
+                           t->pagedir ? "USER  " :
+                                        "KERNEL",
+                     kfree, ksize, kratio,
+                     ufree, usize, uratio);
+    }
+#endif
 
   /* Update statistics. */
   if (t == idle_thread)

@@ -236,4 +236,18 @@ fp_pow_int (const fp_t base, int expo)
   return result;
 }
 
+static inline fp_t
+fp_percent_from_int (int32_t a, int32_t b)
+{
+  return fp_mult (fp_div (fp_from_int (a), fp_from_int (b)),
+                  fp_from_uint (100));
+}
+
+static inline fp_t
+fp_percent_from_uint (uint32_t a, uint32_t b)
+{
+  return fp_mult (fp_div (fp_from_uint (a), fp_from_uint (b)),
+                  fp_from_uint (100));
+}
+
 #endif /* threads/fixed_point.h */

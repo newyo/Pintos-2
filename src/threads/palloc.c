@@ -183,3 +183,13 @@ page_from_pool (const struct pool *pool, void *page)
 
   return page_no >= start_page && page_no < end_page;
 }
+
+void
+palloc_fill_ratio (size_t *kfree, size_t *ksize, size_t *ufree, size_t *usize)
+{
+  *ksize = bitmap_size (kernel_pool.used_map);
+  *usize = bitmap_size (user_pool.used_map);
+  *kfree = bitmap_count (kernel_pool.used_map, 0, *ksize, false);
+  *ufree = bitmap_count (user_pool.used_map, 0, *ksize, false);
+  
+}

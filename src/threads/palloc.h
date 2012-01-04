@@ -17,4 +17,7 @@ void *palloc_get_multiple (enum palloc_flags, size_t page_cnt);
 void palloc_free_page (void *);
 void palloc_free_multiple (void *, size_t page_cnt);
 
+void palloc_fill_ratio (size_t *kfree, size_t *ksize,
+                        size_t *ufree, size_t *usize);
+
 #endif /* threads/palloc.h */

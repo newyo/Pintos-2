@@ -76,6 +76,10 @@ static void locate_block_devices (void);
 static void locate_block_device (enum block_type, const char *name);
 #endif
 
+#ifdef USERPROG
+static bool tick_print_free = false;
+#endif
+
 int main (void) NO_RETURN;
 
 /* Pintos main program. */
@@ -137,6 +141,10 @@ main (void)
   swap_init ();
   vm_init ();
   mmap_init ();
+#endif
+
+#ifdef USERPROG
+  thread_activate_pool_statistics (tick_print_free);
 #endif
 
   thread_load_avg = fp_from_int (0);
@@ -271,6 +279,8 @@ parse_options (char **argv)
 #ifdef USERPROG
       else if (!strcmp (name, "-ul"))
         user_page_limit = (unsigned) atoi (value);
+      else if (!strcmp (name, "-free"))
+        tick_print_free = true;
 #endif
       else
         PANIC ("unknown option `%s' (use -h for help)", name);
