@@ -28,11 +28,9 @@ void vm_tick (struct thread *t);
 
 enum vm_ensure_result
 {
-  VMER_OK,
-  VMER_SEGV,
-  VMER_OOM,
-  
-  VMER_LENGTH
+  VMER_OK   = 1,
+  VMER_SEGV = 3,
+  VMER_OOM  = 5,
 };
 enum vm_ensure_result vm_ensure (struct thread  *t,
                                  void           *user_addr,

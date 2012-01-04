@@ -15,8 +15,10 @@
 #include "userprog/pagedir.h"
 
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
+#define SWAP_PERCENT_AT_ONCE 5
 
-#define SWAP_AT_ONCE 3
+static size_t swap_at_once;
+
 #define MAX_ALLOC_RETRIES 32
 
 #define VMLP_MAGIC (('V'<<16) + ('L'<<8) + 'P')
@@ -72,8 +74,16 @@ vm_init (void)
   lru_init (&pages_lru, 0, NULL, NULL);
   lock_init (&vm_lock);
   
+  size_t user_pool_size;
+  palloc_fill_ratio (NULL, NULL, NULL, &user_pool_size);
+  swap_at_once = (user_pool_size*SWAP_PERCENT_AT_ONCE + 99) / 100;
+  if (swap_at_once < 3)
+    swap_at_once = 3;
+  
   vm_is_initialized = true;
-  printf ("Initialized user's virtual memory.\n");
+  
+  printf ("Initialized user's virtual memory. Swapping %u pages at once.\n",
+          swap_at_once);
 }
 
 static inline struct vm_page *
@@ -356,10 +366,14 @@ swap_free_page (void)
   // (4)
   intr_enable ();
   result = swap_alloc_and_write (ee->thread, ee->user_addr, kpage);
+  ASSERT (result);
   intr_disable ();
   
   if (result) // (5.1.1)
-    palloc_free_page (kpage);
+    {
+      palloc_free_page (kpage);
+      swap_must_retain (ee->thread, ee->user_addr);
+    }
   else // (5.2.1)
     pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage, true);
   
@@ -375,7 +389,7 @@ swap_free_memory (void)
   ASSERT (lock_held_by_current_thread (&vm_lock));
   
   size_t freed = 0;
-  while (freed < SWAP_AT_ONCE && !lru_is_empty (&pages_lru))
+  while (freed < swap_at_once && !lru_is_empty (&pages_lru))
     {
       if (swap_free_page ())
         ++freed;
@@ -397,14 +411,20 @@ vm_alloc_kpage (struct vm_page *ee)
   ASSERT (intr_get_level () == INTR_ON);
   
   void *kpage = vm_palloc ();
-  if (kpage != NULL && !pagedir_set_page (ee->thread->pagedir, ee->user_addr,
-                                          kpage, !ee->readonly))
+  if (kpage == NULL)
+    return NULL;
+  
+  int retry;
+  for (retry = MAX_ALLOC_RETRIES; retry > 0; --retry)
     {
-      palloc_free_page (kpage);
-      return NULL;
+      if (pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
+                            !ee->readonly))
+        return kpage;
+      if (!swap_free_memory ())
+        break;
     }
-    
-  return kpage;
+  palloc_free_page (kpage);
+  return NULL;
 }
 
 void *
@@ -469,18 +489,20 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
     lock_acquire (&vm_lock);
   
   enum vm_ensure_result result;
-  
-  *kpage_ = pagedir_get_page (t->pagedir, user_addr);
-  if (*kpage_ != NULL)
-    {
-      result = VMER_OK;
-      goto end;
-    }
     
   struct vm_page *ee = vm_get_logical_page (t, user_addr);
   if (ee == NULL)
     {
       result = VMER_SEGV;
+      goto end;
+    }
+  
+  *kpage_ = pagedir_get_page (t->pagedir, user_addr);
+  if (*kpage_ != NULL)
+    {
+      if (lru_is_interior (&ee->lru_elem))
+        lru_use (&pages_lru, &ee->lru_elem);
+      result = VMER_OK;
       goto end;
     }
   
@@ -691,6 +713,7 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
   enum vm_ensure_result result = vm_ensure (g->thread, user_addr, kpage_);
   if (result != VMER_OK)
     {
+      PANIC("FAIL FOR %8p", user_addr); // TODO: remove
       lock_release (&vm_lock);
       return result;
     }
@@ -698,17 +721,17 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
   enum intr_level old_level = intr_disable ();
   
   struct vm_page *page;
-  struct vm_ensure_group_entry *entry = vm_ensure_group_get (g,
-                                                             user_addr,
-                                                             &page);
+  struct vm_ensure_group_entry *entry;
+  entry = vm_ensure_group_get (g, user_addr, &page);
   if (entry != NULL)
     goto end;
   if (page == NULL)
     {
+      ASSERT(0); // TODO: remove
       result = VMER_SEGV;
       goto end;
     }
-  
+  ASSERT (lru_is_interior (&page->lru_elem));
   entry = calloc (1, sizeof (*entry));
   entry->page = page;
   hash_insert (&g->entries, &entry->elem);
@@ -730,9 +753,8 @@ vm_ensure_group_remove (struct vm_ensure_group *g, void *user_addr)
   enum intr_level old_level = intr_disable ();
   
   struct vm_page *page;
-  struct vm_ensure_group_entry *entry = vm_ensure_group_get (g,
-                                                             user_addr,
-                                                             &page);
+  struct vm_ensure_group_entry *entry;
+  entry = vm_ensure_group_get (g, user_addr, &page);
   if (entry != NULL)
     {
       hash_delete_found (&g->entries, &entry->elem);

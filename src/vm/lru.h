@@ -20,10 +20,20 @@ struct lru_elem
   typedef __typeof (STRUCT) _t;                                   \
   __typeof (LIST_ELEM) _e = (LIST_ELEM);                          \
   ASSERT (_e != NULL);                                            \
+  ASSERT (_e != NULL);                                            \
   ASSERT (_e->lru_list != NULL || !list_is_interior (&_e->elem)); \
   ASSERT (_e->lru_list == NULL ||  list_is_interior (&_e->elem)); \
   (_t*) ((uint8_t*)&_e->end - offsetof (_t, MEMBER.end));         \
 })
+
+static inline bool
+lru_is_interior (const struct lru_elem *elem)
+{
+  ASSERT (elem != NULL);
+  ASSERT (elem->lru_list != NULL || !list_is_interior (&elem->elem));
+  ASSERT (elem->lru_list == NULL ||  list_is_interior (&elem->elem));
+  return elem->lru_list != NULL;
+}
 
 typedef void lru_dispose_action (struct lru_elem *e, void *aux);
 

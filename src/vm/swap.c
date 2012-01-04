@@ -140,33 +140,26 @@ swap_dispose_page (struct swap_page *ee)
 }
 
 static swap_t
-swap_get_disposable_pages (size_t count)
+swap_get_disposable_page (void)
 {
-  ASSERT (count > 0);
-  ASSERT (count <= swap_pages_count);
+  ASSERT (lock_held_by_current_thread (&swap_lock));
   
-  size_t result = bitmap_scan (used_pages, 0, count, false);
+  size_t result = bitmap_scan (used_pages, 0, 1, false);
   if (result != BITMAP_ERROR)
     return result;
   
-  if (count != 1)  // don't bother to make room for multiple pages
+  struct lru_elem *e = lru_peek_least (&swap_lru);
+  if (e == NULL) // swap space is exhausted
     return SWAP_FAIL;
   
-  for (;;)
-    {
-      struct lru_elem *e = lru_peek_least (&swap_lru);
-      if (e == NULL) // swap space is exhausted
-        return SWAP_FAIL;
-      
-      struct swap_page *ee;
-      ee = lru_entry (e, struct swap_page, lru_elem);
-      ASSERT (ee != NULL);
-      
-      vm_swap_disposed (ee->thread, ee->user_addr);
-      swap_dispose_page (ee);
-      
-      return swap_page_get_id (ee);
-    }
+  struct swap_page *ee;
+  ee = lru_entry (e, struct swap_page, lru_elem);
+  ASSERT (ee != NULL);
+  
+  vm_swap_disposed (ee->thread, ee->user_addr);
+  swap_dispose_page (ee);
+  
+  return swap_page_get_id (ee);
 }
 
 #define MIN(A,B)         \
@@ -187,6 +180,9 @@ swap_write (swap_t         id,
   ASSERT (user_addr != NULL);
   ASSERT (pg_ofs (user_addr) == 0);
   ASSERT (src != NULL);
+  ASSERT (lock_held_by_current_thread (&swap_lock));
+  
+  printf ("SWAPPING %8p TO %04u\n", user_addr, id);
   
   ASSERT (is_valid_swap_id (id));
   
@@ -241,9 +237,12 @@ swap_alloc_and_write (struct thread *owner,
       return true;
     }
   
-  swap_t id = swap_get_disposable_pages (1);
+  swap_t id = swap_get_disposable_page ();
   if (id == SWAP_FAIL)
-    return false;
+    {
+      lock_release (&swap_lock);
+      return false;
+    }
   swap_write (id, owner, user_addr, src);
   lock_release (&swap_lock);
   return true;

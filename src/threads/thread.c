@@ -18,6 +18,7 @@
 #endif
 #ifdef VM
 # include "vm/vm.h"
+# include "vm/swap.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -205,20 +206,26 @@ thread_tick (void)
   if (tick_print_free)
     {
       static size_t tickcount = 0;
-      size_t ksize, kfree, usize, ufree;
+      size_t ksize, kfree, usize, ufree, ssize, sfree;
       palloc_fill_ratio (&kfree, &ksize, &ufree, &usize);
+      
+      ssize = swap_stats_pages ();
+      sfree = ssize - swap_stats_full_pages ();
       
       uint32_t kratio = fp_round (fp_percent_from_uint (kfree, ksize));
       uint32_t uratio = fp_round (fp_percent_from_uint (ufree, usize));
+      uint32_t swapration = fp_round (fp_percent_from_uint (sfree, ssize));
       
       UNSAFE_PRINTF ("    %8u. %s    kfree: %4u/% 4d (%2u%%)"
-                                "    ufree: %4u/% 4d (%2u%%)\n",
+                                "    ufree: %4u/% 4d (%2u%%)"
+                                 "    swap: %4u/% 4d (%2u%%)\n",
                      tickcount++,
                      t == idle_thread ? "IDLE  " :
                            t->pagedir ? "USER  " :
                                         "KERNEL",
                      kfree, ksize, kratio,
-                     ufree, usize, uratio);
+                     ufree, usize, uratio,
+                     sfree, ssize, swapration);
     }
 #endif
 

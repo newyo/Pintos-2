@@ -187,9 +187,13 @@ page_from_pool (const struct pool *pool, void *page)
 void
 palloc_fill_ratio (size_t *kfree, size_t *ksize, size_t *ufree, size_t *usize)
 {
-  *ksize = bitmap_size (kernel_pool.used_map);
-  *usize = bitmap_size (user_pool.used_map);
-  *kfree = bitmap_count (kernel_pool.used_map, 0, *ksize, false);
-  *ufree = bitmap_count (user_pool.used_map, 0, *ksize, false);
-  
+  if (ksize)
+    *ksize = bitmap_size (kernel_pool.used_map);
+  if (kfree)
+    *kfree = bitmap_count (kernel_pool.used_map, 0, *ksize, false);
+    
+  if (usize)
+    *usize = bitmap_size (user_pool.used_map);
+  if (ufree)
+    *ufree = bitmap_count (user_pool.used_map, 0, *usize, false);
 }
