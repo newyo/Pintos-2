@@ -20,7 +20,6 @@ struct lru_elem
   typedef __typeof (STRUCT) _t;                                   \
   __typeof (LIST_ELEM) _e = (LIST_ELEM);                          \
   ASSERT (_e != NULL);                                            \
-  ASSERT (_e != NULL);                                            \
   ASSERT (_e->lru_list != NULL || !list_is_interior (&_e->elem)); \
   ASSERT (_e->lru_list == NULL ||  list_is_interior (&_e->elem)); \
   (_t*) ((uint8_t*)&_e->end - offsetof (_t, MEMBER.end));         \

@@ -50,7 +50,10 @@ lru_use (struct lru *l, struct lru_elem *e)
         lru_dispose (l, lru_peek_least (l), true);
     }
   else
-    ASSERT (e->lru_list == l);
+    {
+      ASSERT (e->lru_list == l);
+      list_remove (&e->elem);
+    }
   list_push_front (&l->lru_list, &e->elem);
   assert_filling (l);
 }

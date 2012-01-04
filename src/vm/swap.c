@@ -12,6 +12,7 @@
 #include "devices/block.h"
 #include "lru.h"
 #include "vm.h"
+#include "crc32.h"
 
 struct swap_page
 {
@@ -19,6 +20,7 @@ struct swap_page
   struct thread    *thread;
   struct hash_elem  hash_elem;
   void             *user_addr;
+  uint32_t          cksum;
 };
 
 struct lock swap_lock;
@@ -214,6 +216,8 @@ swap_write (swap_t         id,
       src += BLOCK_SECTOR_SIZE;
       ++sector;
     }
+    
+  ee->cksum = cksum (src, PGSIZE);
 }
 
 bool
@@ -298,6 +302,15 @@ swap_read_and_retain (struct thread *owner,
       ++sector;
     }
   lru_use (&swap_lru, &ee->lru_elem);
+  
+  uint32_t read_cksum = cksum (dest, PGSIZE);
+  if (read_cksum != ee->cksum)
+    printf ("\n"
+            "WARNING: Checksum mismatch in swap page %04u.\n"
+            "Memory: %p, expected: 0x%8x, calcuted: 0x%8x\n"
+            "EXPECT ERRORS!\n"
+            "\n",
+            swap_page_get_id (ee), user_addr, ee->cksum, read_cksum);
   
   lock_release (&swap_lock);
   return true;

@@ -66,6 +66,7 @@ vm_SRC  = vm/lru.c
 vm_SRC += vm/swap.c
 vm_SRC += vm/vm.c
 vm_SRC += vm/mmap.c
+vm_SRC += vm/crc32.c
 
 # Filesystem code.
 filesys_SRC  = filesys/filesys.c	# Filesystem core.
