@@ -110,9 +110,7 @@ swap_init (void)
     PANIC ("Could not set up swapping: Memory exhausted (2)");
   lru_init (&swap_lru, 0, NULL, NULL);
   
-#ifndef NDEBUG
   swap_needlessly_zero_out_whole_swap_space ();
-#endif
   
   printf ("Initialized swapping.\n");
 }
@@ -207,6 +205,9 @@ swap_write (swap_t         id,
   
   ee->cksum = cksum (src, PGSIZE);
   
+  if (id == 0)
+    printf ("WROTE %08x %08x\n", ee->cksum, ee->cksum);
+  
   block_sector_t sector = swap_page_to_sector (id);
   int i;
   for (i = 0; i < PGSIZE/BLOCK_SECTOR_SIZE; ++i)
@@ -292,18 +293,18 @@ swap_read_and_retain (struct thread *owner,
   
   block_sector_t sector = swap_page_to_sector (swap_page_get_id (ee));
   int i;
+  uint8_t *v = dest;
   for (i = 0; i < PGSIZE/BLOCK_SECTOR_SIZE; ++i)
     {
-      block_read (swap_disk, sector, dest);
-      dest += BLOCK_SECTOR_SIZE;
+      block_read (swap_disk, sector, v);
+      v += BLOCK_SECTOR_SIZE;
       ++sector;
     }
-  dest -= PGSIZE;
-  
-  debug_hexdump (dest, dest+PGSIZE);
   
   uint32_t read_cksum = cksum (dest, PGSIZE);
   bool result = read_cksum != ee->cksum;
+  
+  printf ("READ  %08x %08x\n", read_cksum, ee->cksum);
   
   if (result)
     printf ("\n"
@@ -335,8 +336,8 @@ swap_page_hash (const struct hash_elem *e, void *t)
 
 static bool
 swap_page_less (const struct hash_elem *a,
-                   const struct hash_elem *b,
-                   void *t)
+                const struct hash_elem *b,
+                void *t)
 {
   return swap_page_hash (a, t) < swap_page_hash (b, t);
 }

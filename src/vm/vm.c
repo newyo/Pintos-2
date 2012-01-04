@@ -15,7 +15,7 @@
 #include "userprog/pagedir.h"
 
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
-#define SWAP_PERCENT_AT_ONCE 5
+#define SWAP_PERCENT_AT_ONCE 3
 
 static size_t swap_at_once;
 
@@ -333,7 +333,7 @@ vm_tick (struct thread *t)
   ASSERT (t->pagedir != NULL);
   ASSERT (intr_get_level () == INTR_OFF);
   
-  if (!vm_is_initialized)
+  if (!vm_is_initialized || lock_held_by_current_thread (&vm_lock))
     return;
   
   hash_apply (&t->vm_pages, &vm_tick_sub);
@@ -358,13 +358,7 @@ vm_free_a_page (void)
         continue;
         
       void *kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
-      if (kpage == NULL)
-        {
-          // FIXME: how can empty frames get into the pages_lru?
-          ASSERT (ee->type == VMPPT_EMPTY);
-          continue;
-        }
-      // ASSERT (kpage != NULL);
+      ASSERT (kpage != NULL);
       
       switch (ee->type)
         {
@@ -393,7 +387,8 @@ vm_free_a_page (void)
               {
                 lru_dispose (&pages_lru, &ee->lru_elem, false);
                 palloc_free_page (kpage);
-                swap_must_retain (ee->thread, ee->user_addr);
+                bool smr UNUSED = swap_must_retain (ee->thread, ee->user_addr);
+                ASSERT (smr);
               }
             else
               {
@@ -406,13 +401,13 @@ vm_free_a_page (void)
           
         case VMPPT_SWAPPED:
           {
-            lru_dispose (&pages_lru, &ee->lru_elem, false);
-            pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
-            palloc_free_page (kpage);
-            
-            swap_must_retain (ee->thread, ee->user_addr);
-            
-            result = true;
+            result = swap_must_retain (ee->thread, ee->user_addr);
+            if (result)
+              {
+                lru_dispose (&pages_lru, &ee->lru_elem, false);
+                pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+                palloc_free_page (kpage);
+              }
             break;
           }
           

@@ -150,7 +150,6 @@ page_fault (struct intr_frame *f)
   bool not_present = (f->error_code & PF_P) == 0;
   bool write = (f->error_code & PF_W) != 0;
   bool user = (f->error_code & PF_U) != 0;
-  
   /*
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
@@ -158,7 +157,6 @@ page_fault (struct intr_frame *f)
           write ? "writing" : "reading",
           user ? "user" : "kernel");
   */
-  
 #ifndef VM
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
@@ -194,7 +192,9 @@ page_fault (struct intr_frame *f)
         
       case VMER_SEGV:
       case VMER_OOM:
-        kill (f);
+        ASSERT (pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) ==
+                NULL);
+        thread_exit ();
         
       default:
         PANIC ("Wrong vm_ensure_result: %u", r);
