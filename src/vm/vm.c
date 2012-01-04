@@ -15,9 +15,12 @@
 #include "userprog/pagedir.h"
 
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
+
 #define SWAP_AT_ONCE 3
+#define MAX_ALLOC_RETRIES 32
 
 #define VMLP_MAGIC (('V'<<16) + ('L'<<8) + 'P')
+typedef char _CASSERT_VMLP_MAGIC24[0 - !(VMLP_MAGIC < (1<<24))];
 
 enum vm_page_type
 {
@@ -30,7 +33,7 @@ enum vm_page_type
   
   VMPPT_COUNT
 };
-typedef char _CASSERT_VMPPT_SIZE[0 - !(VMPPT_COUNT < 128)];
+typedef char _CASSERT_VMPPT_SIZE[0 - !(VMPPT_COUNT < (1<<7))];
 
 struct vm_page
 {
@@ -136,10 +139,11 @@ vm_dispose_real (struct vm_page *ee)
     }
     
   void *kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
-  if (kpage == NULL)
-    return;
-  pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
-  palloc_free_page (kpage);
+  if (kpage != NULL)
+    {
+      pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+      palloc_free_page (kpage);
+    }
   
   free (ee);
 }
@@ -391,25 +395,41 @@ vm_alloc_kpage (struct vm_page *ee)
   ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
-  signed retry;
-  for (retry = 32; retry > 0; --retry)
+  void *kpage = vm_palloc ();
+  if (kpage != NULL && !pagedir_set_page (ee->thread->pagedir, ee->user_addr,
+                                          kpage, !ee->readonly))
     {
-      void *kpage = palloc_get_page (PAL_USER);
-      if (kpage != NULL)
-        {
-          if (!pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
-                                 !ee->readonly))
-            {
-              palloc_free_page (kpage);
-              return NULL;
-            }
-          return kpage;
-        }
-        return kpage;
-      if (!swap_free_memory ())
-        return NULL;
+      palloc_free_page (kpage);
+      return NULL;
     }
-  return NULL;
+    
+  return kpage;
+}
+
+void *
+vm_palloc (void)
+{
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  bool outer_lock = lock_held_by_current_thread (&vm_lock);
+  if (!outer_lock)
+    lock_acquire (&vm_lock);
+  
+  void *kpage = NULL;
+  
+  signed retry;
+  for (retry = MAX_ALLOC_RETRIES; retry > 0; --retry)
+    {
+      kpage = palloc_get_page (PAL_USER);
+      if (kpage != NULL)
+        break;
+      if (!swap_free_memory ())
+        break;
+    }
+    
+  if (!outer_lock)
+    lock_release (&vm_lock);
+  return kpage;
 }
 
 static bool

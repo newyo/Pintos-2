@@ -63,4 +63,6 @@ enum vm_ensure_result vm_ensure_group_add (struct vm_ensure_group *g,
                                            void **kpage_);
 bool vm_ensure_group_remove (struct vm_ensure_group *g, void *user_addr);
 
+void *vm_palloc (void);
+
 #endif
