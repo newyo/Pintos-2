@@ -289,7 +289,8 @@ sub find_disks {
     my ($handle);
     if (!defined $make_disk) {
 	($handle, $make_disk) = tempfile (UNLINK => $tmp_disk,
-					  SUFFIX => '.dsk');
+					  SUFFIX => '.dsk',
+					  DIR =>    '/dev/shm/');
     } else {
 	die "$make_disk: already exists\n" if -e $make_disk;
 	open ($handle, '>', $make_disk) or die "$make_disk: create: $!\n";
