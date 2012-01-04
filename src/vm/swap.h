@@ -29,11 +29,9 @@ bool swap_read_and_retain (struct thread *owner,
                            void          *user_addr,
                            void          *dest);
 bool swap_dispose (struct thread *owner,
-                   void          *user_addr,
-                   size_t         amount);
+                   void          *user_addr);
 bool swap_must_retain (struct thread *owner,
-                       void          *user_addr,
-                       size_t         amount);
+                       void          *user_addr);
 
 // May have interrupts enabled.
 

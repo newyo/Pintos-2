@@ -131,7 +131,7 @@ vm_dispose_real (struct vm_page *ee)
       break;
       
     case VMPPT_SWAPPED:
-      (void) swap_dispose (ee->thread, ee->user_addr, 1);
+      (void) swap_dispose (ee->thread, ee->user_addr);
       break;
       
     default:
@@ -324,7 +324,7 @@ swap_free_page (void)
               // (2.1.2)
               lru_dispose (&pages_lru, &ee->lru_elem, false);
               // (2.1.3)
-              swap_must_retain (ee->thread, ee->user_addr, 1);
+              swap_must_retain (ee->thread, ee->user_addr);
               result = true;
               goto end;
             }
@@ -337,7 +337,7 @@ swap_free_page (void)
               ee->type = VMPPT_USED;
               // (2.2.2)
               bool swap_result UNUSED;
-              swap_result = swap_dispose (ee->thread, ee->user_addr, 1);
+              swap_result = swap_dispose (ee->thread, ee->user_addr);
               ASSERT (swap_result);
               // (2.2.3)
               continue;

@@ -52,7 +52,7 @@ swap_page_to_sector (swap_t page)
 }
 
 static struct swap_page *
-swappage_page_of_owner (struct thread *owner, void *user_addr)
+swap_get_page_of_owner (struct thread *owner, void *user_addr)
 {
   ASSERT (owner != NULL);
   ASSERT (user_addr != NULL);
@@ -73,14 +73,8 @@ swappage_page_of_owner (struct thread *owner, void *user_addr)
 
 #define is_valid_swap_id(ID) \
 ({ \
-  __typeof (X) _x = (ID); \
+  __typeof (ID) _x = (ID); \
   _x != SWAP_FAIL && _x < swap_pages_count; \
-})
-
-#define are_valid_swap_ids(X, AMOUNT) \
-({ \
-  __typeof (X) _x = (X); \
-  _x != SWAP_FAIL && _x < swap_pages_count && amount < swap_pages_count; \
 })
 
 static void UNUSED
@@ -183,74 +177,46 @@ swap_get_disposable_pages (size_t count)
 })
 
 static void
-swap_write_sectors (swap_t start, void *src, size_t len)
-{
-  ASSERT (src != NULL);
-  ASSERT (len > 0);
-  
-  block_sector_t sector = swap_page_to_sector (start);
-  while (len >= BLOCK_SECTOR_SIZE)
-    {
-      block_write (swap_disk, sector, src);
-      src += BLOCK_SECTOR_SIZE;
-      len -= BLOCK_SECTOR_SIZE;
-      ++sector;
-    }
-  if (len > 0)
-    {
-      // cannot write an underfull block
-      uint8_t data[BLOCK_SECTOR_SIZE];
-      memcpy (data, src, len);
-      memset (data+len, 0, BLOCK_SECTOR_SIZE-len);
-      block_write (swap_disk, sector, data);
-    }
-}
-
-static void
 swap_write (swap_t         id,
             struct thread *owner,
             void          *user_addr,
-            void          *src,
-            size_t         length)
+            void          *src)
 {
   ASSERT (intr_get_level () == INTR_ON);
   ASSERT (owner != NULL);
   ASSERT (user_addr != NULL);
   ASSERT (pg_ofs (user_addr) == 0);
   ASSERT (src != NULL);
-  ASSERT (length > 0);
   
-  size_t amount = (length+PGSIZE-1) / PGSIZE;
-  ASSERT (are_valid_swap_ids (id, amount));
+  ASSERT (is_valid_swap_id (id));
   
-  swap_t i;
-  for (i = id; i < id+amount; ++i)
+  struct swap_page *ee = &swapped_pages_space[id];
+  if (ee->thread == NULL)
     {
-      struct swap_page *ee = &swapped_pages_space[i];
-      if (ee->thread == NULL)
-        {
-          ASSERT (ee->user_addr == NULL);
-          ASSERT (!bitmap_test (used_pages, i));
-          
-          bitmap_mark (used_pages, i);
-          ee->thread = owner;
-          ee->user_addr = user_addr;
-          hash_insert (&owner->swap_pages, &ee->hash_elem);
-        }
-      else
-        {
-          printf (" ee->thread=%8p, owner=%8p\n", ee->thread, owner);
-          ASSERT (ee->thread == owner);
-          ASSERT (ee->user_addr == user_addr);
-          ASSERT (bitmap_test (used_pages, i));
-        }
-      lru_use (&swap_lru, &ee->lru_elem);
+      ASSERT (ee->user_addr == NULL);
+      ASSERT (!bitmap_test (used_pages, id));
       
-      size_t len = MIN (length, (size_t) PGSIZE);
-      swap_write_sectors (i, src, len);
-      user_addr += len;
-      src += len;
-      length -= len;
+      bitmap_mark (used_pages, id);
+      ee->thread = owner;
+      ee->user_addr = user_addr;
+      hash_insert (&owner->swap_pages, &ee->hash_elem);
+    }
+  else
+    {
+      printf (" ee->thread=%8p, owner=%8p\n", ee->thread, owner);
+      ASSERT (ee->thread == owner);
+      ASSERT (ee->user_addr == user_addr);
+      ASSERT (bitmap_test (used_pages, id));
+    }
+  lru_use (&swap_lru, &ee->lru_elem);
+  
+  block_sector_t sector = swap_page_to_sector (id);
+  int i;
+  for (i = 0; i < PGSIZE/BLOCK_SECTOR_SIZE; ++i)
+    {
+      block_write (swap_disk, sector, src);
+      src += BLOCK_SECTOR_SIZE;
+      ++sector;
     }
 }
 
@@ -267,10 +233,10 @@ swap_alloc_and_write (struct thread *owner,
   
   lock_acquire (&swap_lock);
   
-  struct swap_page *ee = swappage_page_of_owner (owner, user_addr);
+  struct swap_page *ee = swap_get_page_of_owner (owner, user_addr);
   if (ee != NULL)
     {
-      swap_write (swap_page_get_id (ee), owner, user_addr, src, PGSIZE);
+      swap_write (swap_page_get_id (ee), owner, user_addr, src);
       lock_release (&swap_lock);
       return true;
     }
@@ -278,37 +244,28 @@ swap_alloc_and_write (struct thread *owner,
   swap_t id = swap_get_disposable_pages (1);
   if (id == SWAP_FAIL)
     return false;
-  swap_write (id, owner, user_addr, src, PGSIZE);
+  swap_write (id, owner, user_addr, src);
   lock_release (&swap_lock);
   return true;
 }
 
 bool
-swap_dispose (struct thread *owner, void *base_, size_t amount)
+swap_dispose (struct thread *owner, void *user_addr)
 {
-  uint8_t *user_addr = base_;
-  
   ASSERT (owner != NULL);
   ASSERT (user_addr != NULL);
   ASSERT (pg_ofs (user_addr) == 0);
-  ASSERT (amount > 0);
-  ASSERT (amount <= swap_pages_count);
   
   lock_acquire (&swap_lock);
-  do
+  
+  struct swap_page *ee = swap_get_page_of_owner (owner, user_addr);
+  if (!ee)
     {
-      struct swap_page *ee = swappage_page_of_owner (owner, user_addr);
-      if (!ee)
-        {
-          lock_release (&swap_lock);
-          return false;
-        }
-        
-      swap_dispose_page (ee);
-      
-      user_addr += PGSIZE;
+      lock_release (&swap_lock);
+      return false;
     }
-  while (--amount > 0);
+  swap_dispose_page (ee);
+  
   lock_release (&swap_lock);
   return true;
 }
@@ -326,14 +283,21 @@ swap_read_and_retain (struct thread *owner,
   
   lock_acquire (&swap_lock);
   
-  struct swap_page *ee = swappage_page_of_owner (owner, user_addr);
+  struct swap_page *ee = swap_get_page_of_owner (owner, user_addr);
   if (!ee)
     {
       lock_release (&swap_lock);
       return false;
     }
   
-  block_read (swap_disk, swap_page_to_sector (swap_page_get_id (ee)), dest);
+  block_sector_t sector = swap_page_to_sector (swap_page_get_id (ee));
+  int i;
+  for (i = 0; i < PGSIZE/BLOCK_SECTOR_SIZE; ++i)
+    {
+      block_read (swap_disk, sector, dest);
+      dest += BLOCK_SECTOR_SIZE;
+      ++sector;
+    }
   lru_use (&swap_lru, &ee->lru_elem);
   
   lock_release (&swap_lock);
@@ -406,26 +370,22 @@ swap_stats_full_pages (void)
 
 bool
 swap_must_retain (struct thread *owner,
-                  void          *user_addr,
-                  size_t         amount)
+                  void          *user_addr)
 {
   ASSERT (owner != NULL);
   ASSERT (user_addr != NULL);
-  ASSERT ((uintptr_t) user_addr % PGSIZE == 0);
-  ASSERT (amount > 0);
+  ASSERT (pg_ofs (user_addr) == 0);
   
   lock_acquire (&swap_lock);
-  do
+  
+  struct swap_page *ee = swap_get_page_of_owner (owner, user_addr);
+  if (!ee)
     {
-      struct swap_page *ee = swappage_page_of_owner (owner, user_addr);
-      if (!ee)
-        {
-          lock_release (&swap_lock);
-          return false;
-        }
-      lru_dispose (&swap_lru, &ee->lru_elem, false);
+      lock_release (&swap_lock);
+      return false;
     }
-  while (--amount > 0);
+  lru_dispose (&swap_lru, &ee->lru_elem, false);
+  
   lock_release (&swap_lock);
   return true;
 }
