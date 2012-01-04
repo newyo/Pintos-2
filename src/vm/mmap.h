@@ -15,4 +15,6 @@ void mmap_init (void);
 void mmap_init_thread (struct thread *owner);
 void mmap_clean (struct thread *owner);
 
+bool mmap_alias_dispose (struct thread *owner, mapid_t id);
+
 #endif

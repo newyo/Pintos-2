@@ -403,7 +403,7 @@ syscall_handler_SYS_CLOSE (_SYSCALL_HANDLER_ARGS)
   free (fd_data);
 }
 
-static void TODO_NO_RETURN
+static void
 syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
 {
   // mapid_t mmap (int fd, void *addr);
@@ -416,10 +416,9 @@ syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
   // TODO
   (void) fd_data;
   (void) base;
-  thread_exit ();
 }
 
-static void TODO_NO_RETURN
+static void
 syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
 {
   // void munmap (mapid_t);
@@ -430,7 +429,6 @@ syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
   
   // TODO
   (void) map;
-  thread_exit ();
 }
 
 static void TODO_NO_RETURN
