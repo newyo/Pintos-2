@@ -97,6 +97,7 @@ static tid_t allocate_tid (void);
 static void thread_recalculate_priorities (struct thread *t, void *aux);
 static void thread_recalculate_load_avg (void);
 static size_t thread_get_ready_threads (void);
+static void thread_foreach2 (thread_action_func *func, void *aux);
 
 static void sleep_wakeup (void);
 static int thread_get_priority_of (struct thread *t);
@@ -249,8 +250,8 @@ thread_tick (void)
        * not at any other time.
        */
       thread_recalculate_load_avg ();
-      thread_foreach (thread_recalculate_recent_cpu, NULL);
-      thread_foreach (thread_recalculate_priorities, NULL);
+      thread_foreach2 (thread_recalculate_recent_cpu, NULL);
+      thread_foreach2 (thread_recalculate_priorities, NULL);
     }
 
   /* Enforce preemption. */
@@ -522,21 +523,35 @@ thread_yield (void)
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
-void
-thread_foreach (thread_action_func *func, void *aux)
+static void
+thread_for_list (thread_action_func *func, void *aux, struct list *list)
 {
   struct list_elem *e;
 
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (func != NULL);
 
-  for (e = list_begin (&all_list); e != list_end (&all_list);
-       e = list_next (e))
+  for (e = list_begin (list); e != list_end (list); e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, allelem);
       ASSERT (is_thread (t));
       func (t, aux);
     }
+}
+
+void
+thread_foreach (thread_action_func *func, void *aux)
+{
+  thread_for_list (func, aux, &all_list);
+#ifdef USERPROG
+  thread_for_list (func, aux, &zombie_list);
+#endif
+}
+
+static void
+thread_foreach2 (thread_action_func *func, void *aux)
+{
+  thread_for_list (func, aux, &all_list);
 }
 
 bool
