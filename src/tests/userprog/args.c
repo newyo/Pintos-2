@@ -5,18 +5,21 @@
 
 #include "tests/lib.h"
 
-#define CELLS (5*1024*1024 / sizeof (void *))
-
 int
 main (int argc, char *argv[]) 
 {
-  void *space[CELLS];
-  
-  unsigned i;
-  for (i = 0; i < sizeof (space)/sizeof (space[0]); ++i)
-    space[i] = 0x78563412;
-  for (i = 0; i < sizeof (space)/sizeof (space[0]); ++i)
-    printf ("    %p == %p\n", space[i], i);
-  
-  return (int) space;
+  int i;
+
+  test_name = "args";
+
+  msg ("begin");
+  msg ("argc = %d", argc);
+  for (i = 0; i <= argc; i++)
+    if (argv[i] != NULL)
+      msg ("argv[%d] = '%s'", i, argv[i]);
+    else
+      msg ("argv[%d] = null", i);
+  msg ("end");
+
+  return 0;
 }
