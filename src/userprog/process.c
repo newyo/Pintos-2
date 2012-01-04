@@ -157,54 +157,6 @@ elf_stack_push_str (void **sp, char *str, void *end)
   *_x; \
 });
 
-static inline void
-debug_hexdump (void *from, void *to)
-{
-  printf ("\n");
-  printf ("  HEXDUMP:    0x%08x - 0x%08x\n", (intptr_t) from, (intptr_t) to);
-  printf ("  0x0000000X  0 1 2 3  4 5 6 7  8 9 A B  C D E F\n");
-  
-  intptr_t bottom = ((((intptr_t) (from))     ) & ~0x0F);
-  intptr_t top    = ((((intptr_t) (to  ))+0x0F) & ~0x0F);
-  intptr_t cur;
-  for (cur = bottom; cur < top; cur += 0x10)
-    {
-      printf ("  0x%08x", cur);
-      intptr_t h;
-      for (h = 0; h < 0x04; ++h)
-        {
-          printf (" ");
-          int i;
-          for (i = 0; i < 0x04; ++i)
-            {
-              uint8_t *p = (uint8_t *) (cur + 4*h + i);
-              if ((void *) p >= from && (void *) p < to)
-                printf ("%02hhx", *p);
-              else
-                printf ("  ");
-            }
-        }
-      printf ("   ");
-      for (h = 0; h < 0x04; ++h)
-        {
-          char s[4] = "....";
-          int i;
-          for (i = 0; i < 0x04; ++i)
-            {
-              uint8_t *p = (uint8_t *) (cur + 4*h + i);
-              // ASCII 0x7F  is non-printable
-              if ((void *) p < from || (void *) p >= to)
-                s[i] = ' ';
-              else if(*p >= ' ' && *p < 0x7F)
-                s[i] = *p;
-            }
-          printf (" %.4s", s);
-        }
-      printf("\n");
-    }
-  printf ("\n");
-}
-
 /* A thread function that loads a user process and starts it
    running. */
 static void

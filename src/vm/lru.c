@@ -5,8 +5,7 @@ static inline void
 assert_filling (struct lru *l)
 {
   ASSERT (l != NULL);
-  ASSERT (l->item_count == 0 || !list_empty (&l->lru_list));
-  ASSERT (l->item_count > 0  ||  list_empty (&l->lru_list));
+  ASSERT ((l->item_count == 0) == list_empty (&l->lru_list));
 }
 
 void

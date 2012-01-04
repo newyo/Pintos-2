@@ -19,6 +19,8 @@ struct inode_disk
     unsigned magic;                     /* Magic number. */
     uint32_t unused[125];               /* Not used. */
   };
+typedef char _CASSERT_INODE_SIZE[0 - !(sizeof (struct inode_disk) ==
+                                       BLOCK_SECTOR_SIZE)];
 
 /* Returns the number of sectors to allocate for an inode SIZE
    bytes long. */

@@ -5,7 +5,7 @@
 
 #include "tests/lib.h"
 
-#define CELLS (7*1024*1024 / sizeof (unsigned))
+#define CELLS (5*1024*1024 / sizeof (unsigned))
 
 int
 main (int argc, char *argv[]) 

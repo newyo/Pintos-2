@@ -151,11 +151,13 @@ page_fault (struct intr_frame *f)
   bool write = (f->error_code & PF_W) != 0;
   bool user = (f->error_code & PF_U) != 0;
   
+  /*
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
+  */
   
 #ifndef VM
   /* To implement virtual memory, delete the rest of the function
@@ -164,16 +166,13 @@ page_fault (struct intr_frame *f)
   kill (f);
 #else
 
+  if (!user)
+    PANIC ("Page fault at %p: %s error %s page in kernel context.\n",
+            fault_addr,
+            not_present ? "not present" : "rights violation",
+            write ? "writing" : "reading");
   if (!not_present)
-    {
-      if (!user)
-        PANIC ("Page fault at %p: %s error %s page in kernel context.\n",
-                fault_addr,
-                not_present ? "not present" : "rights violation",
-                write ? "writing" : "reading");
-      else
-        kill (f);
-    }
+    kill (f);
     
   struct thread *t = thread_current ();
   struct vm_ensure_group g;
@@ -188,19 +187,15 @@ page_fault (struct intr_frame *f)
   switch (r)
     {
       case VMER_OK:
-        ASSERT(pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) != NULL);
+        ASSERT (kpage != NULL);
+        ASSERT (pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) ==
+                kpage);
         return;
+        
       case VMER_SEGV:
       case VMER_OOM:
-        PANIC ("r=%u", r);
-        if (!user)
-          PANIC ("%s at %p: %s error %s page in %s context.\n",
-                 r == VMER_SEGV ? "Seg fault" : "OOM",
-                 fault_addr,
-                 not_present ? "not present" : "rights violation",
-                 write ? "writing" : "reading",
-                 user ? "user" : "kernel");
         kill (f);
+        
       default:
         PANIC ("Wrong vm_ensure_result: %u", r);
     }

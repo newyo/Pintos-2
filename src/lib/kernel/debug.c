@@ -131,3 +131,56 @@ debug_backtrace_all (void)
   thread_foreach (print_stacktrace, 0);
   intr_set_level (oldlevel);
 }
+
+void
+debug_hexdump (void *from, void *to)
+{
+  enum intr_level oldlevel = intr_disable ();
+  
+  printf ("\n");
+  printf ("  HEXDUMP:    0x%08x - 0x%08x\n", (intptr_t) from, (intptr_t) to);
+  printf ("  0x%07xX  0 1 2 3  4 5 6 7  8 9 A B  C D E F\n",
+          ((uintptr_t) from) >> 8);
+  
+  intptr_t bottom = ((((intptr_t) (from))     ) & ~0x0F);
+  intptr_t top    = ((((intptr_t) (to  ))+0x0F) & ~0x0F);
+  intptr_t cur;
+  for (cur = bottom; cur < top; cur += 0x10)
+    {
+      printf ("  0x%08x", cur);
+      intptr_t h;
+      for (h = 0; h < 0x04; ++h)
+        {
+          printf (" ");
+          int i;
+          for (i = 0; i < 0x04; ++i)
+            {
+              uint8_t *p = (uint8_t *) (cur + 4*h + i);
+              if ((void *) p >= from && (void *) p < to)
+                printf ("%02hhx", *p);
+              else
+                printf ("  ");
+            }
+        }
+      printf ("   ");
+      for (h = 0; h < 0x04; ++h)
+        {
+          char s[4] = "....";
+          int i;
+          for (i = 0; i < 0x04; ++i)
+            {
+              uint8_t *p = (uint8_t *) (cur + 4*h + i);
+              // ASCII 0x7F  is non-printable
+              if ((void *) p < from || (void *) p >= to)
+                s[i] = ' ';
+              else if(*p >= ' ' && *p < 0x7F)
+                s[i] = *p;
+            }
+          printf (" %.4s", s);
+        }
+      printf("\n");
+    }
+  printf ("\n");
+  
+  intr_set_level (oldlevel);
+}

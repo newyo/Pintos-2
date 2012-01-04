@@ -184,8 +184,6 @@ swap_write (swap_t         id,
   ASSERT (src != NULL);
   ASSERT (lock_held_by_current_thread (&swap_lock));
   
-  printf ("SWAPPING %8p TO %04u\n", user_addr, id);
-  
   ASSERT (is_valid_swap_id (id));
   
   struct swap_page *ee = &swapped_pages_space[id];
@@ -201,12 +199,13 @@ swap_write (swap_t         id,
     }
   else
     {
-      printf (" ee->thread=%8p, owner=%8p\n", ee->thread, owner);
       ASSERT (ee->thread == owner);
       ASSERT (ee->user_addr == user_addr);
       ASSERT (bitmap_test (used_pages, id));
     }
   lru_use (&swap_lru, &ee->lru_elem);
+  
+  ee->cksum = cksum (src, PGSIZE);
   
   block_sector_t sector = swap_page_to_sector (id);
   int i;
@@ -216,8 +215,6 @@ swap_write (swap_t         id,
       src += BLOCK_SECTOR_SIZE;
       ++sector;
     }
-    
-  ee->cksum = cksum (src, PGSIZE);
 }
 
 bool
@@ -301,19 +298,28 @@ swap_read_and_retain (struct thread *owner,
       dest += BLOCK_SECTOR_SIZE;
       ++sector;
     }
-  lru_use (&swap_lru, &ee->lru_elem);
+  dest -= PGSIZE;
+  
+  debug_hexdump (dest, dest+PGSIZE);
   
   uint32_t read_cksum = cksum (dest, PGSIZE);
-  if (read_cksum != ee->cksum)
+  bool result = read_cksum != ee->cksum;
+  
+  if (result)
     printf ("\n"
-            "WARNING: Checksum mismatch in swap page %04u.\n"
-            "Memory: %p, expected: 0x%8x, calcuted: 0x%8x\n"
+            "WARNING: Checksum mismatch in swap page %04u @ %p.\n"
+            "Memory: %p, expected: 0x%08x, calcuted: 0x%08x\n"
             "EXPECT ERRORS!\n"
             "\n",
-            swap_page_get_id (ee), user_addr, ee->cksum, read_cksum);
-  
+            swap_page_get_id (ee), dest, user_addr, ee->cksum, read_cksum);
+            
+  if (result)
+    lru_use (&swap_lru, &ee->lru_elem);
+  else
+    swap_dispose_page (ee);
+    
   lock_release (&swap_lock);
-  return true;
+  return result;
 }
 
 static unsigned

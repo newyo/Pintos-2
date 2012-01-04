@@ -194,6 +194,32 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
+static void
+thread_print_tick_status (struct thread *t)
+{
+  static size_t tickcount = 0;
+  size_t ksize, kfree, usize, ufree, ssize, sfree;
+  palloc_fill_ratio (&kfree, &ksize, &ufree, &usize);
+  
+  ssize = swap_stats_pages ();
+  sfree = ssize - swap_stats_full_pages ();
+  
+  uint32_t kratio = fp_round (fp_percent_from_uint (kfree, ksize));
+  uint32_t uratio = fp_round (fp_percent_from_uint (ufree, usize));
+  uint32_t swapration = fp_round (fp_percent_from_uint (sfree, ssize));
+  
+  UNSAFE_PRINTF ("    %8u. %s    kernel: %4u/% 4d (%2u%%)"
+                              "    user: %4u/% 4d (%2u%%)"
+                              "    swap: %4u/% 4d (%2u%%)\n",
+                 tickcount++,
+                 t == idle_thread ? "IDLE  " :
+                       t->pagedir ? "USER  " :
+                                    "KERNEL",
+                 kfree, ksize, kratio,
+                 ufree, usize, uratio,
+                 sfree, ssize, swapration);
+}
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -201,33 +227,6 @@ thread_tick (void)
 {
   struct thread *t = thread_current ();
   ASSERT_STACK_NOT_EXCEEDED (t);
-  
-#ifdef USERPROG
-  if (tick_print_free)
-    {
-      static size_t tickcount = 0;
-      size_t ksize, kfree, usize, ufree, ssize, sfree;
-      palloc_fill_ratio (&kfree, &ksize, &ufree, &usize);
-      
-      ssize = swap_stats_pages ();
-      sfree = ssize - swap_stats_full_pages ();
-      
-      uint32_t kratio = fp_round (fp_percent_from_uint (kfree, ksize));
-      uint32_t uratio = fp_round (fp_percent_from_uint (ufree, usize));
-      uint32_t swapration = fp_round (fp_percent_from_uint (sfree, ssize));
-      
-      UNSAFE_PRINTF ("    %8u. %s    kfree: %4u/% 4d (%2u%%)"
-                                "    ufree: %4u/% 4d (%2u%%)"
-                                 "    swap: %4u/% 4d (%2u%%)\n",
-                     tickcount++,
-                     t == idle_thread ? "IDLE  " :
-                           t->pagedir ? "USER  " :
-                                        "KERNEL",
-                     kfree, ksize, kratio,
-                     ufree, usize, uratio,
-                     sfree, ssize, swapration);
-    }
-#endif
 
   /* Update statistics. */
   if (t == idle_thread)
@@ -242,11 +241,6 @@ thread_tick (void)
 #endif
         kernel_ticks++;
     }
-    
-#ifdef VM
-  if (t->pagedir != NULL)
-    vm_tick (t);
-#endif
 
   if(thread_mlfqs && ((timer_ticks () % TIMER_FREQ) == 0))
     {
@@ -519,6 +513,13 @@ thread_yield (void)
   enum intr_level old_level;
   
   ASSERT (!intr_context ());
+    
+#ifdef VM
+  if (tick_print_free)
+    thread_print_tick_status (cur);
+  if (cur->pagedir != NULL)
+    vm_tick (cur);
+#endif
 
   old_level = intr_disable ();
   if (cur != idle_thread)
