@@ -60,6 +60,7 @@ assert_t_addr (struct thread *t, const void *addr)
   ASSERT (vm_is_initialized);
   ASSERT (t != NULL);
   ASSERT (addr >= MIN_ALLOC_ADDR);
+  ASSERT (is_user_vaddr (addr));
   ASSERT (pg_ofs (addr) == 0);
 }
 
@@ -456,7 +457,7 @@ vm_swap_in (struct vm_page *ee, void **kpage_)
 enum vm_ensure_result
 vm_ensure (struct thread *t, void *user_addr, void **kpage_)
 {
-  if (user_addr < MIN_ALLOC_ADDR)
+  if (user_addr < MIN_ALLOC_ADDR || !is_user_vaddr (user_addr))
     return VMER_SEGV;
     
   assert_t_addr (t, user_addr);
