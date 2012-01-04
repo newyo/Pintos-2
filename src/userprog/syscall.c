@@ -53,9 +53,9 @@ syscall_init (void)
 
 static bool
 ensure_user_memory (struct vm_ensure_group *g,
-                    void *addr,
-                    unsigned size,
-                    bool for_writing)
+                    void                   *addr,
+                    unsigned                size,
+                    bool                    for_writing)
 {
   ASSERT (g != NULL);
   
@@ -285,7 +285,11 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
   unsigned length = *(unsigned *) arg3;
   
   if (!ensure_user_memory (g, buffer, length, true))
-    kill_segv (g);
+    {
+      vm_ensure_group_destroy (g);
+      if_->eax = -1;
+      return;
+    }
     
   if (fd != 0)
     {
@@ -327,8 +331,13 @@ syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
   unsigned length = *(unsigned *) arg3;
   
   if (!ensure_user_memory (g, buffer, length, false))
-    kill_segv (g);
-  else if (fd == 0 || fd >= INT_MAX)
+    {
+      vm_ensure_group_destroy (g);
+      if_->eax = -1;
+      return;
+    }
+    
+  if (fd == 0 || fd >= INT_MAX)
     {
       if_->eax = -EBADF;
       vm_ensure_group_destroy (g);
