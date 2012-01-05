@@ -634,8 +634,8 @@ vm_is_readonly (struct thread *t, void *user_addr)
 
 struct vm_ensure_group_entry
 {
-  struct hash_elem        elem;
-  struct vm_page *page;
+  struct hash_elem  elem;
+  struct vm_page   *page;
 };
 
 static struct vm_ensure_group_entry *

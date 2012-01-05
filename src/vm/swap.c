@@ -6,16 +6,19 @@
 #include <stdio.h>
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
-#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "userprog/process.h"
 #include "devices/block.h"
 #include "lru.h"
 #include "vm.h"
 #include "crc32.h"
+#include "allocator.h"
 
 struct swap_page
 {
+  swap_t            id;
+  struct hash_elem  id_elem;
+  
   struct lru_elem   lru_elem;
   struct thread    *thread;
   struct hash_elem  hash_elem;
@@ -30,21 +33,12 @@ size_t swap_pages_count;
 #define PG_SECTOR_RATIO (PGSIZE / BLOCK_SECTOR_SIZE)
 char _CASSERT_INT_PG_SECTOR_RATIO[0 - !(PGSIZE % BLOCK_SECTOR_SIZE == 0)];
 
-struct bitmap *used_pages; // false == free
-struct lru swap_lru; // list of struct swap_page
-struct swap_page *swapped_pages_space;
+struct bitmap    *used_pages; // false == free
+struct lru        swap_lru; // list of struct swap_page
+struct allocator  pages_allocator;
+struct hash       pages_hash;
 
-static swap_t
-swap_page_get_id (struct swap_page *cur)
-{
-  ASSERT (cur != NULL);
-  ASSERT (cur >= swapped_pages_space);
-  ASSERT (cur <  swapped_pages_space + swap_pages_count);
-  
-  return (uintptr_t) (cur - swapped_pages_space) / sizeof (*cur);
-}
-
-static block_sector_t
+static inline block_sector_t
 swap_page_to_sector (swap_t page)
 {
   ASSERT (page < swap_pages_count);
@@ -73,12 +67,6 @@ swap_get_page_of_owner (struct thread *owner, void *user_addr)
   return ee;
 }
 
-#define is_valid_swap_id(ID) \
-({ \
-  __typeof (ID) _x = (ID); \
-  _x != SWAP_FAIL && _x < swap_pages_count; \
-})
-
 static void UNUSED
 swap_needlessly_zero_out_whole_swap_space (void)
 {
@@ -88,6 +76,25 @@ swap_needlessly_zero_out_whole_swap_space (void)
   block_sector_t i;
   for (i = 0; i < swap_pages_count; ++i)
     block_write (swap_disk, i, zero);
+}
+
+static unsigned
+swap_id_hash (const struct hash_elem *e, void *aux UNUSED)
+{
+  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (swap_t))];
+  ASSERT (e != NULL);
+  
+  struct swap_page *ee = hash_entry (e, struct swap_page, id_elem);
+  ASSERT (ee->id != SWAP_FAIL);
+  return (unsigned) ee->id;
+}
+
+static bool
+swap_id_less (const struct hash_elem *a,
+              const struct hash_elem *b,
+              void *aux UNUSED)
+{
+  return swap_id_hash (a, NULL) < swap_id_hash (b, NULL);
 }
 
 void
@@ -101,8 +108,8 @@ swap_init (void)
   swap_pages_count = block_size (swap_disk) / PG_SECTOR_RATIO;
   ASSERT (swap_pages_count > 0);
   
-  swapped_pages_space = calloc (swap_pages_count, sizeof (struct swap_page));
-  if (!swapped_pages_space)
+  if (!allocator_init (&pages_allocator, false, swap_pages_count,
+                       sizeof (struct swap_page)))
     PANIC ("Could not set up swapping: Memory exhausted (1)");
   
   used_pages = bitmap_create (swap_pages_count);
@@ -110,56 +117,60 @@ swap_init (void)
     PANIC ("Could not set up swapping: Memory exhausted (2)");
   lru_init (&swap_lru, 0, NULL, NULL);
   
+  hash_init (&pages_hash, &swap_id_hash, &swap_id_less, NULL);
+  
   swap_needlessly_zero_out_whole_swap_space ();
   
   printf ("Initialized swapping.\n");
 }
 
 static void
-swap_dispose_page_real (struct swap_page *ee)
+swap_page_free (struct swap_page *ee)
 {
   ASSERT (ee != NULL);
-  ASSERT (ee->thread != NULL);
-  ASSERT (ee->user_addr != NULL);
   
+  if (ee->thread)
+    hash_delete (&ee->thread->swap_pages, &ee->hash_elem);
   lru_dispose (&swap_lru, &ee->lru_elem, false);
+  bitmap_reset (used_pages, ee->id);
+  
   memset (ee, 0, sizeof (*ee));
-  bitmap_reset (used_pages, swap_page_get_id (ee));
+  allocator_free (&pages_allocator, ee, 1);
 }
 
-static void
-swap_dispose_page (struct swap_page *ee)
-{
-  ASSERT (ee != NULL);
-  
-  struct hash_elem *e UNUSED;
-  e = hash_delete (&ee->thread->swap_pages, &ee->hash_elem);
-  ASSERT (e != NULL);
-  
-  swap_dispose_page_real (ee);
-}
-
-static swap_t
-swap_get_disposable_page (void)
+static struct swap_page *
+swap_page_alloc (void)
 {
   ASSERT (lock_held_by_current_thread (&swap_lock));
   
-  size_t result = bitmap_scan (used_pages, 0, 1, false);
-  if (result != BITMAP_ERROR)
-    return result;
+  size_t result;
   
-  struct lru_elem *e = lru_peek_least (&swap_lru);
-  if (e == NULL) // swap space is exhausted
-    return SWAP_FAIL;
-  
-  struct swap_page *ee;
-  ee = lru_entry (e, struct swap_page, lru_elem);
-  ASSERT (ee != NULL);
-  
-  vm_swap_disposed (ee->thread, ee->user_addr);
-  swap_dispose_page (ee);
-  
-  return swap_page_get_id (ee);
+  int i;
+  for (i = 0; i < 2; ++i)
+    {
+      result = bitmap_scan (used_pages, 0, 1, false);
+      if (result != BITMAP_ERROR)
+        break;
+      
+      struct lru_elem *e = lru_peek_least (&swap_lru);
+      if (e == NULL) // swap space is exhausted
+        return NULL;
+        
+      struct swap_page *ee;
+      ee = lru_entry (e, struct swap_page, lru_elem);
+      ASSERT (ee != NULL);
+      
+      vm_swap_disposed (ee->thread, ee->user_addr);
+      swap_page_free (ee);
+    }
+  if (result == BITMAP_ERROR)
+    return NULL;
+    
+  struct swap_page *page = allocator_alloc (&pages_allocator, 1);
+  ASSERT (page != NULL);
+  memset (page, 0, sizeof (*page));
+  page->id = result;
+  return page;
 }
 
 #define MIN(A,B)         \
@@ -170,45 +181,21 @@ swap_get_disposable_page (void)
 })
 
 static void
-swap_write (swap_t         id,
-            struct thread *owner,
-            void          *user_addr,
-            void          *src)
+swap_write (struct swap_page *ee,
+            void             *src)
 {
   ASSERT (intr_get_level () == INTR_ON);
-  ASSERT (owner != NULL);
-  ASSERT (user_addr != NULL);
-  ASSERT (pg_ofs (user_addr) == 0);
+  ASSERT (ee != NULL);
+  ASSERT (ee->thread != NULL);
+  ASSERT (ee->user_addr != NULL);
+  ASSERT (pg_ofs (ee->user_addr) == 0);
   ASSERT (src != NULL);
   ASSERT (lock_held_by_current_thread (&swap_lock));
   
-  ASSERT (is_valid_swap_id (id));
-  
-  struct swap_page *ee = &swapped_pages_space[id];
-  if (ee->thread == NULL)
-    {
-      ASSERT (ee->user_addr == NULL);
-      ASSERT (!bitmap_test (used_pages, id));
-      
-      bitmap_mark (used_pages, id);
-      ee->thread = owner;
-      ee->user_addr = user_addr;
-      hash_insert (&owner->swap_pages, &ee->hash_elem);
-    }
-  else
-    {
-      ASSERT (ee->thread == owner);
-      ASSERT (ee->user_addr == user_addr);
-      ASSERT (bitmap_test (used_pages, id));
-    }
   lru_use (&swap_lru, &ee->lru_elem);
-  
   ee->cksum = cksum (src, PGSIZE);
   
-  if (id == 0)
-    printf ("WROTE %08x %08x\n", ee->cksum, ee->cksum);
-  
-  block_sector_t sector = swap_page_to_sector (id);
+  block_sector_t sector = swap_page_to_sector (ee->id);
   int i;
   for (i = 0; i < PGSIZE/BLOCK_SECTOR_SIZE; ++i)
     {
@@ -230,24 +217,23 @@ swap_alloc_and_write (struct thread *owner,
   ASSERT (src != NULL);
   
   lock_acquire (&swap_lock);
+  bool result = false;
   
   struct swap_page *ee = swap_get_page_of_owner (owner, user_addr);
-  if (ee != NULL)
+  if (ee == NULL)
     {
-      swap_write (swap_page_get_id (ee), owner, user_addr, src);
-      lock_release (&swap_lock);
-      return true;
+      ee = swap_page_alloc ();
+      if (ee == NULL)
+        goto end;
+      ee->thread = owner;
+      ee->user_addr = user_addr;
     }
+  swap_write (ee, src);
+  result = true;
   
-  swap_t id = swap_get_disposable_page ();
-  if (id == SWAP_FAIL)
-    {
-      lock_release (&swap_lock);
-      return false;
-    }
-  swap_write (id, owner, user_addr, src);
+end:
   lock_release (&swap_lock);
-  return true;
+  return result;
 }
 
 bool
@@ -258,17 +244,17 @@ swap_dispose (struct thread *owner, void *user_addr)
   ASSERT (pg_ofs (user_addr) == 0);
   
   lock_acquire (&swap_lock);
+  bool result = false;
   
   struct swap_page *ee = swap_get_page_of_owner (owner, user_addr);
   if (!ee)
     {
-      lock_release (&swap_lock);
-      return false;
+      swap_page_free (ee);
+      result = true;
     }
-  swap_dispose_page (ee);
-  
+    
   lock_release (&swap_lock);
-  return true;
+  return result;
 }
 
 bool
@@ -291,7 +277,7 @@ swap_read_and_retain (struct thread *owner,
       return false;
     }
   
-  block_sector_t sector = swap_page_to_sector (swap_page_get_id (ee));
+  block_sector_t sector = swap_page_to_sector (ee->id);
   int i;
   uint8_t *v = dest;
   for (i = 0; i < PGSIZE/BLOCK_SECTOR_SIZE; ++i)
@@ -312,12 +298,12 @@ swap_read_and_retain (struct thread *owner,
             "Memory: %p, expected: 0x%08x, calcuted: 0x%08x\n"
             "EXPECT ERRORS!\n"
             "\n",
-            swap_page_get_id (ee), dest, user_addr, ee->cksum, read_cksum);
+            ee->id, dest, user_addr, ee->cksum, read_cksum);
             
   if (result)
     lru_use (&swap_lru, &ee->lru_elem);
   else
-    swap_dispose_page (ee);
+    swap_page_free (ee);
     
   lock_release (&swap_lock);
   return result;
@@ -356,7 +342,7 @@ swap_clean_sub (struct hash_elem *e, void *t)
   ASSERT (e != NULL);
   struct swap_page *ee = hash_entry (e, struct swap_page, hash_elem);
   ASSERT (ee->thread == t);
-  swap_dispose_page_real (ee);
+  swap_page_free (ee);
 }
 
 void
