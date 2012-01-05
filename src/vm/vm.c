@@ -17,10 +17,6 @@
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
 #define SWAP_PERCENT_AT_ONCE 3
 
-static size_t swap_at_once;
-
-#define MAX_ALLOC_RETRIES 32
-
 #define VMLP_MAGIC (('V'<<16) + ('L'<<8) + 'P')
 typedef char _CASSERT_VMLP_MAGIC24[0 - !(VMLP_MAGIC < (1<<24))];
 
@@ -76,14 +72,10 @@ vm_init (void)
   
   size_t user_pool_size;
   palloc_fill_ratio (NULL, NULL, NULL, &user_pool_size);
-  swap_at_once = (user_pool_size*SWAP_PERCENT_AT_ONCE + 99) / 100;
-  if (swap_at_once < 3)
-    swap_at_once = 3;
   
   vm_is_initialized = true;
   
-  printf ("Initialized user's virtual memory. Swapping %u pages at once.\n",
-          swap_at_once);
+  printf ("Initialized user's virtual memory.\n");
 }
 
 static inline struct vm_page *
@@ -336,10 +328,14 @@ vm_tick (struct thread *t)
   if (!vm_is_initialized || lock_held_by_current_thread (&vm_lock))
     return;
   
-  hash_apply (&t->vm_pages, &vm_tick_sub);
+  if (lock_try_acquire (&vm_lock))
+    {
+      hash_apply (&t->vm_pages, &vm_tick_sub);
+      lock_release (&vm_lock);
+    }
 }
 
-static bool
+static void *
 vm_free_a_page (void)
 {
   ASSERT (intr_get_level () == INTR_ON);
@@ -347,29 +343,29 @@ vm_free_a_page (void)
   
   intr_disable ();
   
-  bool result = false;
+  bool result;
+  void *kpage = NULL;
   for (;;)
     {
       struct lru_elem *e = lru_peek_least (&pages_lru);
       if (!e)
-        break;
+        {
+          result = false;
+          break;
+        }
       struct vm_page *ee = lru_entry (e, struct vm_page, lru_elem);
       if (vm_handle_page_usage (ee) != VMPU_CLEAR)
         continue;
         
-      void *kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
+      kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
       ASSERT (kpage != NULL);
       
       switch (ee->type)
         {
-        case VMPPT_UNUSED:
-          PANIC ("ee->type == VMPPT_UNUSED");
-          
         case VMPPT_EMPTY:
           {
             lru_dispose (&pages_lru, &ee->lru_elem, false);
             pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
-            palloc_free_page (kpage);
             result = true;
             break;
           }
@@ -384,12 +380,7 @@ vm_free_a_page (void)
             intr_disable ();
             
             if (result)
-              {
-                lru_dispose (&pages_lru, &ee->lru_elem, false);
-                palloc_free_page (kpage);
-                bool smr UNUSED = swap_must_retain (ee->thread, ee->user_addr);
-                ASSERT (smr);
-              }
+              lru_dispose (&pages_lru, &ee->lru_elem, false);
             else
               {
                 pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
@@ -406,37 +397,21 @@ vm_free_a_page (void)
               {
                 lru_dispose (&pages_lru, &ee->lru_elem, false);
                 pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
-                palloc_free_page (kpage);
               }
             break;
           }
           
+        case VMPPT_UNUSED:
         case VMPPT_COUNT:
         default:
+          result = false;
           PANIC ("ee->type == %d", ee->type);
         }
       break;
     }
     
   intr_enable();
-  return result;
-}
-
-static bool
-vm_free_some_memory (void)
-{
-  ASSERT (intr_get_level () == INTR_ON);
-  ASSERT (lock_held_by_current_thread (&vm_lock));
-  
-  size_t freed = 0;
-  while (freed < swap_at_once && !lru_is_empty (&pages_lru))
-    {
-      if (vm_free_a_page ())
-        ++freed;
-      else
-        break;
-    }
-  return freed > 0;
+  return result ? kpage : NULL;
 }
 
 static void *
@@ -450,17 +425,32 @@ vm_alloc_kpage (struct vm_page *ee)
   ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
-  void *kpage = vm_palloc ();
-  if (kpage == NULL)
-    return NULL;
-  
-  if (!pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
-                         !ee->readonly))
+  int i;
+  for (i = 0; i < 2; ++i)
     {
+      void *kpage = vm_palloc ();
+      if (kpage == NULL)
+        return NULL;
+        
+      if (pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
+                            !ee->readonly))
+        {
+          lru_use (&pages_lru, &ee->lru_elem);
+          return kpage;
+        }
+        
       palloc_free_page (kpage);
-      return NULL;
+      int j;
+      for (j = 0; j < 2; ++j)
+        {
+          kpage = vm_free_a_page ();
+          if (kpage)
+            palloc_free_page (kpage);
+          else
+            break;
+        }
     }
-  return kpage;
+  return NULL;
 }
 
 void *
@@ -472,17 +462,9 @@ vm_palloc (void)
   if (!outer_lock)
     lock_acquire (&vm_lock);
   
-  void *kpage = NULL;
-  
-  signed retry;
-  for (retry = MAX_ALLOC_RETRIES; retry > 0; --retry)
-    {
-      kpage = palloc_get_page (PAL_USER);
-      if (kpage != NULL)
-        break;
-      if (!vm_free_some_memory ())
-        break;
-    }
+  void *kpage = palloc_get_page (PAL_USER);
+  if (kpage == NULL)
+    kpage = vm_free_a_page ();
     
   if (!outer_lock)
     lock_release (&vm_lock);
@@ -508,6 +490,7 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
   struct vm_page *ee = vm_get_logical_page (t, user_addr);
   if (ee == NULL)
     {
+      *kpage_ = NULL;
       result = VMER_SEGV;
       goto end;
     }
@@ -515,8 +498,6 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
   *kpage_ = pagedir_get_page (t->pagedir, user_addr);
   if (*kpage_ != NULL)
     {
-      if (lru_is_interior (&ee->lru_elem))
-        lru_use (&pages_lru, &ee->lru_elem);
       result = VMER_OK;
       goto end;
     }
@@ -528,12 +509,9 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
       goto end;
     }
   
+  
   switch (ee->type)
     {
-      case VMPPT_UNUSED:
-        // VMPPT_UNUSED is a transient state and cannot occur
-        PANIC ("ee->type == VMPPT_UNUSED");
-        
       case VMPPT_EMPTY:
         memset (*kpage_, 0, PGSIZE);
         result = VMER_OK;
@@ -545,27 +523,32 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
         
       case VMPPT_SWAPPED:
         {
-          bool swap_in_result;
-          swap_in_result = swap_read_and_retain (ee->thread, ee->user_addr,
-                                                 *kpage_);
-          result = swap_in_result ? VMER_OK : VMER_SEGV;
+          if (swap_read_and_retain (ee->thread, ee->user_addr, *kpage_))
+            result = VMER_OK;
+          else
+            result = VMER_SEGV;
           break;
         }
         
+      case VMPPT_UNUSED:
       case VMPPT_COUNT:
       default:
         PANIC ("ee->type == %d", ee->type);
     }
     
+end:
   if (result == VMER_OK)
-    lru_use (&pages_lru, &ee->lru_elem);
+    {
+      if (lru_is_interior (&ee->lru_elem))
+        lru_use (&pages_lru, &ee->lru_elem);
+      ASSERT (*kpage_ != NULL);
+    }
   else
     {
       palloc_free_page (*kpage_);
       *kpage_ = NULL;
     }
     
-end:
   if (!outer_lock)
     lock_release (&vm_lock);
   return result;

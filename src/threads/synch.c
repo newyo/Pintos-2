@@ -231,7 +231,7 @@ lock_try_acquire (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
-  ASSERT (!intr_context ());
+  //ASSERT (!intr_context ());
 
   bool success = sema_try_down (&lock->semaphore);
   if (success)
@@ -255,7 +255,7 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-  ASSERT (!intr_context ());
+  //ASSERT (!intr_context ());
   
   enum intr_level old_level = intr_disable ();
   list_remove_properly (&lock->holder_elem);

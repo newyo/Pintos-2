@@ -150,12 +150,14 @@ page_fault (struct intr_frame *f)
   bool not_present = (f->error_code & PF_P) == 0;
   bool write = (f->error_code & PF_W) != 0;
   bool user = (f->error_code & PF_U) != 0;
+  
   /*
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
+  printf ("Page fault at %p: %s error %s page in %s context (%p).\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
-          user ? "user" : "kernel");
+          user ? "user" : "kernel",
+          f->eip);
   */
 #ifndef VM
   /* To implement virtual memory, delete the rest of the function
@@ -175,23 +177,23 @@ page_fault (struct intr_frame *f)
   struct thread *t = thread_current ();
   struct vm_ensure_group g;
   vm_ensure_group_init (&g, t);
+  
   void *kpage;
   vm_ensure_group_add (&g, pg_round_down (f->eip), &kpage);
   enum vm_ensure_result r = vm_ensure (t, pg_round_down (fault_addr), &kpage);
+  ASSERT (pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) == kpage);
+  
   vm_ensure_group_destroy (&g);
   
   switch (r)
     {
       case VMER_OK:
         ASSERT (kpage != NULL);
-        ASSERT (pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) ==
-                kpage);
         return;
         
       case VMER_SEGV:
       case VMER_OOM:
-        ASSERT (pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) ==
-                NULL);
+        ASSERT (kpage == NULL);
         thread_exit ();
         
       default:

@@ -204,20 +204,16 @@ thread_print_tick_status (struct thread *t)
   ssize = swap_stats_pages ();
   sfree = ssize - swap_stats_full_pages ();
   
-  uint32_t kratio = fp_round (fp_percent_from_uint (kfree, ksize));
-  uint32_t uratio = fp_round (fp_percent_from_uint (ufree, usize));
-  uint32_t swapration = fp_round (fp_percent_from_uint (sfree, ssize));
-  
-  UNSAFE_PRINTF ("    %8u. %s    kernel: %4u/% 4d (%2u%%)"
-                              "    user: %4u/% 4d (%2u%%)"
-                              "    swap: %4u/% 4d (%2u%%)\n",
+  UNSAFE_PRINTF ("    %8u. %s    kernel: %4u/% 4d (%3u%%)"
+                              "    user: %4u/% 4d (%3u%%)"
+                              "    swap: %4u/% 4d (%3u%%)\n",
                  tickcount++,
                  t == idle_thread ? "IDLE  " :
                        t->pagedir ? "USER  " :
                                     "KERNEL",
-                 kfree, ksize, kratio,
-                 ufree, usize, uratio,
-                 sfree, ssize, swapration);
+                 kfree, ksize, fp_round (fp_percent_from_uint (kfree, ksize)),
+                 ufree, usize, fp_round (fp_percent_from_uint (ufree, usize)),
+                 sfree, ssize, fp_round (fp_percent_from_uint (sfree, ssize)));
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -227,7 +223,7 @@ thread_tick (void)
 {
   struct thread *t = thread_current ();
   ASSERT_STACK_NOT_EXCEEDED (t);
-
+  
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -254,6 +250,11 @@ thread_tick (void)
       thread_foreach2 (thread_recalculate_recent_cpu, NULL);
       thread_foreach2 (thread_recalculate_priorities, NULL);
     }
+    
+#ifdef VM
+  if (t->pagedir != NULL)
+    vm_tick (t);
+#endif
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -519,8 +520,6 @@ thread_yield (void)
 #ifdef VM
   if (tick_print_free)
     thread_print_tick_status (cur);
-  if (cur->pagedir != NULL)
-    vm_tick (cur);
 #endif
 
   if (cur != idle_thread)

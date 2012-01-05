@@ -628,17 +628,24 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      void *kpage = vm_alloc_and_ensure (t, upage, !writable);
-      if (kpage == NULL)
+      if (!vm_alloc_zero (t, upage, !writable))
         return false;
-
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      if (page_read_bytes > 0)
         {
-          vm_dispose (t, upage);
-          return false; 
+          struct vm_ensure_group g;
+          vm_ensure_group_init (&g, t);
+          
+          void *kpage;
+          bool result = vm_ensure_group_add (&g, upage, &kpage) == VMER_OK;
+          result = result && (file_read (file, kpage, page_read_bytes) ==
+                              (int) page_read_bytes);
+          pagedir_set_dirty (t->pagedir, upage, true);
+          
+          vm_ensure_group_destroy (&g);
+          if (!result)
+            return false; 
         }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
       /* Advance. */
       read_bytes -= page_read_bytes;

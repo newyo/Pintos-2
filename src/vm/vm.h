@@ -28,9 +28,9 @@ void vm_tick (struct thread *t);
 
 enum vm_ensure_result
 {
-  VMER_OK   = 1,
-  VMER_SEGV = 3,
-  VMER_OOM  = 5,
+  VMER_OK,
+  VMER_SEGV,
+  VMER_OOM,
 };
 enum vm_ensure_result vm_ensure (struct thread  *t,
                                  void           *user_addr,
@@ -44,8 +44,6 @@ enum vm_is_readonly_result
   VMIR_INVALID,
   VMIR_READONLY,
   VMIR_READWRITE,
-  
-  VMIR_LENGTH
 };
 enum vm_is_readonly_result vm_is_readonly (struct thread *t, void *user_addr);
 
