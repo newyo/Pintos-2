@@ -513,6 +513,8 @@ thread_yield (void)
   enum intr_level old_level;
   
   ASSERT (!intr_context ());
+
+  old_level = intr_disable ();
     
 #ifdef VM
   if (tick_print_free)
@@ -521,7 +523,6 @@ thread_yield (void)
     vm_tick (cur);
 #endif
 
-  old_level = intr_disable ();
   if (cur != idle_thread)
     list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
