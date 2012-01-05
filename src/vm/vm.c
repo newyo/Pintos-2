@@ -730,7 +730,8 @@ enum vm_ensure_result
 vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
 {
   ASSERT (g != NULL);
-  ASSERT (user_addr != NULL);
+  if (user_addr < MIN_ALLOC_ADDR || !is_user_vaddr (user_addr))
+    return VMER_SEGV;
   
   lock_acquire (&vm_lock);
     
