@@ -737,7 +737,7 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
   enum vm_ensure_result result = vm_ensure (g->thread, user_addr, kpage_);
   if (result != VMER_OK)
     {
-      PANIC("FAIL FOR %8p", user_addr); // TODO: remove
+      //PANIC("FAIL FOR %8p", user_addr); // TODO: remove
       lock_release (&vm_lock);
       return result;
     }
@@ -751,7 +751,6 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
     goto end;
   if (page == NULL)
     {
-      ASSERT(0); // TODO: remove
       result = VMER_SEGV;
       goto end;
     }

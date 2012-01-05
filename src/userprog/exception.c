@@ -176,10 +176,8 @@ page_fault (struct intr_frame *f)
   struct vm_ensure_group g;
   vm_ensure_group_init (&g, t);
   void *kpage;
-  enum vm_ensure_result r;
-  r = vm_ensure_group_add (&g, pg_round_down (f->eip), &kpage);
-  ASSERT (r == VMER_OK);
-  r = vm_ensure (t, pg_round_down (fault_addr), &kpage);
+  vm_ensure_group_add (&g, pg_round_down (f->eip), &kpage);
+  enum vm_ensure_result r = vm_ensure (t, pg_round_down (fault_addr), &kpage);
   vm_ensure_group_destroy (&g);
   
   switch (r)
