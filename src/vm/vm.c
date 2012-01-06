@@ -115,8 +115,8 @@ vm_init_thread (struct thread *t)
   
   //printf ("   INITIALISIERE VM FÜR %8p.\n", t);
   
-  lock_acquire (&vm_lock);
-  enum intr_level old_level = intr_disable ();
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
   
   swap_init_thread (t);
   hash_init (&t->vm_pages, &vm_thread_page_hash, &vm_thread_page_less, t);
@@ -180,8 +180,8 @@ vm_clean (struct thread *t)
   ASSERT (t != NULL);
   //printf ("   CLEANE VM VON %8p.\n", t);
     
-  lock_acquire (&vm_lock);
-  enum intr_level old_level = intr_disable ();
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
   
   mmap_clean (t);
   hash_destroy (&t->vm_pages, &vm_clean_sub);
@@ -198,6 +198,7 @@ vm_alloc_zero (struct thread *t, void *addr, bool readonly)
   
   bool result;
   
+  // TODO: my have race conditions
   bool outer_lock = lock_held_by_current_thread (&vm_lock);
   if (!outer_lock)
     lock_acquire (&vm_lock);
@@ -360,6 +361,7 @@ vm_free_a_page (void)
   for (;;)
     {
       struct lru_elem *e = lru_peek_least (&pages_lru);
+      ASSERT (e != NULL); // TODO: remove line
       if (!e)
         {
           result = false;
@@ -437,31 +439,32 @@ vm_alloc_kpage (struct vm_page *ee)
   ASSERT (pagedir_get_page (ee->thread->pagedir, ee->user_addr) == NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
-  int i;
-  for (i = 0; i < 2; ++i)
+  int i, j;
+  for (i = 0; i < 3; ++i)
     {
       void *kpage = vm_palloc ();
-      if (kpage == NULL)
-        return NULL;
-        
-      if (pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
-                            !ee->readonly))
+      if (kpage != NULL)
         {
-          lru_use (&pages_lru, &ee->lru_elem);
-          return kpage;
+          if (pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
+                                !ee->readonly))
+            {
+              lru_use (&pages_lru, &ee->lru_elem);
+              return kpage;
+            }
+          palloc_free_page (kpage);
         }
-        
-      palloc_free_page (kpage);
-      int j;
-      for (j = 0; j < 2; ++j)
+      for (j = 0; j < 5; ++j)
         {
           kpage = vm_free_a_page ();
-          if (kpage)
-            palloc_free_page (kpage);
-          else
-            break;
+          if (kpage == NULL)
+            {
+              ASSERT (0); // TODO: remove line
+              return NULL;
+            }
+          palloc_free_page (kpage);
         }
     }
+  ASSERT (0); // TODO: remove line
   return NULL;
 }
 
@@ -523,6 +526,7 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
   *kpage_ = vm_alloc_kpage (ee);
   if (!*kpage_)
     {
+      ASSERT (0); // TODO: remove line
       result = VMER_OOM;
       goto end;
     }
@@ -576,10 +580,10 @@ vm_dispose (struct thread *t, void *addr)
 {
   assert_t_addr (t, addr);
   
+  // TODO: may have race conditions
   bool outer_lock = lock_held_by_current_thread (&vm_lock);
   if (!outer_lock)
     lock_acquire (&vm_lock);
-    
   enum intr_level old_level = intr_disable ();
   
   struct vm_page *ee = vm_get_logical_page (t, addr);
@@ -587,7 +591,6 @@ vm_dispose (struct thread *t, void *addr)
   
   if (!outer_lock)
     lock_release (&vm_lock);
-  
   intr_set_level (old_level);
 }
 
@@ -597,27 +600,26 @@ vm_alloc_and_ensure (struct thread *t, void *addr, bool readonly)
   assert_t_addr (t, addr);
   ASSERT (intr_get_level () == INTR_ON);
   
-  lock_acquire (&vm_lock);
+  void *kpage = NULL;
+  
+  bool outer_lock = lock_held_by_current_thread (&vm_lock);
+  if (!outer_lock)
+    lock_acquire (&vm_lock);
   
   if (!vm_alloc_zero (t, addr, readonly))
-    {
-      lock_release (&vm_lock);
-      return NULL;
-    }
+    goto end;
   
-  void *kpage;
   enum vm_ensure_result result = vm_ensure (t, addr, &kpage);
   if (result == VMER_OK)
-    {
-      lock_release (&vm_lock);
-      return kpage;
-    }
+    goto end;
     
   ASSERT (result == VMER_OOM);
   vm_dispose (t, addr);
-  lock_release (&vm_lock);
   
-  return NULL;
+end:
+  if (!outer_lock)
+    lock_release (&vm_lock);
+  return kpage;
 }
 
 enum vm_is_readonly_result
@@ -684,13 +686,14 @@ vm_ensure_group_less (const struct hash_elem *a,
 }
 
 void
-vm_ensure_group_init (struct vm_ensure_group *g, struct thread *t)
+vm_ensure_group_init (struct vm_ensure_group *g, struct thread *t, void *esp)
 {
   ASSERT (g != NULL);
   ASSERT (t != NULL);
   
   memset (g, 0, sizeof (*g));
   g->thread = t;
+  g->esp = esp;
   hash_init (&g->entries, &vm_ensure_group_hash, &vm_ensure_group_less, t);
 }
 
@@ -717,13 +720,30 @@ vm_ensure_group_destroy (struct vm_ensure_group *g)
 {
   ASSERT (g != NULL);
   
-  lock_acquire (&vm_lock);
-  enum intr_level old_level = intr_disable ();
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
   
   hash_destroy (&g->entries, &vm_ensure_group_dispose_real);
   
   lock_release (&vm_lock);
   intr_set_level (old_level);
+}
+
+#define MAX_STACK (8*1024*1024)
+
+static inline bool __attribute__ ((const))
+vm_is_stack_addr (void *user_addr)
+{
+  return (user_addr < PHYS_BASE) && (user_addr >= PHYS_BASE - MAX_STACK);
+}
+
+static inline bool __attribute__ ((const))
+vm_is_valid_stack_addr (void *esp, void *user_addr)
+{
+  return vm_is_stack_addr (esp) &&
+         (((esp    <= user_addr) && vm_is_stack_addr (user_addr))    ||
+          ((esp-4  == user_addr) && vm_is_stack_addr (user_addr-4))  ||
+          ((esp-32 == user_addr) && vm_is_stack_addr (user_addr-32)));
 }
 
 enum vm_ensure_result
@@ -735,19 +755,23 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
   
   lock_acquire (&vm_lock);
     
-  enum vm_ensure_result result = vm_ensure (g->thread, user_addr, kpage_);
-  if (result != VMER_OK)
+  enum vm_ensure_result result;
+  result = vm_ensure (g->thread, pg_round_down (user_addr), kpage_);
+  ASSERT (result != VMER_OOM);
+  if (result == VMER_SEGV && vm_is_valid_stack_addr (g->esp, user_addr))
     {
-      //PANIC("FAIL FOR %8p", user_addr); // TODO: remove
-      lock_release (&vm_lock);
-      return result;
+      *kpage_ = vm_alloc_and_ensure (g->thread, pg_round_down (user_addr),
+                                     false);
+      result = *kpage_ ? VMER_OK : VMER_OOM;
     }
+  if (result != VMER_OK)
+    goto end2;
   
   enum intr_level old_level = intr_disable ();
   
   struct vm_page *page;
   struct vm_ensure_group_entry *entry;
-  entry = vm_ensure_group_get (g, user_addr, &page);
+  entry = vm_ensure_group_get (g, pg_round_down (user_addr), &page);
   if (entry != NULL)
     goto end;
   if (page == NULL)
@@ -764,9 +788,15 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
     }
     
 end:
-  lock_release (&vm_lock);
+  ASSERT (result == VMER_OK);
   intr_set_level (old_level);
-  return VMER_OK;
+end2:
+  ASSERT (result == VMER_OK ? *kpage_ != NULL : true);
+  ASSERT (result != VMER_OK ? *kpage_ == NULL : true);
+  lock_release (&vm_lock);
+  //printf ("(%d) kpage_ = %p -> %p\n", result, kpage_, *kpage_);
+  ASSERT (result != VMER_OOM);
+  return result;
 }
 
 bool
@@ -775,8 +805,8 @@ vm_ensure_group_remove (struct vm_ensure_group *g, void *user_addr)
   ASSERT (g != NULL);
   ASSERT (user_addr != NULL);
   
-  lock_acquire (&vm_lock);
-  enum intr_level old_level = intr_disable ();
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
   
   struct vm_page *page;
   struct vm_ensure_group_entry *entry;

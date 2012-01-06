@@ -28,7 +28,7 @@ void vm_tick (struct thread *t);
 
 enum vm_ensure_result
 {
-  VMER_OK,
+  VMER_OK = 1,
   VMER_SEGV,
   VMER_OOM,
 };
@@ -51,8 +51,11 @@ struct vm_ensure_group
 {
   struct thread *thread;
   struct hash    entries;
+  void          *esp;
 };
-void vm_ensure_group_init (struct vm_ensure_group *g, struct thread *t);
+void vm_ensure_group_init (struct vm_ensure_group *g,
+                           struct thread          *t,
+                           void                   *esp);
 void vm_ensure_group_destroy (struct vm_ensure_group *g);
 enum vm_ensure_result vm_ensure_group_add (struct vm_ensure_group *g,
                                            void *user_addr,

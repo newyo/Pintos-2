@@ -475,7 +475,7 @@ static void
 syscall_handler (struct intr_frame *if_) 
 {
   struct vm_ensure_group g;
-  vm_ensure_group_init (&g, thread_current ());
+  vm_ensure_group_init (&g, thread_current (), if_->esp);
   
   int  *nr       = &((int   *) if_->esp)[0];
   void *arg1     = &((void **) if_->esp)[1];

@@ -624,7 +624,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (page_read_bytes > 0)
         {
           struct vm_ensure_group g;
-          vm_ensure_group_init (&g, t);
+          vm_ensure_group_init (&g, t, NULL);
           
           void *kpage;
           bool result = vm_ensure_group_add (&g, upage, &kpage) == VMER_OK;

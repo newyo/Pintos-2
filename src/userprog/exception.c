@@ -115,23 +115,6 @@ kill (struct intr_frame *f)
     }
 }
 
-#define MAX_STACK (8*1024*1024)
-
-static inline bool __attribute__ ((pure))
-is_stack_addr (void *addr)
-{
-  return (addr < PHYS_BASE) && (addr >= PHYS_BASE - MAX_STACK);
-}
-
-static inline bool __attribute__ ((pure))
-pf_is_in_stack (void *esp, void *fault_addr)
-{
-  return is_stack_addr (esp) &&
-         (((esp    <= fault_addr) && is_stack_addr (fault_addr))    ||
-          ((esp-4  == fault_addr) && is_stack_addr (fault_addr-4))  ||
-          ((esp-32 == fault_addr) && is_stack_addr (fault_addr-32)));
-}
-
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -193,35 +176,32 @@ page_fault (struct intr_frame *f)
     
   struct thread *t = thread_current ();
   struct vm_ensure_group g;
-  vm_ensure_group_init (&g, t);
+  vm_ensure_group_init (&g, t, f->esp);
   
   void *kpage;
-  vm_ensure_group_add (&g, pg_round_down (f->eip), &kpage);
-  enum vm_ensure_result r = vm_ensure (t, pg_round_down (fault_addr), &kpage);
-  if (r == VMER_SEGV && pf_is_in_stack (f->esp, fault_addr))
-    {
-      // TODO: stack growth logic belongs to vm to be usable in syscalls
-      // Make vm_alloc_and_ensure taking the esp as a paramter?
-      kpage = vm_alloc_and_ensure (t, pg_round_down (fault_addr), false);
-      r = kpage ? VMER_OK : VMER_OOM;
-    }
-  ASSERT (pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) == kpage);
+  (void) vm_ensure_group_add (&g, pg_round_down (f->eip), &kpage);
+  enum vm_ensure_result result = vm_ensure_group_add (&g, fault_addr, &kpage);
+  //printf ("(%d) &kpage = %p -> %p\n", result, &kpage, kpage);
+  //ASSERT (pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) == kpage);
   
   vm_ensure_group_destroy (&g);
   
-  switch (r)
+  switch (result)
     {
       case VMER_OK:
-        ASSERT (kpage != NULL);
+        //ASSERT (kpage != NULL);
         return;
         
       case VMER_SEGV:
-      case VMER_OOM:
-        ASSERT (kpage == NULL);
+        //ASSERT (kpage == NULL);
         thread_exit ();
         
+      case VMER_OOM:
+        //ASSERT (kpage == NULL);
+        kill (f);
+        
       default:
-        PANIC ("Wrong vm_ensure_result: %u", r);
+        PANIC ("Wrong vm_ensure_result: %u", result);
     }
     
 #endif

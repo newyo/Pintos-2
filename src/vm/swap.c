@@ -148,6 +148,7 @@ swap_page_alloc (void)
         break;
       
       struct lru_elem *e = lru_peek_least (&swap_lru);
+      ASSERT (e != NULL); // TODO: remove line
       if (e == NULL) // swap space is exhausted
         return NULL;
         
