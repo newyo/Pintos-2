@@ -474,12 +474,16 @@ vm_palloc (void)
 enum vm_ensure_result
 vm_ensure (struct thread *t, void *user_addr, void **kpage_)
 {
-  if (user_addr < MIN_ALLOC_ADDR || !is_user_vaddr (user_addr))
-    return VMER_SEGV;
-    
-  assert_t_addr (t, user_addr);
   ASSERT (kpage_ != NULL);
   ASSERT (intr_get_level () == INTR_ON);
+  
+  if (user_addr < MIN_ALLOC_ADDR || !is_user_vaddr (user_addr))
+    {
+      *kpage_ = NULL;
+      return VMER_SEGV;
+    }
+    
+  assert_t_addr (t, user_addr);
   
   bool outer_lock = lock_held_by_current_thread (&vm_lock);
   if (!outer_lock)
