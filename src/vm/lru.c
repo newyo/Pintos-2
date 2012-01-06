@@ -69,7 +69,7 @@ lru_dispose (struct lru *l, struct lru_elem *e, bool run_dispose_action)
   ASSERT (e->lru_list == l);
   ASSERT (list_is_interior (&e->elem));
   
-  list_remove (&e->elem);
+  list_remove_properly (&e->elem);
   e->lru_list = NULL;
   
   --l->item_count;

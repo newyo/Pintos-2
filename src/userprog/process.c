@@ -655,10 +655,6 @@ setup_stack (void **esp)
 
   if (!vm_alloc_and_ensure (t, ((uint8_t *) PHYS_BASE) - PGSIZE, false))
     return false;
-  size_t i;
-  for (i = PROCESS_STACK_SIZE/PGSIZE - 1; i >= 1; --i)
-    if(!vm_alloc_zero (t, ((uint8_t *) PHYS_BASE) - (i+1) * PGSIZE, false))
-      return false; // don't dispose pages, thread will be killed, anyway
   
   *esp = PHYS_BASE;
   return true;

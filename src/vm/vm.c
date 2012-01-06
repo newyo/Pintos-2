@@ -515,6 +515,8 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
   if (*kpage_ != NULL)
     {
       result = VMER_OK;
+      if (lru_is_interior (&ee->lru_elem))
+        lru_use (&pages_lru, &ee->lru_elem);
       goto end;
     }
   
@@ -551,12 +553,11 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
       default:
         PANIC ("ee->type == %d", ee->type);
     }
+  lru_use (&pages_lru, &ee->lru_elem);
     
 end:
   if (result == VMER_OK)
     {
-      if (lru_is_interior (&ee->lru_elem))
-        lru_use (&pages_lru, &ee->lru_elem);
       ASSERT (*kpage_ != NULL);
     }
   else

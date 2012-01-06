@@ -115,6 +115,23 @@ kill (struct intr_frame *f)
     }
 }
 
+#define MAX_STACK (8*1024*1024)
+
+static inline bool __attribute__ ((pure))
+is_stack_addr (void *addr)
+{
+  return (addr < PHYS_BASE) && (addr >= PHYS_BASE - MAX_STACK);
+}
+
+static inline bool __attribute__ ((pure))
+pf_is_in_stack (void *esp, void *fault_addr)
+{
+  return is_stack_addr (esp) &&
+         (((esp    <= fault_addr) && is_stack_addr (fault_addr))    ||
+          ((esp-4  == fault_addr) && is_stack_addr (fault_addr-4))  ||
+          ((esp-32 == fault_addr) && is_stack_addr (fault_addr-32)));
+}
+
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -181,6 +198,11 @@ page_fault (struct intr_frame *f)
   void *kpage;
   vm_ensure_group_add (&g, pg_round_down (f->eip), &kpage);
   enum vm_ensure_result r = vm_ensure (t, pg_round_down (fault_addr), &kpage);
+  if (r == VMER_SEGV && pf_is_in_stack (f->esp, fault_addr))
+    {
+      kpage = vm_alloc_and_ensure (t, pg_round_down (fault_addr), false);
+      r = kpage ? VMER_OK : VMER_OOM;
+    }
   ASSERT (pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) == kpage);
   
   vm_ensure_group_destroy (&g);
