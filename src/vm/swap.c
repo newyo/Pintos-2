@@ -200,7 +200,7 @@ swap_alloc_and_write (struct thread *owner,
       ++sector;
     }
   
-  printf ("[OUT] %p  -> %4x (0x%8x)\n", ee->user_addr, ee->id, ee->cksum);
+  //printf ("[OUT] %p  -> %4x (0x%8x)\n", ee->user_addr, ee->id, ee->cksum);
     
   bitmap_mark (used_pages, ee->id);
   return true;
@@ -256,7 +256,7 @@ swap_read_and_retain (struct thread *owner,
             "\n",
             ee->id, dest, user_addr, ee->cksum, read_cksum);
   
-  printf ("[IN ] %p <-  %4x (0x%8x)\n", ee->user_addr, ee->id, read_cksum);
+  //printf ("[IN ] %p <-  %4x (0x%8x)\n", ee->user_addr, ee->id, read_cksum);
             
   if (result)
     lru_use (&swap_lru, &ee->lru_elem);
