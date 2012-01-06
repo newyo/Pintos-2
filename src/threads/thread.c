@@ -19,6 +19,7 @@
 #ifdef VM
 # include "vm/vm.h"
 # include "vm/swap.h"
+# include "vm/mmap.h"
 #endif
 
 /* Random value for struct thread's `magic' member.

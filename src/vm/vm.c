@@ -111,9 +111,19 @@ vm_init_thread (struct thread *t)
 {
   ASSERT (vm_is_initialized);
   ASSERT (t != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   
   //printf ("   INITIALISIERE VM FÜR %8p.\n", t);
+  
+  lock_acquire (&vm_lock);
+  enum intr_level old_level = intr_disable ();
+  
+  swap_init_thread (t);
   hash_init (&t->vm_pages, &vm_thread_page_hash, &vm_thread_page_less, t);
+  mmap_init_thread (t);
+  
+  lock_release (&vm_lock);
+  intr_set_level (old_level);
 }
 
 static void
@@ -173,7 +183,9 @@ vm_clean (struct thread *t)
   lock_acquire (&vm_lock);
   enum intr_level old_level = intr_disable ();
   
+  mmap_clean (t);
   hash_destroy (&t->vm_pages, &vm_clean_sub);
+  swap_clean (t);
   
   lock_release (&vm_lock);
   intr_set_level (old_level);
