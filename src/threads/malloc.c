@@ -8,6 +8,7 @@
 #include "threads/palloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/interrupt.h"
 
 /* A simple implementation of malloc().
 
@@ -40,7 +41,6 @@ struct desc
     size_t block_size;          /* Size of each element in bytes. */
     size_t blocks_per_arena;    /* Number of blocks in an arena. */
     struct list free_list;      /* List of free blocks. */
-    struct lock lock;           /* Lock. */
   };
 
 /* Magic number for detecting arena corruption. */
@@ -67,12 +67,15 @@ static size_t desc_cnt;         /* Number of descriptors. */
 static struct arena *block_to_arena (struct block *);
 static struct block *arena_to_block (struct arena *, size_t idx);
 
+struct lock malloc_lock;
+
 /* Initializes the malloc() descriptors. */
 void
 malloc_init (void) 
 {
+  lock_init (&malloc_lock);
+  
   size_t block_size;
-
   for (block_size = 16; block_size < PGSIZE / 2; block_size *= 2)
     {
       struct desc *d = &descs[desc_cnt++];
@@ -80,7 +83,6 @@ malloc_init (void)
       d->block_size = block_size;
       d->blocks_per_arena = (PGSIZE - sizeof (struct arena)) / block_size;
       list_init (&d->free_list);
-      lock_init (&d->lock);
     }
 }
 
@@ -92,10 +94,15 @@ malloc (size_t size)
   struct desc *d;
   struct block *b;
   struct arena *a;
+  
+  void *result = NULL;
 
   /* A null pointer satisfies a request for 0 bytes. */
   if (size == 0)
     return NULL;
+    
+  enum intr_level old_level;
+  lock_acquire2 (&malloc_lock, &old_level);
 
   /* Find the smallest descriptor that satisfies a SIZE-byte
      request. */
@@ -109,17 +116,16 @@ malloc (size_t size)
       size_t page_cnt = DIV_ROUND_UP (size + sizeof *a, PGSIZE);
       a = palloc_get_multiple (0, page_cnt);
       if (a == NULL)
-        return NULL;
+        goto end;
 
       /* Initialize the arena to indicate a big block of PAGE_CNT
          pages, and return it. */
       a->magic = ARENA_MAGIC;
       a->desc = NULL;
       a->free_cnt = page_cnt;
-      return a + 1;
+      result = a + 1;
+      goto end;
     }
-
-  lock_acquire (&d->lock);
 
   /* If the free list is empty, create a new arena. */
   if (list_empty (&d->free_list))
@@ -129,10 +135,7 @@ malloc (size_t size)
       /* Allocate a page. */
       a = palloc_get_page (0);
       if (a == NULL) 
-        {
-          lock_release (&d->lock);
-          return NULL; 
-        }
+        goto end;
 
       /* Initialize arena and add its blocks to the free list. */
       a->magic = ARENA_MAGIC;
@@ -146,14 +149,18 @@ malloc (size_t size)
   b = list_entry (list_pop_front (&d->free_list), struct block, free_elem);
   a = block_to_arena (b);
   a->free_cnt--;
-  lock_release (&d->lock);
-  return b;
+  result = b;
+  
+end:
+  lock_release (&malloc_lock);
+  intr_set_level (old_level);
+  return result;
 }
 
 /* Allocates and return A times B bytes initialized to zeroes.
    Returns a null pointer if memory is not available. */
 void *
-calloc (size_t a, size_t b) 
+calloc (size_t a, size_t b)
 {
   void *p;
   size_t size;
@@ -196,18 +203,16 @@ realloc (void *old_block, size_t new_size)
       free (old_block);
       return NULL;
     }
-  else 
+    
+  void *new_block = malloc (new_size);
+  if (old_block != NULL && new_block != NULL)
     {
-      void *new_block = malloc (new_size);
-      if (old_block != NULL && new_block != NULL)
-        {
-          size_t old_size = block_size (old_block);
-          size_t min_size = new_size < old_size ? new_size : old_size;
-          memcpy (new_block, old_block, min_size);
-          free (old_block);
-        }
-      return new_block;
+      size_t old_size = block_size (old_block);
+      size_t min_size = new_size < old_size ? new_size : old_size;
+      memcpy (new_block, old_block, min_size);
+      free (old_block);
     }
+  return new_block;
 }
 
 /* Frees block P, which must have been previously allocated with
@@ -215,46 +220,46 @@ realloc (void *old_block, size_t new_size)
 void
 free (void *p) 
 {
-  if (p != NULL)
+  if (p == NULL)
+    return;
+    
+  struct block *b = p;
+  struct arena *a = block_to_arena (b);
+  struct desc *d = a->desc;
+  
+  if (d == NULL) 
     {
-      struct block *b = p;
-      struct arena *a = block_to_arena (b);
-      struct desc *d = a->desc;
-      
-      if (d != NULL) 
-        {
-          /* It's a normal block.  We handle it here. */
+      /* It's a big block.  Free its pages. */
+      palloc_free_multiple (a, a->free_cnt);
+      return;
+    }
+    
+  /* It's a normal block.  We handle it here. */
 
 #ifndef NDEBUG
-          /* Clear the block to help detect use-after-free bugs. */
-          memset (b, 0xcc, d->block_size);
+  /* Clear the block to help detect use-after-free bugs. */
+  memset (b, 0xcc, d->block_size);
 #endif
-  
-          lock_acquire (&d->lock);
 
-          /* Add block to free list. */
-          list_push_front (&d->free_list, &b->free_elem);
+  enum intr_level old_level;
+  lock_acquire2 (&malloc_lock, &old_level);
 
-          /* If the arena is now entirely unused, free it. */
-          if (++a->free_cnt >= d->blocks_per_arena) 
-            {
-              size_t i;
+  /* Add block to free list. */
+  list_push_front (&d->free_list, &b->free_elem);
 
-              ASSERT (a->free_cnt == d->blocks_per_arena);
-              for (i = 0; i < d->blocks_per_arena; i++) 
-                list_remove (&arena_to_block (a, i)->free_elem);
-              palloc_free_page (a);
-            }
+  /* If the arena is now entirely unused, free it. */
+  if (++a->free_cnt >= d->blocks_per_arena) 
+    {
+      size_t i;
 
-          lock_release (&d->lock);
-        }
-      else
-        {
-          /* It's a big block.  Free its pages. */
-          palloc_free_multiple (a, a->free_cnt);
-          return;
-        }
+      ASSERT (a->free_cnt == d->blocks_per_arena);
+      for (i = 0; i < d->blocks_per_arena; i++) 
+        list_remove (&arena_to_block (a, i)->free_elem);
+      palloc_free_page (a);
     }
+
+  lock_release (&malloc_lock);
+  intr_set_level (old_level);
 }
 
 /* Returns the arena that block B is inside. */
