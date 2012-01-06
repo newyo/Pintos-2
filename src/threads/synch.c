@@ -213,9 +213,12 @@ lock_acquire (struct lock *lock)
   enum intr_level old_level = intr_disable ();
   if (!sema_try_down (&lock->semaphore))
     {
-      old_level = intr_disable ();
+      intr_set_level (old_level);
+      
       ASSERT (!intr_context ());
       sema_down (&lock->semaphore);
+      
+      old_level = intr_disable ();
     }
   
   struct thread *current_thread = thread_current ();
