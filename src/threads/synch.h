@@ -3,6 +3,7 @@
 
 #include <list.h>
 #include <stdbool.h>
+#include "threads/interrupt.h"
 
 /* A counting semaphore. */
 struct semaphore 
@@ -14,6 +15,8 @@ struct semaphore
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
 bool sema_try_down (struct semaphore *);
+void sema_down2 (struct semaphore *, enum intr_level *ilevel);
+bool sema_try_down2 (struct semaphore *, enum intr_level *ilevel);
 void sema_up (struct semaphore *);
 void sema_self_test (void);
 
@@ -24,10 +27,13 @@ struct lock
     struct list_elem holder_elem; /* lock list of holder */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
   };
+  
 
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);
+void lock_acquire2 (struct lock *, enum intr_level *ilevel);
+bool lock_try_acquire2 (struct lock *, enum intr_level *ilevel);
 void lock_release (struct lock *);
 bool lock_held_by_current_thread (const struct lock *);
 struct thread *lock_get_holder (struct lock *);

@@ -58,14 +58,12 @@ sema_init (struct semaphore *sema, unsigned value)
    interrupts disabled, but if it sleeps then the next scheduled
    thread will probably turn interrupts back on. */
 void
-sema_down (struct semaphore *sema) 
+sema_down2 (struct semaphore *sema, enum intr_level *ilevel) 
 {
-  enum intr_level old_level;
-
   ASSERT (sema != NULL);
   ASSERT (!intr_context ());
 
-  old_level = intr_disable ();
+  *ilevel = intr_disable ();
   while (sema->value == 0) 
     {
       struct thread *current_thread = thread_current ();
@@ -73,7 +71,6 @@ sema_down (struct semaphore *sema)
       thread_block ();
     }
   sema->value--;
-  intr_set_level (old_level);
 }
 
 /* Down or "P" operation on a semaphore, but only if the
@@ -82,24 +79,16 @@ sema_down (struct semaphore *sema)
 
    This function may be called from an interrupt handler. */
 bool
-sema_try_down (struct semaphore *sema) 
+sema_try_down2 (struct semaphore *sema, enum intr_level *ilevel) 
 {
-  enum intr_level old_level;
-  bool success;
-
   ASSERT (sema != NULL);
 
-  old_level = intr_disable ();
-  if (sema->value > 0) 
-    {
-      sema->value--;
-      success = true; 
-    }
-  else
-    success = false;
-  intr_set_level (old_level);
-
-  return success;
+  *ilevel = intr_disable ();
+  if (sema->value <= 0)
+    return false;
+    
+  sema->value--;
+  return true;
 }
 
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
@@ -205,27 +194,21 @@ lock_init (struct lock *lock)
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
 void
-lock_acquire (struct lock *lock)
+lock_acquire2 (struct lock *lock, enum intr_level *ilevel)
 {
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
 
-  enum intr_level old_level = intr_disable ();
-  if (!sema_try_down (&lock->semaphore))
+  if (!sema_try_down2 (&lock->semaphore, ilevel))
     {
-      intr_set_level (old_level);
-      
+      intr_set_level (*ilevel);
       ASSERT (!intr_context ());
-      sema_down (&lock->semaphore);
-      
-      old_level = intr_disable ();
+      sema_down2 (&lock->semaphore, ilevel);
     }
   
   struct thread *current_thread = thread_current ();
   list_push_back (&current_thread->lock_list, &lock->holder_elem);
   lock->holder = current_thread;
-  
-  intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -235,7 +218,7 @@ lock_acquire (struct lock *lock)
    This function will not sleep, so it may be called within an
    interrupt handler. */
 bool
-lock_try_acquire (struct lock *lock)
+lock_try_acquire2 (struct lock *lock, enum intr_level *ilevel)
 {
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
@@ -244,11 +227,10 @@ lock_try_acquire (struct lock *lock)
   bool success = sema_try_down (&lock->semaphore);
   if (success)
     {
-      enum intr_level old_level = intr_disable ();
+      *ilevel = intr_disable ();
       struct thread *current_thread = thread_current ();
       list_push_back (&current_thread->lock_list, &lock->holder_elem);
       lock->holder = current_thread;
-      intr_set_level (old_level);
     }
   return success;
 }
@@ -503,4 +485,40 @@ rwlock_release_write (struct rwlock *rwlock)
   else if (!list_empty (&rwlock->writers_list.waiters))
     cond_signal (&rwlock->writers_list, &rwlock->edit_lock);
   lock_release (&rwlock->edit_lock);
+}
+
+void
+lock_acquire (struct lock *lock)
+{
+  enum intr_level old_level;
+  lock_acquire2 (lock, &old_level);
+  intr_set_level (old_level);
+}
+
+bool
+lock_try_acquire (struct lock *lock)
+{
+  enum intr_level old_level;
+  if (!lock_try_acquire2 (lock, &old_level))
+    return false;
+  intr_set_level (old_level);
+  return true;
+}
+
+void
+sema_down (struct semaphore *sema)
+{
+  enum intr_level old_level;
+  sema_down2 (sema, &old_level);
+  intr_set_level (old_level);
+}
+
+bool
+sema_try_down (struct semaphore *sema)
+{
+  enum intr_level old_level;
+  if (!sema_try_down2 (sema, &old_level))
+    return false;
+  intr_set_level (old_level);
+  return true;
 }
