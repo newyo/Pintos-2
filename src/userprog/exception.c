@@ -200,6 +200,8 @@ page_fault (struct intr_frame *f)
   enum vm_ensure_result r = vm_ensure (t, pg_round_down (fault_addr), &kpage);
   if (r == VMER_SEGV && pf_is_in_stack (f->esp, fault_addr))
     {
+      // TODO: stack growth logic belongs to vm to be usable in syscalls
+      // Make vm_alloc_and_ensure taking the esp as a paramter?
       kpage = vm_alloc_and_ensure (t, pg_round_down (fault_addr), false);
       r = kpage ? VMER_OK : VMER_OOM;
     }
