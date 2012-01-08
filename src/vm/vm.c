@@ -356,17 +356,15 @@ vm_free_a_page (void)
   
   intr_disable ();
   
-  bool result;
+  bool result = false;
   void *kpage = NULL;
-  for (;;)
+  int retry;
+  for (retry = 0; retry < 32; ++retry)
     {
       struct lru_elem *e = lru_peek_least (&pages_lru);
       ASSERT (e != NULL); // TODO: remove line
       if (!e)
-        {
-          result = false;
-          break;
-        }
+        break;
       struct vm_page *ee = lru_entry (e, struct vm_page, lru_elem);
       if (vm_handle_page_usage (ee) != VMPU_CLEAR)
         continue;
@@ -384,26 +382,6 @@ vm_free_a_page (void)
             break;
           }
           
-        case VMPPT_USED:
-          {
-            pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
-            ee->type = VMPPT_SWAPPED;
-            
-            intr_enable ();
-            result = swap_alloc_and_write (ee->thread, ee->user_addr, kpage);
-            intr_disable ();
-            
-            if (result)
-              lru_dispose (&pages_lru, &ee->lru_elem, false);
-            else
-              {
-                pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
-                                  true);
-                ee->type = VMPPT_USED;
-              }
-            break;
-          }
-          
         case VMPPT_SWAPPED:
           {
             result = swap_must_retain (ee->thread, ee->user_addr);
@@ -411,6 +389,31 @@ vm_free_a_page (void)
               {
                 lru_dispose (&pages_lru, &ee->lru_elem, false);
                 pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+                break;
+              }
+            ee->type = VMPPT_UNUSED;
+            // fallthrough
+          }
+          
+        case VMPPT_USED:
+          {
+            pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+            ee->type = VMPPT_SWAPPED;
+            
+            intr_enable ();
+            result = swap_alloc_and_write (ee->thread, ee->user_addr, kpage);
+            ASSERT (result);
+            intr_disable ();
+            
+            if (result)
+              lru_dispose (&pages_lru, &ee->lru_elem, false);
+            else
+              {
+                lru_use (&pages_lru, &ee->lru_elem);
+                pagedir_set_page (ee->thread->pagedir, ee->user_addr, kpage,
+                                  true);
+                ee->type = VMPPT_USED;
+                continue;
               }
             break;
           }
@@ -418,7 +421,6 @@ vm_free_a_page (void)
         case VMPPT_UNUSED:
         case VMPPT_COUNT:
         default:
-          result = false;
           PANIC ("ee->type == %d", ee->type);
         }
       break;
@@ -531,7 +533,6 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
       goto end;
     }
   
-  
   switch (ee->type)
     {
       case VMPPT_EMPTY:
@@ -548,7 +549,10 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
           if (swap_read_and_retain (ee->thread, ee->user_addr, *kpage_))
             result = VMER_OK;
           else
-            result = VMER_SEGV;
+            {
+              result = VMER_SEGV;
+              ASSERT (0); // TODO: remove line;
+            }
           break;
         }
         

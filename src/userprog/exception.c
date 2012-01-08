@@ -181,23 +181,18 @@ page_fault (struct intr_frame *f)
   void *kpage;
   (void) vm_ensure_group_add (&g, pg_round_down (f->eip), &kpage);
   enum vm_ensure_result result = vm_ensure_group_add (&g, fault_addr, &kpage);
-  //printf ("(%d) &kpage = %p -> %p\n", result, &kpage, kpage);
-  //ASSERT (pagedir_get_page (t->pagedir, pg_round_down (fault_addr)) == kpage);
   
   vm_ensure_group_destroy (&g);
   
   switch (result)
     {
       case VMER_OK:
-        //ASSERT (kpage != NULL);
         return;
         
       case VMER_SEGV:
-        //ASSERT (kpage == NULL);
-        thread_exit ();
+        kill (f);
         
       case VMER_OOM:
-        //ASSERT (kpage == NULL);
         kill (f);
         
       default:
