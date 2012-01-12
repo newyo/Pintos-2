@@ -630,7 +630,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           bool result = vm_ensure_group_add (&g, upage, &kpage) == VMER_OK;
           result = result && (file_read (file, kpage, page_read_bytes) ==
                               (int) page_read_bytes);
-          pagedir_set_dirty (t->pagedir, upage, true);
+          vm_kernel_wrote (t, upage, PGSIZE);
           
           vm_ensure_group_destroy (&g);
           if (!result)

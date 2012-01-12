@@ -23,6 +23,7 @@ void *vm_alloc_and_ensure (struct thread *t, void *user_addr, bool readonly);
 void vm_dispose (struct thread *t, void *user_addr);
 
 void vm_swap_disposed (struct thread *t, void *base);
+void vm_kernel_wrote (struct thread *t, void *user_addr, size_t amount);
 
 void vm_tick (struct thread *t);
 

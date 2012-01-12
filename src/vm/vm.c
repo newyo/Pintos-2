@@ -264,6 +264,51 @@ vm_swap_disposed (struct thread *t, void *user_addr)
   ee->type = VMPPT_USED;
 }
 
+void
+vm_kernel_wrote (struct thread *t, void *user_addr, size_t amount)
+{
+  ASSERT (t != NULL);
+  ASSERT (user_addr != NULL);
+  if (amount == 0)
+    return;
+  
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
+  
+  uint8_t *start = pg_round_down (user_addr);
+  uint8_t *end = pg_round_down (start + amount - 1);
+  uint8_t *i;
+  
+  for (i = start; i <= end; i += PGSIZE)
+    {
+      struct vm_page *ee = vm_get_logical_page (t, i);
+      ASSERT (ee != NULL);
+      ASSERT (!lru_is_interior (&ee->lru_elem));
+      
+      switch (ee->type)
+        {
+        case VMPPT_EMPTY:
+        case VMPPT_USED:
+          break;
+          
+        case VMPPT_SWAPPED:
+          swap_dispose (ee->thread, ee->user_addr);
+          break;
+          
+        case VMPPT_UNUSED:
+        case VMPPT_COUNT:
+        default:
+          PANIC ("ee->type == %d", ee->type);
+        }
+        
+      ee->type = VMPPT_USED;
+      pagedir_set_dirty (ee->thread->pagedir, ee->user_addr, true);
+    }
+    
+  lock_release (&vm_lock);
+  intr_set_level (old_level);
+}
+
 enum vm_page_usage
 {
   VMPU_CLEAR,
@@ -840,7 +885,8 @@ vm_ensure_group_is_readonly (struct vm_ensure_group *g, void *user_addr)
   enum intr_level old_level;
   lock_acquire2 (&vm_lock, &old_level);
   
-  struct vm_page *ee = vm_get_logical_page (g->thread, user_addr);
+  struct vm_page *ee = vm_get_logical_page (g->thread,
+                                              pg_round_down (user_addr));
   
   enum vm_is_readonly_result result;
   if (ee)

@@ -282,6 +282,8 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
   
   if (!ensure_user_memory (g, buffer, length, true))
     kill_segv (g);
+  
+  int result = 0;
     
   if (fd != 0)
     {
@@ -292,13 +294,11 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
           vm_ensure_group_destroy (g);
           return;
         }
-        
-      if_->eax = SYNC (file_read (fd_data->file, buffer, length));
+      result = SYNC (file_read (fd_data->file, buffer, length));
     }
   else
     {
       char *dest = buffer;
-      int result = 0;
       lock_acquire (&stdin_lock);
       while (input_full () && (unsigned) result < length)
         {
@@ -309,6 +309,8 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
       *dest = '\0';
       lock_release (&stdin_lock);
     }
+  if_->eax = result;
+  vm_kernel_wrote (g->thread, buffer, result);
   vm_ensure_group_destroy (g);
 }
 
