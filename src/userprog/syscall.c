@@ -61,13 +61,9 @@ ensure_user_memory (struct vm_ensure_group *g,
   
   if (size == 0) // nothing to read
     return true;
-  if (addr >= PHYS_BASE) // start points to kernelspace
-    return false;
   intptr_t start = (intptr_t) addr;
   intptr_t end   = start + size;
   if (end < start) // we have an overflow, cannot be a valid pointer
-    return false;
-  if ((void *) end > PHYS_BASE) // end points to kernelspace
     return false;
     
   intptr_t i;
@@ -75,7 +71,7 @@ ensure_user_memory (struct vm_ensure_group *g,
   void *kpage;
   for (i = start & ~(PGSIZE-1); i < end; i += PGSIZE)
     {
-      enum vm_is_readonly_result r = vm_is_readonly (g->thread, (void *) i);
+      enum vm_is_readonly_result r = vm_ensure_group_is_readonly (g, (void *) i);
       if (r == VMIR_INVALID)
         return false;
       if (for_writing && r == VMIR_READONLY)

@@ -629,8 +629,9 @@ end:
 enum vm_is_readonly_result
 vm_is_readonly (struct thread *t, void *user_addr)
 {
-  assert_t_addr (t, user_addr);
-  lock_acquire (&vm_lock);
+  ASSERT (t != NULL);
+  if (user_addr < MIN_ALLOC_ADDR || !is_user_vaddr (user_addr))
+    return VMER_SEGV;
   
   struct vm_page *ee = vm_get_logical_page (t, user_addr);
     
@@ -761,7 +762,7 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
     
   enum vm_ensure_result result;
   result = vm_ensure (g->thread, pg_round_down (user_addr), kpage_);
-  ASSERT (result != VMER_OOM);
+  ASSERT (result != VMER_OOM); // TODO: remove line
   if (result == VMER_SEGV && vm_is_valid_stack_addr (g->esp, user_addr))
     {
       *kpage_ = vm_alloc_and_ensure (g->thread, pg_round_down (user_addr),
@@ -827,4 +828,29 @@ vm_ensure_group_remove (struct vm_ensure_group *g, void *user_addr)
   lock_release (&vm_lock);
   intr_set_level (old_level);
   return page != NULL;
+}
+
+enum vm_is_readonly_result
+vm_ensure_group_is_readonly (struct vm_ensure_group *g, void *user_addr)
+{
+  ASSERT (g != NULL);
+  if (user_addr < MIN_ALLOC_ADDR || !is_user_vaddr (user_addr))
+    return VMER_SEGV;
+  
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
+  
+  struct vm_page *ee = vm_get_logical_page (g->thread, user_addr);
+  
+  enum vm_is_readonly_result result;
+  if (ee)
+    result = ee->readonly ? VMIR_READONLY : VMIR_READWRITE;
+  else if (vm_is_valid_stack_addr (g->esp, user_addr))
+    result = VMIR_READWRITE;
+  else
+    result = VMIR_INVALID;
+  
+  lock_release (&vm_lock);
+  intr_set_level (old_level);
+  return result;
 }
