@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "threads/palloc.h"
-#include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/interrupt.h"
 
@@ -67,14 +66,10 @@ static size_t desc_cnt;         /* Number of descriptors. */
 static struct arena *block_to_arena (struct block *);
 static struct block *arena_to_block (struct arena *, size_t idx);
 
-struct lock malloc_lock;
-
 /* Initializes the malloc() descriptors. */
 void
 malloc_init (void) 
-{
-  lock_init (&malloc_lock);
-  
+{ 
   size_t block_size;
   for (block_size = 16; block_size < PGSIZE / 2; block_size *= 2)
     {
@@ -101,8 +96,7 @@ malloc (size_t size)
   if (size == 0)
     return NULL;
     
-  enum intr_level old_level;
-  lock_acquire2 (&malloc_lock, &old_level);
+  enum intr_level old_level = intr_disable ();
 
   /* Find the smallest descriptor that satisfies a SIZE-byte
      request. */
@@ -152,7 +146,6 @@ malloc (size_t size)
   result = b;
   
 end:
-  lock_release (&malloc_lock);
   intr_set_level (old_level);
   return result;
 }
@@ -241,8 +234,7 @@ free (void *p)
   memset (b, 0xcc, d->block_size);
 #endif
 
-  enum intr_level old_level;
-  lock_acquire2 (&malloc_lock, &old_level);
+  enum intr_level old_level = intr_disable ();
 
   /* Add block to free list. */
   list_push_front (&d->free_list, &b->free_elem);
@@ -258,7 +250,6 @@ free (void *p)
       palloc_free_page (a);
     }
 
-  lock_release (&malloc_lock);
   intr_set_level (old_level);
 }
 

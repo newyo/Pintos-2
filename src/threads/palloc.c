@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "threads/interrupt.h"
 #include "threads/loader.h"
-#include "threads/synch.h"
 #include "threads/vaddr.h"
 
 /* Page allocator.  Hands out memory in page-size (or
@@ -28,7 +28,6 @@
 /* A memory pool. */
 struct pool
   {
-    struct lock lock;                   /* Mutual exclusion. */
     struct bitmap *used_map;            /* Bitmap of free pages. */
     uint8_t *base;                      /* Base of pool. */
   };
@@ -80,9 +79,9 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
   if (page_cnt == 0)
     return NULL;
 
-  lock_acquire (&pool->lock);
+  enum intr_level old_level = intr_disable ();
   page_idx = bitmap_scan_and_flip (pool->used_map, 0, page_cnt, false);
-  lock_release (&pool->lock);
+  intr_set_level (old_level);
 
   if (page_idx != BITMAP_ERROR)
     pages = pool->base + PGSIZE * page_idx;
@@ -167,7 +166,6 @@ init_pool (struct pool *p, void *base, size_t page_cnt, const char *name)
   printf ("%zu pages available in %s.\n", page_cnt, name);
 
   /* Initialize the pool. */
-  lock_init (&p->lock);
   p->used_map = bitmap_create_in_buf (page_cnt, base, bm_pages * PGSIZE);
   p->base = base + bm_pages * PGSIZE;
 }
