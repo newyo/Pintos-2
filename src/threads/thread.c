@@ -200,15 +200,19 @@ thread_print_tick_status (struct thread *t)
 {
   static size_t tickcount = 0;
   size_t ksize, kfree, usize, ufree, ssize, sfree;
+  uint32_t ticks_low, ticks_high;
+  
   palloc_fill_ratio (&kfree, &ksize, &ufree, &usize);
   
   ssize = swap_stats_pages ();
   sfree = ssize - swap_stats_full_pages ();
   
-  UNSAFE_PRINTF ("    %8u. %s    kernel: %4u/% 4d (%3u%%)"
-                              "    user: %4u/% 4d (%3u%%)"
-                              "    swap: %4u/% 4d (%3u%%)\n",
-                 tickcount++,
+  asm ("rdtsc" : "=a"(ticks_low), "=d"(ticks_high));
+  
+  UNSAFE_PRINTF ("    %8u (%20llu). %s    kernel: %4u/% 4d (%3u%%)"
+                                       "    user: %4u/% 4d (%3u%%)"
+                                       "    swap: %4u/% 4d (%3u%%)\n",
+                 tickcount++, (ticks_low | ((uint64_t) ticks_high << 32)),
                  t == idle_thread ? "IDLE  " :
                        t->pagedir ? "USER  " :
                                     "KERNEL",
