@@ -38,6 +38,9 @@ hash_init (struct hash *h,
 
   if (h->buckets != NULL) 
     {
+      size_t i;
+      for (i = 0; i < h->bucket_cnt; ++i)
+        list_init (&h->buckets[i]);
       hash_clear (h, NULL);
       return true;
     }
@@ -469,6 +472,7 @@ insert_elem (struct hash *h, struct list *bucket, struct hash_elem *e)
   ASSERT (e != NULL);
   
   h->elem_cnt++;
+  list_elem_init (&e->list_elem);
   list_push_front (bucket, &e->list_elem);
 }
 
