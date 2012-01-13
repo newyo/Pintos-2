@@ -13,9 +13,11 @@
 #include "filesys/file.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#include "threads/interrupt.h"
 #include "devices/input.h"
 #ifdef VM
 # include "vm/vm.h"
+# include "vm/mmap.h"
 #endif
 
 #define TODO_NO_RETURN NO_RETURN
@@ -411,9 +413,31 @@ syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
   void *base = *(void **) arg2;
   vm_ensure_group_destroy (g);
   
-  // TODO
-  (void) fd_data;
-  (void) base;
+  if (!fd_data || base < MIN_ALLOC_ADDR || pg_ofs (base) != 0)
+    {
+      if_->eax = MAP_FAILED;
+      return;
+    }
+  
+  intr_disable ();
+  mapid_t id = mmap_alias_acquire (g->thread, fd_data->file);
+  if (id == MAP_FAILED)
+    {
+      if_->eax = MAP_FAILED;
+      goto end;
+    }
+  if (!mmap_map_upages (g->thread, id, base))
+    {
+      bool dispose_result UNUSED;
+      dispose_result = mmap_alias_dispose (g->thread, id);
+      ASSERT (dispose_result);
+      if_->eax = MAP_FAILED;
+      goto end;
+    }
+  if_->eax = id;
+    
+end:
+  intr_enable ();
 }
 
 static void
@@ -422,11 +446,22 @@ syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
   // void munmap (mapid_t);
   ENSURE_USER_ARGS (1);
   
-  mapid_t map = *(mapid_t *) arg2;
+  mapid_t id = *(mapid_t *) arg2;
   vm_ensure_group_destroy (g);
   
-  // TODO
-  (void) map;
+  if (id == MAP_FAILED)
+    {
+      // TODO: kill?
+      return;
+    }
+  
+  intr_disable ();
+  bool dispose_result = mmap_alias_dispose (g->thread, id);
+  
+  (void) dispose_result;
+  // TODO: kill?
+  
+  intr_enable ();
 }
 
 static void TODO_NO_RETURN

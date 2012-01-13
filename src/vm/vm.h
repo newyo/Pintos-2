@@ -3,10 +3,38 @@
 
 #include <stdbool.h>
 #include <hash.h>
+#include "lru.h"
 #include "threads/thread.h"
 #include "filesys/file.h"
 
-struct vm_page;
+#define MIN_ALLOC_ADDR ((void *) (1<<16))
+
+enum vm_page_type
+{
+  VMPPT_UNUSED = 0,   // this physical page is not used, yet
+  
+  VMPPT_EMPTY,        // read from, but never written to -> all zeros
+  VMPPT_USED,         // allocated, no swap file equivalent
+  VMPPT_SWAPPED,      // retreived from swap and not dirty or disposed
+                      // OR removed from RAM
+  
+  VMPPT_COUNT
+};
+
+struct vm_page
+{
+  void                *user_addr;   // virtual address
+  struct thread       *thread;      // owner thread
+  struct hash_elem     thread_elem; // for thread.vm_pages
+  struct lru_elem      lru_elem;    // for pages_lru
+  
+  struct
+  {
+    uint32_t           vmlp_magic :24;
+    bool               readonly   :1;
+    enum vm_page_type  type       :7;
+  };
+};
 
 typedef int mapid_t;
 #define MAP_FAILED ((mapid_t) -1)

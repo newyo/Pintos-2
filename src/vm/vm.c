@@ -14,39 +14,11 @@
 #include "threads/synch.h"
 #include "userprog/pagedir.h"
 
-#define MIN_ALLOC_ADDR ((void *) (1<<16))
 #define SWAP_PERCENT_AT_ONCE 3
 
 #define VMLP_MAGIC (('V'<<16) + ('L'<<8) + 'P')
 typedef char _CASSERT_VMLP_MAGIC24[0 - !(VMLP_MAGIC < (1<<24))];
-
-enum vm_page_type
-{
-  VMPPT_UNUSED = 0,   // this physical page is not used, yet
-  
-  VMPPT_EMPTY,        // read from, but never written to -> all zeros
-  VMPPT_USED,         // allocated, no swap file equivalent
-  VMPPT_SWAPPED,      // retreived from swap and not dirty or disposed
-                      // OR removed from RAM
-  
-  VMPPT_COUNT
-};
 typedef char _CASSERT_VMPPT_SIZE[0 - !(VMPPT_COUNT < (1<<7))];
-
-struct vm_page
-{
-  void                *user_addr;   // virtual address
-  struct thread       *thread;      // owner thread
-  struct hash_elem     thread_elem; // for thread.vm_pages
-  struct lru_elem      lru_elem;    // for pages_lru
-  
-  struct
-  {
-    uint32_t           vmlp_magic :24;
-    bool               readonly   :1;
-    enum vm_page_type  type       :7;
-  };
-};
 
 static bool vm_is_initialized;
 static struct lru pages_lru;
