@@ -17,7 +17,6 @@
 #include "devices/input.h"
 #ifdef VM
 # include "vm/vm.h"
-# include "vm/mmap.h"
 #endif
 
 #define TODO_NO_RETURN NO_RETURN
@@ -419,25 +418,16 @@ syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
       return;
     }
   
-  intr_disable ();
-  mapid_t id = mmap_alias_acquire (g->thread, fd_data->file);
+  mapid_t id = vm_mmap_acquire (g->thread, fd_data->file);
   if (id == MAP_FAILED)
-    {
-      if_->eax = MAP_FAILED;
-      goto end;
-    }
-  if (!mmap_map_upages (g->thread, id, base))
+    if_->eax = MAP_FAILED;
+  else if (!vm_mmap_pages (g->thread, id, base))
     {
       bool dispose_result UNUSED;
-      dispose_result = mmap_alias_dispose (g->thread, id);
+      dispose_result = vm_mmap_dispose (g->thread, id);
       ASSERT (dispose_result);
       if_->eax = MAP_FAILED;
-      goto end;
     }
-  if_->eax = id;
-    
-end:
-  intr_enable ();
 }
 
 static void
@@ -455,13 +445,9 @@ syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
       return;
     }
   
-  intr_disable ();
-  bool dispose_result = mmap_alias_dispose (g->thread, id);
-  
+  bool dispose_result = vm_mmap_dispose (g->thread, id);
   (void) dispose_result;
   // TODO: kill?
-  
-  intr_enable ();
 }
 
 static void TODO_NO_RETURN

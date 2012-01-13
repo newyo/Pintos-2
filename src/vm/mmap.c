@@ -403,6 +403,7 @@ mmap_map_upage (struct thread *owner,
   ASSERT (owner != NULL);
   ASSERT (id != MAP_FAILED);
   ASSERT (base != NULL);
+  ASSERT (pg_ofs (base) == 0);
   ASSERT (intr_get_level () == INTR_OFF);
   
   // TODO
@@ -416,6 +417,7 @@ mmap_map_upages (struct thread *owner, mapid_t id, void *base)
   ASSERT (owner != NULL);
   ASSERT (id != MAP_FAILED);
   ASSERT (base != NULL);
+  ASSERT (pg_ofs (base) == 0);
   ASSERT (intr_get_level () == INTR_OFF);
   
   // TODO

@@ -96,4 +96,14 @@ vm_ensure_group_is_readonly (struct vm_ensure_group *g, void *user_addr);
 
 void *vm_palloc (void);
 
+mapid_t vm_mmap_acquire (struct thread *owner, struct file *file);
+bool vm_mmap_dispose (struct thread *owner, mapid_t id);
+bool vm_mmap_page (struct thread *owner,
+                   mapid_t        id,
+                   void          *base,
+                   size_t         nth_page);
+bool vm_mmap_pages (struct thread *owner,
+                    mapid_t        id,
+                    void          *base);
+
 #endif

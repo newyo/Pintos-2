@@ -858,7 +858,7 @@ vm_ensure_group_is_readonly (struct vm_ensure_group *g, void *user_addr)
   lock_acquire2 (&vm_lock, &old_level);
   
   struct vm_page *ee = vm_get_logical_page (g->thread,
-                                              pg_round_down (user_addr));
+                                            pg_round_down (user_addr));
   
   enum vm_is_readonly_result result;
   if (ee)
@@ -870,5 +870,81 @@ vm_ensure_group_is_readonly (struct vm_ensure_group *g, void *user_addr)
   
   lock_release (&vm_lock);
   intr_set_level (old_level);
+  return result;
+}
+
+mapid_t
+vm_mmap_acquire (struct thread *owner, struct file *file)
+{
+  ASSERT (owner != NULL);
+  ASSERT (file != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
+  
+  mapid_t result = mmap_alias_acquire (owner, file);
+  
+  lock_release (&vm_lock);
+  intr_set_level (old_level);
+  
+  return result;
+}
+
+bool
+vm_mmap_dispose (struct thread *owner, mapid_t id)
+{
+  ASSERT (owner != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
+  
+  bool result = mmap_alias_dispose (owner, id);
+  
+  lock_release (&vm_lock);
+  intr_set_level (old_level);
+  
+  return result;
+}
+
+bool
+vm_mmap_page (struct thread *owner, mapid_t id, void *base, size_t nth_page)
+{
+  ASSERT (owner != NULL);
+  ASSERT (id != MAP_FAILED);
+  ASSERT (base != NULL);
+  ASSERT (pg_ofs (base) == 0);
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
+  
+  (void) nth_page;
+  bool result = false; // TODO
+  
+  lock_release (&vm_lock);
+  intr_set_level (old_level);
+  
+  return result;
+}
+
+bool
+vm_mmap_pages (struct thread *owner, mapid_t id, void *base)
+{
+  ASSERT (owner != NULL);
+  ASSERT (id != MAP_FAILED);
+  ASSERT (base != NULL);
+  ASSERT (pg_ofs (base) == 0);
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
+  
+  bool result = false; // TODO
+  
+  lock_release (&vm_lock);
+  intr_set_level (old_level);
+  
   return result;
 }
