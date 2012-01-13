@@ -119,6 +119,14 @@ vm_dispose_real (struct vm_page *ee)
       (void) swap_dispose (ee->thread, ee->user_addr);
       break;
       
+    case VMPPT_MMAP_ALIAS:
+      // TODO;
+      break;
+      
+    case VMPPT_MMAP_KPAGE:
+      // TODO
+      break;
+      
     default:
       PANIC ("ee->type == %d", ee->type);
     }
@@ -261,6 +269,8 @@ vm_kernel_wrote (struct thread *t, void *user_addr, size_t amount)
         {
         case VMPPT_EMPTY:
         case VMPPT_USED:
+        case VMPPT_MMAP_KPAGE:
+        case VMPPT_MMAP_ALIAS:
           break;
           
         case VMPPT_SWAPPED:
@@ -297,13 +307,17 @@ vm_handle_page_usage (struct vm_page *ee)
     return VMPU_CLEAR;
   
   enum vm_page_usage result;
+  if (!ee->thread)
+    {
+      ASSERT (ee->type == VMPPT_MMAP_KPAGE);
+      // TODO: check refs
+      return VMPU_CLEAR;
+    }
+    
   if (!ee->readonly && pagedir_is_dirty (ee->thread->pagedir, ee->user_addr))
     {
       switch (ee->type)
         {
-        case VMPPT_UNUSED:
-          PANIC ("ee->type == VMPPT_UNUSED");
-          
         case VMPPT_EMPTY:
           ee->type = VMPPT_USED;
           break;
@@ -314,7 +328,14 @@ vm_handle_page_usage (struct vm_page *ee)
         case VMPPT_SWAPPED:
           swap_dispose (ee->thread, ee->user_addr);
           break;
-              
+          
+        case VMPPT_MMAP_ALIAS:
+          // TODO: set kpage dirty
+          // TODO: lru_use kpage
+          break;
+        
+        case VMPPT_MMAP_KPAGE:
+        case VMPPT_UNUSED:
         case VMPPT_COUNT:
         default:
           PANIC ("ee->type == %d", ee->type);
@@ -435,6 +456,11 @@ vm_free_a_page (void)
             break;
           }
           
+        case VMPPT_MMAP_KPAGE:
+          // TODO: write kpage, remove upages
+          break;
+          
+        case VMPPT_MMAP_ALIAS:
         case VMPPT_UNUSED:
         case VMPPT_COUNT:
         default:
@@ -556,24 +582,25 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
         memset (*kpage_, 0, PGSIZE);
         result = VMER_OK;
         break;
-      
-      case VMPPT_USED:
-        // VMPPT_USED implies pagedir_get_page != NULL
-        PANIC ("ee->type == VMPPT_USED, but pagedir_get_page (...) == NULL");
         
       case VMPPT_SWAPPED:
-        {
-          if (swap_read_and_retain (ee->thread, ee->user_addr, *kpage_))
-            result = VMER_OK;
-          else
-            {
-              result = VMER_SEGV;
-              ASSERT (0); // TODO: remove line;
-            }
-          break;
-        }
+        if (swap_read_and_retain (ee->thread, ee->user_addr, *kpage_))
+          result = VMER_OK;
+        else
+          {
+            result = VMER_SEGV;
+            ASSERT (0); // TODO: remove line;
+          }
+        break;
         
+      case VMPPT_MMAP_ALIAS:
+        // TODO
+        break;
+        
+      case VMPPT_USED:
+        // VMPPT_USED implies pagedir_get_page != NULL
       case VMPPT_UNUSED:
+      case VMPPT_MMAP_KPAGE:
       case VMPPT_COUNT:
       default:
         PANIC ("ee->type == %d", ee->type);
@@ -938,13 +965,36 @@ vm_mmap_pages (struct thread *owner, mapid_t id, void *base)
   ASSERT (pg_ofs (base) == 0);
   ASSERT (intr_get_level () == INTR_ON);
   
+  bool result = false;
+  
   enum intr_level old_level;
   lock_acquire2 (&vm_lock, &old_level);
   
-  bool result = false; // TODO
+  struct mmap_alias *alias = mmap_retreive_alias (owner, id);
+  if (!alias)
+    goto end;
+  size_t pages_count = mmap_alias_pages_count (alias);
   
+  size_t i;
+  for (i = 0; i < pages_count; ++i)
+    {
+      if (!mmap_alias_map_upage (alias, base + i*PGSIZE, i))
+        goto end;
+        
+      struct vm_page *page = calloc (1, sizeof (*page));
+      if (!page)
+        goto end;
+      page->type       = VMPPT_MMAP_ALIAS;
+      page->thread     = owner;
+      page->user_addr  = base + i*PGSIZE;
+      page->vmlp_magic = VMLP_MAGIC;
+      page->readonly   = false;
+      hash_insert (&owner->vm_pages, &page->thread_elem);
+    }
+  result = true;
+  
+end:
   lock_release (&vm_lock);
   intr_set_level (old_level);
-  
   return result;
 }

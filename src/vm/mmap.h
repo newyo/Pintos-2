@@ -18,14 +18,12 @@ void mmap_clean (struct thread *owner);
 mapid_t mmap_alias_acquire (struct thread *owner, struct file *file);
 bool mmap_alias_dispose (struct thread *owner, mapid_t id);
 
-bool mmap_map_upage (struct thread *owner,
-                     mapid_t        id,
-                     void          *base,
-                     size_t         nth_page);
-bool mmap_map_upages (struct thread *owner,
-                      mapid_t        id,
-                      void          *base);
-
 bool mmap_load (const struct vm_page *vm_page, void *dest);
+
+struct mmap_alias *mmap_retreive_alias (struct thread *owner, mapid_t id);
+size_t mmap_alias_pages_count (struct mmap_alias *alias);
+bool mmap_alias_map_upage (struct mmap_alias *alias,
+                           void              *base,
+                           size_t             nth_page);
 
 #endif

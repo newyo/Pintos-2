@@ -15,6 +15,7 @@ struct mmap_region
   struct file      *file;
   size_t            length;
   struct list       refs;
+  struct hash       kpages;
   
   struct hash_elem  regions_elem;
 };
@@ -37,7 +38,8 @@ struct mmap_kpage
   bool                dirty;
   struct list         refs;
   
-  struct hash_elem    kpages_elem;
+  struct hash_elem    upage_elem;
+  struct hash_elem    region_elem;
 };
 
 struct mmap_upage
@@ -66,7 +68,6 @@ struct mmap_writer_task
 
 static struct lock mmap_filesys_lock;
 static struct hash mmap_regions;
-static struct hash mmap_kpages;
 
 static struct semaphore mmap_writer_sema;
 static struct lock      mmap_writer_lock;
@@ -208,31 +209,11 @@ mmap_region_less (const struct hash_elem *a,
   return mmap_region_hash (a, NULL) < mmap_region_hash (b, NULL);
 }
 
-static unsigned
-mmap_kpage_hash (const struct hash_elem *e, void *aux UNUSED)
-{
-  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void*))];
-  ASSERT (e != NULL);
-  
-  struct mmap_kpage *ee = hash_entry (e, struct mmap_kpage, kpages_elem);
-  ASSERT (ee->kernel_addr != NULL);
-  return (unsigned) ee->kernel_addr;
-}
-
-static bool
-mmap_kpage_less (const struct hash_elem *a,
-                 const struct hash_elem *b,
-                 void *aux UNUSED)
-{
-  return mmap_kpage_hash (a, NULL) < mmap_kpage_hash (b, NULL);
-}
-
 void
 mmap_init (void)
 {
   lock_init (&mmap_filesys_lock);
   hash_init (&mmap_regions, &mmap_region_hash, &mmap_region_less, NULL);
-  hash_init (&mmap_kpages, &mmap_kpage_hash, &mmap_kpage_less, NULL);
   
   sema_init (&mmap_writer_sema, 0);
   lock_init (&mmap_writer_lock);
@@ -299,7 +280,7 @@ mmap_clean (struct thread *owner)
 }
 
 static unsigned
-mmap_upage_hash (const struct hash_elem *e, void *alias UNUSED)
+mmap_alias_upage_hash (const struct hash_elem *e, void *alias UNUSED)
 {
   typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void *))];
   ASSERT (e != NULL);
@@ -309,11 +290,56 @@ mmap_upage_hash (const struct hash_elem *e, void *alias UNUSED)
 }
 
 static bool
-mmap_upage_less (const struct hash_elem *a,
-                 const struct hash_elem *b,
-                 void *alias)
+mmap_alias_upage_less (const struct hash_elem *a,
+                       const struct hash_elem *b,
+                       void *alias)
 {
-  return mmap_aliases_hash (a, alias) < mmap_aliases_hash (b, alias);
+  return mmap_alias_upage_hash (a, alias) < mmap_alias_upage_hash (b, alias);
+}
+
+static unsigned
+mmap_region_kpage_hash (const struct hash_elem *e, void *region)
+{
+  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (size_t))];
+  ASSERT (e != NULL);
+  
+  struct mmap_kpage *ee = hash_entry (e, struct mmap_kpage, region_elem);
+  ASSERT (ee->region == region);
+  return (unsigned) ee->page_num;
+}
+
+static bool
+mmap_region_kpage_less (const struct hash_elem *a,
+                        const struct hash_elem *b,
+                        void *region)
+{
+  return mmap_region_kpage_hash (a, region)<mmap_region_kpage_hash (b, region);
+}
+
+struct mmap_alias *
+mmap_retreive_alias  (struct thread *owner, mapid_t id)
+{
+  ASSERT (owner != NULL);
+  ASSERT (id != MAP_FAILED);
+  ASSERT (intr_get_level () == INTR_OFF);
+  
+  struct mmap_alias key;
+  memset (&key, 0, sizeof (key));
+  key.id = id;
+  
+  struct hash_elem *e = hash_find (&owner->mmap_aliases, &key.aliases_elem);
+  if (!e)
+    return NULL;
+  return hash_entry (e, struct mmap_alias, aliases_elem);
+}
+
+size_t
+mmap_alias_pages_count (struct mmap_alias *alias)
+{
+  ASSERT (alias != NULL);
+  ASSERT (intr_get_level () == INTR_OFF);
+  
+  return (alias->ref->length + PGSIZE-1) / PGSIZE;
 }
 
 mapid_t
@@ -358,10 +384,14 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
         free (region);
       return MAP_FAILED;
     }
+  else if (e_region == NULL)
+    hash_init (&region->kpages, &mmap_region_kpage_hash, mmap_region_kpage_less,
+               region);
   static mapid_t id = 0;
   alias->id = ++id;
   alias->ref = region;
-  hash_init (&alias->upages, &mmap_upage_hash, &mmap_upage_less, alias);
+  hash_init (&alias->upages, &mmap_alias_upage_hash, &mmap_alias_upage_less,
+             alias);
   
   struct hash_elem *e UNUSED;
   e = hash_insert (&owner->mmap_aliases, &alias->aliases_elem);
@@ -395,32 +425,15 @@ mmap_alias_dispose (struct thread *owner, mapid_t id)
 
 
 bool
-mmap_map_upage (struct thread *owner,
-                mapid_t        id,
-                void          *base,
-                size_t         nth_page)
+mmap_alias_map_upage (struct mmap_alias *alias, void *base, size_t nth_page)
 {
-  ASSERT (owner != NULL);
-  ASSERT (id != MAP_FAILED);
+  ASSERT (alias != NULL);
   ASSERT (base != NULL);
   ASSERT (pg_ofs (base) == 0);
   ASSERT (intr_get_level () == INTR_OFF);
   
   // TODO
   (void) nth_page;
-  return false;
-}
-
-bool
-mmap_map_upages (struct thread *owner, mapid_t id, void *base)
-{
-  ASSERT (owner != NULL);
-  ASSERT (id != MAP_FAILED);
-  ASSERT (base != NULL);
-  ASSERT (pg_ofs (base) == 0);
-  ASSERT (intr_get_level () == INTR_OFF);
-  
-  // TODO
   return false;
 }
 

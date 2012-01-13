@@ -17,6 +17,8 @@ enum vm_page_type
   VMPPT_USED,         // allocated, no swap file equivalent
   VMPPT_SWAPPED,      // retreived from swap and not dirty or disposed
                       // OR removed from RAM
+  VMPPT_MMAP_ALIAS,   // upage belongs to an mmap'd region
+  VMPPT_MMAP_KPAGE,   // page is being used by (multiple) VMPPT_MMAP_ALIAS pages
   
   VMPPT_COUNT
 };
