@@ -198,14 +198,9 @@ lock_acquire2 (struct lock *lock, enum intr_level *ilevel)
 {
   ASSERT (lock != NULL);
   ASSERT (!lock_held_by_current_thread (lock));
-
-  if (!sema_try_down2 (&lock->semaphore, ilevel))
-    {
-      intr_set_level (*ilevel);
-      ASSERT (!intr_context ());
-      sema_down2 (&lock->semaphore, ilevel);
-    }
+  ASSERT (!intr_context ());
   
+  sema_down2 (&lock->semaphore, ilevel);
   struct thread *current_thread = thread_current ();
   list_push_back (&current_thread->lock_list, &lock->holder_elem);
   lock->holder = current_thread;
@@ -224,10 +219,9 @@ lock_try_acquire2 (struct lock *lock, enum intr_level *ilevel)
   ASSERT (!lock_held_by_current_thread (lock));
   //ASSERT (!intr_context ());
 
-  bool success = sema_try_down (&lock->semaphore);
+  bool success = sema_try_down2 (&lock->semaphore, ilevel);
   if (success)
     {
-      *ilevel = intr_disable ();
       struct thread *current_thread = thread_current ();
       list_push_back (&current_thread->lock_list, &lock->holder_elem);
       lock->holder = current_thread;
@@ -250,9 +244,8 @@ lock_release (struct lock *lock)
   enum intr_level old_level = intr_disable ();
   list_remove_properly (&lock->holder_elem);
   lock->holder = NULL;
-  intr_set_level (old_level);
-  
   sema_up (&lock->semaphore);
+  intr_set_level (old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -262,10 +255,8 @@ bool
 lock_held_by_current_thread (const struct lock *lock) 
 {
   ASSERT (lock != NULL);
-  ASSERT (
-    (lock->holder == NULL && !list_is_interior (&lock->holder_elem)) ||
-    (lock->holder != NULL &&  list_is_interior (&lock->holder_elem))
-  )
+  ASSERT (lock->holder == NULL ||  list_is_interior (&lock->holder_elem));
+  ASSERT (lock->holder != NULL || !list_is_interior (&lock->holder_elem));
   
   return lock->holder == thread_current ();
 }
