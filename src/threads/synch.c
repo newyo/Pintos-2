@@ -255,8 +255,7 @@ bool
 lock_held_by_current_thread (const struct lock *lock) 
 {
   ASSERT (lock != NULL);
-  ASSERT (lock->holder == NULL ||  list_is_interior (&lock->holder_elem));
-  ASSERT (lock->holder != NULL || !list_is_interior (&lock->holder_elem));
+  ASSERT (lock->holder != NULL ? list_is_interior (&lock->holder_elem) : true);
   
   return lock->holder == thread_current ();
 }

@@ -2,14 +2,54 @@
 #define __MMAP_H
 
 #include <stddef.h>
+#include <hash.h>
+#include <list.h>
 #include "threads/thread.h"
 #include "filesys/file.h"
 #include "vm/vm.h"
 
-struct mmap_region;
-struct mmap_alias;
-struct mmap_kpage;
-struct mmap_upage;
+struct mmap_region
+{
+  struct file      *file;
+  size_t            length;
+  struct list       refs;
+  struct hash       kpages;
+  
+  struct hash_elem  regions_elem;
+};
+
+struct mmap_alias
+{
+  mapid_t             id;
+  struct mmap_region *ref;
+  struct hash         upages;
+  
+  struct hash_elem    aliases_elem;
+  struct list_elem    region_elem;
+};
+
+struct mmap_kpage
+{
+  struct vm_page     *kernel_page;
+  struct mmap_region *region;
+  size_t              page_num;
+  bool                dirty;
+  struct list         refs;
+  
+  struct hash_elem    upage_elem;
+  struct hash_elem    region_elem;
+};
+
+struct mmap_upage
+{
+  struct vm_page    *vm_page;
+  struct mmap_alias *ref;
+  size_t             page_num;
+  struct mmap_kpage *kpage;
+  
+  struct hash_elem   alias_elem;
+  struct hash_elem   upages_elem;
+};
 
 void mmap_init (void);
 void mmap_init_thread (struct thread *owner);
@@ -18,7 +58,9 @@ void mmap_clean (struct thread *owner);
 mapid_t mmap_alias_acquire (struct thread *owner, struct file *file);
 bool mmap_alias_dispose (struct thread *owner, mapid_t id);
 
-struct vm_page *mmap_load (const struct vm_page *vm_page, void *dest);
+struct mmap_upage *mmap_retreive_upage (struct vm_page *vm_page);
+struct mmap_kpage *mmap_load_kpage (struct mmap_upage *upage,
+                                    struct vm_page    *kernel_page);
 
 struct mmap_alias *mmap_retreive_alias (struct thread *owner, mapid_t id);
 size_t mmap_alias_pages_count (struct mmap_alias *alias);

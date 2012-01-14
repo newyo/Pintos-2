@@ -531,9 +531,65 @@ vm_palloc (void)
   return kpage;
 }
 
+static enum vm_ensure_result
+vm_ensure_mmap_alias (struct vm_page *vm_page, void **kpage_)
+{
+  ASSERT (vm_page != NULL);
+  ASSERT (vm_page->type == VMPPT_MMAP_ALIAS);
+  ASSERT (kpage_ != NULL);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  struct mmap_upage *mmap_upage = mmap_retreive_upage (vm_page);
+  ASSERT (mmap_upage != NULL);
+  
+  if (mmap_upage->kpage != NULL)
+    {
+      ASSERT (mmap_upage->kpage->kernel_page != NULL);
+      *kpage_ = mmap_upage->kpage->kernel_page;
+      return VMER_OK;
+    }
+  
+  *kpage_ = vm_palloc ();
+  if (!*kpage_)
+    {
+      ASSERT (0); // TODO: remove line
+      *kpage_ = NULL;
+      return VMER_OOM;
+    }
+    
+  struct vm_page *kernel_page = calloc (1, sizeof (*kernel_page));
+  if (!kernel_page)
+    {
+      ASSERT (0); // TODO: remove line
+      palloc_free_page (*kpage_);
+      *kpage_ = NULL;
+      return VMER_OOM;
+    }
+  
+  kernel_page->user_addr  = *kpage_;
+  kernel_page->vmlp_magic = VMLP_MAGIC;
+  kernel_page->type       = VMPPT_MMAP_KPAGE;
+    
+  if (!mmap_load_kpage (mmap_upage, kernel_page))
+    {
+      ASSERT (0); // TODO: remove line
+      free (kernel_page);
+      palloc_free_page (*kpage_);
+      *kpage_ = NULL;
+      return VMER_SEGV;
+    }
+    
+  lru_use (&pages_lru, &kernel_page->lru_elem);
+  return true;
+}
+
 enum vm_ensure_result
 vm_ensure (struct thread *t, void *user_addr, void **kpage_)
 {
+  ASSERT (t != NULL);
+  ASSERT (user_addr != NULL);
+  ASSERT (pg_ofs (user_addr) == 0);
   ASSERT (kpage_ != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
@@ -567,6 +623,14 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
         lru_use (&pages_lru, &ee->lru_elem);
       goto end;
     }
+    
+  if (ee->type == VMPPT_MMAP_ALIAS)
+    {
+      result = vm_ensure_mmap_alias (ee, kpage_);
+      if (!outer_lock)
+        lock_release (&vm_lock);
+      return result;
+    }
   
   *kpage_ = vm_alloc_kpage (ee);
   if (!*kpage_)
@@ -597,25 +661,10 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
           }
         break;
         
-      case VMPPT_MMAP_ALIAS:
-        {
-          struct vm_page *mee = mmap_load (ee, *kpage_);
-          if (mee)
-            {
-              result = VMER_OK;
-              lru_use (&pages_lru, &mee->lru_elem);
-            }
-          else
-            {
-              result = VMER_SEGV;
-              ASSERT (0); // TODO: remove line;
-            }
-          break;
-        }
-        
       case VMPPT_USED: // implies pagedir_get_page != NULL
       case VMPPT_UNUSED:
       case VMPPT_MMAP_KPAGE:
+      case VMPPT_MMAP_ALIAS:
       case VMPPT_COUNT:
       default:
         PANIC ("ee->type == %d", ee->type);
@@ -700,7 +749,8 @@ vm_is_readonly (struct thread *t, void *user_addr)
 struct vm_ensure_group_entry
 {
   struct hash_elem  elem;
-  struct vm_page   *page;
+  struct vm_page   *kernel_page;
+  struct vm_page   *user_page;
 };
 
 static struct vm_ensure_group_entry *
@@ -720,7 +770,7 @@ vm_ensure_group_get (struct vm_ensure_group  *g,
   
   struct vm_ensure_group_entry key;
   memset (&key, 0, sizeof (key));
-  key.page = *page_;
+  key.user_page = *page_;
   
   struct hash_elem *e = hash_find (&g->entries, &key.elem);
   return hash_entry (e, struct vm_ensure_group_entry, elem);
@@ -734,10 +784,10 @@ vm_ensure_group_hash (const struct hash_elem *e, void *t)
   ASSERT (e != NULL);
   struct vm_ensure_group_entry *ee;
   ee = hash_entry (e, struct vm_ensure_group_entry, elem);
-  ASSERT (ee->page != NULL);
-  ASSERT (ee->page->thread == t);
+  ASSERT (ee->user_page != NULL);
+  ASSERT (ee->user_page->thread == t);
   
-  return (unsigned) ee->page;
+  return (unsigned) ee->user_page;
 }
 
 static bool
@@ -769,11 +819,13 @@ vm_ensure_group_dispose_real (struct hash_elem *e, void *t)
   ASSERT (e != NULL);
   struct vm_ensure_group_entry *ee;
   ee = hash_entry (e, struct vm_ensure_group_entry, elem);
-  ASSERT (ee->page != NULL);
-  ASSERT (ee->page->thread == t);
-  ASSERT (ee->page->vmlp_magic == VMLP_MAGIC);
+  ASSERT (ee->user_page != NULL);
+  ASSERT (ee->user_page->thread == t);
+  ASSERT (ee->user_page->vmlp_magic == VMLP_MAGIC);
+  ASSERT (ee->kernel_page != NULL);
+  ASSERT (ee->kernel_page->vmlp_magic == VMLP_MAGIC);
   
-  lru_use (&pages_lru, &ee->page->lru_elem);
+  lru_use (&pages_lru, &ee->kernel_page->lru_elem);
     
   free (ee);
 }
@@ -832,30 +884,44 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
   
   enum intr_level old_level = intr_disable ();
   
-  struct vm_page *page;
+  struct vm_page *user_page, *kernel_page;
   struct vm_ensure_group_entry *entry;
-  entry = vm_ensure_group_get (g, pg_round_down (user_addr), &page);
+  entry = vm_ensure_group_get (g, pg_round_down (user_addr), &user_page);
   if (entry != NULL)
     goto end;
-  else if (page == NULL)
+  else if (user_page == NULL)
     {
       result = VMER_SEGV;
       goto end;
     }
-  else if (page->type == VMPPT_MMAP_ALIAS)
+  
+  if (user_page->type == VMPPT_MMAP_ALIAS)
     {
-      // TODO: remove kpage from lru
+      struct mmap_upage *upage = mmap_retreive_upage (user_page);
+      ASSERT (upage != NULL);
+      ASSERT (upage->kpage != NULL);
+      ASSERT (upage->kpage->kernel_page != NULL);
+      kernel_page = upage->kpage->kernel_page;
     }
-  else if (lru_is_interior (&page->lru_elem))
+  else
+    kernel_page = user_page;
+  
+  if (lru_is_interior (&kernel_page->lru_elem))
     {
       entry = calloc (1, sizeof (*entry));
-      entry->page = page;
-      hash_insert (&g->entries, &entry->elem);
-      lru_dispose (&pages_lru, &page->lru_elem, false);
+      if (entry == NULL)
+        {
+          result = VMER_OOM;
+          goto end;
+        }
+      entry->user_page = user_page;
+      entry->kernel_page = kernel_page;
+      struct hash_elem *e UNUSED = hash_insert (&g->entries, &entry->elem);
+      ASSERT (e == NULL);
+      lru_dispose (&pages_lru, &kernel_page->lru_elem, false);
     }
     
 end:
-  ASSERT (result == VMER_OK);
   intr_set_level (old_level);
 end2:
   ASSERT (result == VMER_OK ? *kpage_ != NULL : true);
