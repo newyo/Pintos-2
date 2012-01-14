@@ -46,6 +46,7 @@ struct mmap_upage
 {
   struct vm_page    *upage;
   struct mmap_alias *ref;
+  size_t             page_num;
   struct mmap_kpage *kpage;
   
   struct hash_elem   alias_elem;
@@ -286,15 +287,30 @@ mmap_alias_upage_hash (const struct hash_elem *e, void *alias UNUSED)
   ASSERT (e != NULL);
   
   struct mmap_upage *ee = hash_entry (e, struct mmap_upage, alias_elem);
-  return (unsigned) ee->upage->user_addr;
+  ASSERT (ee->ref == alias);
+  
+  return ee->ref->id ^ (ee->page_num << 16) ^ (ee->page_num >> 16);
 }
 
 static bool
 mmap_alias_upage_less (const struct hash_elem *a,
                        const struct hash_elem *b,
-                       void *alias)
+                       void                   *alias UNUSED)
 {
-  return mmap_alias_upage_hash (a, alias) < mmap_alias_upage_hash (b, alias);
+  ASSERT (a != NULL);
+  ASSERT (b != NULL);
+  
+  struct mmap_upage *aa = hash_entry (a, struct mmap_upage, alias_elem);
+  struct mmap_upage *bb = hash_entry (b, struct mmap_upage, alias_elem);
+  ASSERT (aa->ref == alias);
+  ASSERT (bb->ref == alias);
+  
+  if (aa->page_num < bb->page_num)
+    return true;
+  else if (aa->page_num > bb->page_num)
+    return false;
+  else
+    return aa->ref->id < bb->ref->id;
 }
 
 static unsigned
@@ -311,7 +327,7 @@ mmap_region_kpage_hash (const struct hash_elem *e, void *region)
 static bool
 mmap_region_kpage_less (const struct hash_elem *a,
                         const struct hash_elem *b,
-                        void *region)
+                        void                   *region)
 {
   return mmap_region_kpage_hash (a, region)<mmap_region_kpage_hash (b, region);
 }
@@ -423,26 +439,35 @@ mmap_alias_dispose (struct thread *owner, mapid_t id)
   return true;
 }
 
-
-bool
-mmap_alias_map_upage (struct mmap_alias *alias, void *base, size_t nth_page)
+struct mmap_upage *
+mmap_alias_map_upage (struct mmap_alias *alias,
+                      struct vm_page    *vm_page,
+                      size_t             nth_page)
 {
   ASSERT (alias != NULL);
-  ASSERT (base != NULL);
-  ASSERT (pg_ofs (base) == 0);
+  ASSERT (vm_page != NULL);
   ASSERT (intr_get_level () == INTR_OFF);
   
-  // TODO
-  (void) nth_page;
-  return false;
+  struct mmap_upage *page = calloc (1, sizeof (*page));
+  if (!page)
+    return NULL;
+  page->upage = vm_page;
+  page->page_num = nth_page;
+  page->ref = alias;
+  
+  struct hash_elem *e UNUSED;
+  e = hash_insert (&alias->upages, &page->alias_elem);
+  ASSERT (e == NULL);
+  
+  return page;
 }
 
-bool
+struct vm_page *
 mmap_load (const struct vm_page *vm_page, void *dest)
 {
   ASSERT (vm_page != NULL);
   ASSERT (dest != NULL);
-  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (intr_get_level () == INTR_ON);
   
   // TODO
   return false;

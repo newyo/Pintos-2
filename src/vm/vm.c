@@ -581,11 +581,15 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
       case VMPPT_EMPTY:
         memset (*kpage_, 0, PGSIZE);
         result = VMER_OK;
+        lru_use (&pages_lru, &ee->lru_elem);
         break;
         
       case VMPPT_SWAPPED:
         if (swap_read_and_retain (ee->thread, ee->user_addr, *kpage_))
-          result = VMER_OK;
+          {
+            result = VMER_OK;
+            lru_use (&pages_lru, &ee->lru_elem);
+          }
         else
           {
             result = VMER_SEGV;
@@ -594,18 +598,28 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
         break;
         
       case VMPPT_MMAP_ALIAS:
-        // TODO
-        break;
+        {
+          struct vm_page *mee = mmap_load (ee, *kpage_);
+          if (mee)
+            {
+              result = VMER_OK;
+              lru_use (&pages_lru, &mee->lru_elem);
+            }
+          else
+            {
+              result = VMER_SEGV;
+              ASSERT (0); // TODO: remove line;
+            }
+          break;
+        }
         
-      case VMPPT_USED:
-        // VMPPT_USED implies pagedir_get_page != NULL
+      case VMPPT_USED: // implies pagedir_get_page != NULL
       case VMPPT_UNUSED:
       case VMPPT_MMAP_KPAGE:
       case VMPPT_COUNT:
       default:
         PANIC ("ee->type == %d", ee->type);
     }
-  lru_use (&pages_lru, &ee->lru_elem);
     
 end:
   if (result == VMER_OK)
@@ -823,12 +837,16 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
   entry = vm_ensure_group_get (g, pg_round_down (user_addr), &page);
   if (entry != NULL)
     goto end;
-  if (page == NULL)
+  else if (page == NULL)
     {
       result = VMER_SEGV;
       goto end;
     }
-  if (lru_is_interior (&page->lru_elem))
+  else if (page->type == VMPPT_MMAP_ALIAS)
+    {
+      // TODO: remove kpage from lru
+    }
+  else if (lru_is_interior (&page->lru_elem))
     {
       entry = calloc (1, sizeof (*entry));
       entry->page = page;
@@ -944,15 +962,43 @@ vm_mmap_page (struct thread *owner, mapid_t id, void *base, size_t nth_page)
   ASSERT (pg_ofs (base) == 0);
   ASSERT (intr_get_level () == INTR_ON);
   
+  bool result = false;
+  
   enum intr_level old_level;
   lock_acquire2 (&vm_lock, &old_level);
   
-  (void) nth_page;
-  bool result = false; // TODO
+  struct vm_page *ee = vm_get_logical_page (owner, base);
+  if (ee != NULL)
+    goto end;
   
+  struct mmap_alias *alias = mmap_retreive_alias (owner, id);
+  if (!alias || nth_page >= mmap_alias_pages_count (alias))
+    goto end;
+  
+  struct vm_page *page = calloc (1, sizeof (*page));
+  if (!page)
+    goto end;
+  page->type       = VMPPT_MMAP_ALIAS;
+  page->thread     = owner;
+  page->user_addr  = base;
+  page->vmlp_magic = VMLP_MAGIC;
+  page->readonly   = false;
+  
+  if (!mmap_alias_map_upage (alias, page, nth_page))
+    {
+      free (page);
+      goto end;
+    }
+  
+  struct hash_elem *e UNUSED;
+  e = hash_insert (&owner->vm_pages, &page->thread_elem);
+  ASSERT (e == NULL);
+  
+  result = true;
+  
+end:
   lock_release (&vm_lock);
   intr_set_level (old_level);
-  
   return result;
 }
 
@@ -978,7 +1024,8 @@ vm_mmap_pages (struct thread *owner, mapid_t id, void *base)
   size_t i;
   for (i = 0; i < pages_count; ++i)
     {
-      if (!mmap_alias_map_upage (alias, base + i*PGSIZE, i))
+      struct vm_page *ee = vm_get_logical_page (owner, base + i*PGSIZE);
+      if (ee != NULL)
         goto end;
         
       struct vm_page *page = calloc (1, sizeof (*page));
@@ -989,7 +1036,16 @@ vm_mmap_pages (struct thread *owner, mapid_t id, void *base)
       page->user_addr  = base + i*PGSIZE;
       page->vmlp_magic = VMLP_MAGIC;
       page->readonly   = false;
-      hash_insert (&owner->vm_pages, &page->thread_elem);
+      
+      if (!mmap_alias_map_upage (alias, page, i))
+        {
+          free (page);
+          goto end;
+        }
+      
+      struct hash_elem *e UNUSED;
+      e = hash_insert (&owner->vm_pages, &page->thread_elem);
+      ASSERT (e == NULL);
     }
   result = true;
   
