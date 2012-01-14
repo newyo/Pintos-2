@@ -12,7 +12,7 @@ struct mmap_region
 {
   struct file      *file;
   size_t            length;
-  struct list       refs;
+  struct list       aliases;
   struct hash       kpages;
   
   struct hash_elem  regions_elem;
@@ -21,7 +21,7 @@ struct mmap_region
 struct mmap_alias
 {
   mapid_t             id;
-  struct mmap_region *ref;
+  struct mmap_region *region;
   struct hash         upages;
   
   struct hash_elem    aliases_elem;
@@ -34,7 +34,7 @@ struct mmap_kpage
   struct mmap_region *region;
   size_t              page_num;
   bool                dirty;
-  struct list         refs;
+  struct list         upages;
   
   struct hash_elem    upage_elem;
   struct hash_elem    region_elem;
@@ -43,7 +43,7 @@ struct mmap_kpage
 struct mmap_upage
 {
   struct vm_page    *vm_page;
-  struct mmap_alias *ref;
+  struct mmap_alias *alias;
   size_t             page_num;
   struct mmap_kpage *kpage;
   

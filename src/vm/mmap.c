@@ -264,9 +264,9 @@ mmap_alias_upage_hash (const struct hash_elem *e, void *alias UNUSED)
   ASSERT (e != NULL);
   
   struct mmap_upage *ee = hash_entry (e, struct mmap_upage, alias_elem);
-  ASSERT (ee->ref == alias);
+  ASSERT (ee->alias == alias);
   
-  return ee->ref->id ^ (ee->page_num << 16) ^ (ee->page_num >> 16);
+  return ee->alias->id ^ (ee->page_num << 16) ^ (ee->page_num >> 16);
 }
 
 static bool
@@ -279,15 +279,15 @@ mmap_alias_upage_less (const struct hash_elem *a,
   
   struct mmap_upage *aa = hash_entry (a, struct mmap_upage, alias_elem);
   struct mmap_upage *bb = hash_entry (b, struct mmap_upage, alias_elem);
-  ASSERT (aa->ref == alias);
-  ASSERT (bb->ref == alias);
+  ASSERT (aa->alias == alias);
+  ASSERT (bb->alias == alias);
   
   if (aa->page_num < bb->page_num)
     return true;
   else if (aa->page_num > bb->page_num)
     return false;
   else
-    return aa->ref->id < bb->ref->id;
+    return aa->alias->id < bb->alias->id;
 }
 
 static unsigned
@@ -332,7 +332,7 @@ mmap_alias_pages_count (struct mmap_alias *alias)
   ASSERT (alias != NULL);
   ASSERT (intr_get_level () == INTR_OFF);
   
-  return (alias->ref->length + PGSIZE-1) / PGSIZE;
+  return (alias->region->length + PGSIZE-1) / PGSIZE;
 }
 
 mapid_t
@@ -366,7 +366,7 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
           return MAP_FAILED;
         }
       region->length = file_length (region->file);
-      list_init (&region->refs);
+      list_init (&region->aliases);
     }
     
   struct mmap_alias *alias = calloc (1, sizeof (*alias));
@@ -382,7 +382,7 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
                region);
   static mapid_t id = 0;
   alias->id = ++id;
-  alias->ref = region;
+  alias->region = region;
   hash_init (&alias->upages, &mmap_alias_upage_hash, &mmap_alias_upage_less,
              alias);
   
@@ -390,7 +390,7 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
   e = hash_insert (&owner->mmap_aliases, &alias->aliases_elem);
   ASSERT (e == NULL);
   
-  list_push_front (&region->refs, &alias->region_elem);
+  list_push_front (&region->aliases, &alias->region_elem);
   
   return alias->id;
 }
@@ -430,7 +430,7 @@ mmap_alias_map_upage (struct mmap_alias *alias,
     return NULL;
   page->vm_page = vm_page;
   page->page_num = nth_page;
-  page->ref = alias;
+  page->alias = alias;
   
   struct hash_elem *e UNUSED;
   e = hash_insert (&alias->upages, &page->alias_elem);
