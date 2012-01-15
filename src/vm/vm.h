@@ -54,6 +54,7 @@ void vm_dispose (struct thread *t, void *user_addr);
 
 void vm_swap_disposed (struct thread *t, void *base);
 void vm_kernel_wrote (struct thread *t, void *user_addr, size_t amount);
+void vm_mmap_disposed (struct vm_page *ee);
 
 void vm_tick (struct thread *t);
 

@@ -245,6 +245,17 @@ vm_swap_disposed (struct thread *t, void *user_addr)
 }
 
 void
+vm_mmap_disposed (struct vm_page *ee)
+{
+  ASSERT (ee != NULL);
+  ASSERT (ee->type == VMPPT_MMAP_KPAGE || ee->type == VMPPT_MMAP_ALIAS);
+  lock_held_by_current_thread (&vm_lock);
+  ASSERT (intr_get_level () == INTR_OFF);
+  
+  vm_dispose_real (ee);
+}
+
+void
 vm_kernel_wrote (struct thread *t, void *user_addr, size_t amount)
 {
   ASSERT (t != NULL);
@@ -407,7 +418,13 @@ vm_free_a_page (void)
       if (vm_handle_page_usage (ee) != VMPU_CLEAR)
         continue;
         
-      kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
+      if (ee->thread)
+        kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
+      else
+        {
+          ASSERT (ee->type == VMPPT_MMAP_KPAGE);
+          kpage = ee->user_addr;
+        }
       ASSERT (kpage != NULL);
       
       switch (ee->type)
@@ -458,6 +475,7 @@ vm_free_a_page (void)
           
         case VMPPT_MMAP_KPAGE:
           // TODO: write kpage, remove upages
+          ASSERT (0);
           break;
           
         case VMPPT_MMAP_ALIAS:

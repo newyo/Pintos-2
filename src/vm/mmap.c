@@ -232,24 +232,55 @@ mmap_init_thread (struct thread *owner)
 }
 
 static void
-mmap_alias_dispose_real (struct mmap_alias *ee)
-{
-  ASSERT (ee != NULL);
-  ASSERT (intr_get_level () == INTR_OFF);
-  
-  // TODO
-  
-  free (ee);
-}
-
-static void
-mmap_clean_sub (struct hash_elem *e, void *t UNUSED)
+mmap_alias_upage_destroy_sub (struct hash_elem *e, void *alias UNUSED)
 {
   ASSERT (e != NULL);
   ASSERT (intr_get_level () == INTR_OFF);
   
+  struct mmap_upage *ee = hash_entry (e, struct mmap_upage, alias_elem);
+  ASSERT (ee->alias == alias);
+  hash_delete (&mmap_upages, &ee->upages_elem);
+  hash_delete (&ee->alias->upages, &ee->alias_elem);
+  if (ee->kpage)
+    {
+      list_remove (&ee->kpage_elem);
+      if (list_empty (&ee->kpage->upages))
+        {
+          // TODO
+        }
+    }
+  if (ee->vm_page)
+    vm_mmap_disposed (ee->vm_page);
+  free (ee);
+}
+
+static void
+mmap_alias_dispose_real (struct thread *owner, struct mmap_alias *ee)
+{
+  ASSERT (owner != NULL);
+  ASSERT (ee != NULL);
+  ASSERT (ee->region != NULL);
+  ASSERT (intr_get_level () == INTR_OFF);
+  
+  hash_destroy (&ee->upages, &mmap_alias_upage_destroy_sub);
+  list_remove (&ee->region_elem);
+  ASSERT (hash_delete (&owner->mmap_aliases, &ee->aliases_elem) == NULL);
+  if (list_empty (&ee->region->aliases))
+    {
+      // TODO
+    }
+  free (ee);
+}
+
+static void
+mmap_clean_sub (struct hash_elem *e, void *t)
+{
+  ASSERT (e != NULL);
+  ASSERT (t != NULL);
+  ASSERT (intr_get_level () == INTR_OFF);
+  
   struct mmap_alias *ee = hash_entry (e, struct mmap_alias, aliases_elem);
-  mmap_alias_dispose_real (ee);
+  mmap_alias_dispose_real (t, ee);
 }
 
 void
@@ -416,7 +447,7 @@ mmap_alias_dispose (struct thread *owner, mapid_t id)
     return false;
   
   struct mmap_alias *ee = hash_entry (e, struct mmap_alias, aliases_elem);
-  mmap_alias_dispose_real (ee);
+  mmap_alias_dispose_real (owner, ee);
   return true;
 }
 
