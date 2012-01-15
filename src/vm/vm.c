@@ -543,14 +543,14 @@ vm_ensure_mmap_alias (struct vm_page *vm_page, void **kpage_)
   struct mmap_upage *mmap_upage = mmap_retreive_upage (vm_page);
   ASSERT (mmap_upage != NULL);
   
-  if (mmap_upage->kpage != NULL)
+  if (mmap_upage->kpage != NULL || mmap_assign_kpage (mmap_upage))
     {
       ASSERT (mmap_upage->kpage->kernel_page != NULL);
       *kpage_ = mmap_upage->kpage->kernel_page;
       return VMER_OK;
     }
   
-  *kpage_ = vm_palloc ();
+  *kpage_ = vm_alloc_kpage (vm_page);
   if (!*kpage_)
     {
       ASSERT (0); // TODO: remove line
@@ -579,6 +579,7 @@ vm_ensure_mmap_alias (struct vm_page *vm_page, void **kpage_)
       *kpage_ = NULL;
       return VMER_SEGV;
     }
+  ASSERT (mmap_upage->kpage != NULL);
     
   lru_use (&pages_lru, &kernel_page->lru_elem);
   return true;
@@ -908,6 +909,10 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
   
   if (lru_is_interior (&kernel_page->lru_elem))
     {
+      ASSERT (kernel_page->type == VMPPT_MMAP_KPAGE ?
+          user_page->type == VMPPT_MMAP_ALIAS :
+          user_page->type != VMPPT_MMAP_ALIAS);
+          
       entry = calloc (1, sizeof (*entry));
       if (entry == NULL)
         {
@@ -927,8 +932,7 @@ end2:
   ASSERT (result == VMER_OK ? *kpage_ != NULL : true);
   ASSERT (result != VMER_OK ? *kpage_ == NULL : true);
   lock_release (&vm_lock);
-  //printf ("(%d) kpage_ = %p -> %p\n", result, kpage_, *kpage_);
-  ASSERT (result != VMER_OOM);
+  ASSERT (result != VMER_OOM); // TODO: remove line
   return result;
 }
 

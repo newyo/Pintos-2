@@ -49,6 +49,7 @@ struct mmap_upage
   
   struct hash_elem   alias_elem;
   struct hash_elem   upages_elem;
+  struct list_elem   kpage_elem;
 };
 
 void mmap_init (void);
@@ -59,6 +60,7 @@ mapid_t mmap_alias_acquire (struct thread *owner, struct file *file);
 bool mmap_alias_dispose (struct thread *owner, mapid_t id);
 
 struct mmap_upage *mmap_retreive_upage (struct vm_page *vm_page);
+struct mmap_kpage *mmap_assign_kpage (struct mmap_upage *upage);
 struct mmap_kpage *mmap_load_kpage (struct mmap_upage *upage,
                                     struct vm_page    *kernel_page);
 

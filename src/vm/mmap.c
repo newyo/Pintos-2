@@ -32,7 +32,7 @@ static struct lock      mmap_writer_lock;
 static struct list      mmap_writer_tasks;
 static tid_t            mmap_writer_thread;
 
-static void
+static bool
 mmap_writer_write (struct mmap_kpage *page)
 {
   ASSERT (page != NULL);
@@ -47,41 +47,45 @@ mmap_writer_write (struct mmap_kpage *page)
   off_t len = r->length >= start+PGSIZE ? PGSIZE : r->length - start;
   off_t wrote UNUSED;
   wrote = file_write_at (r->file, page->kernel_page->user_addr, len, start);
-  ASSERT (wrote == len);
+  bool result = wrote == len;
   
   lock_release (&mmap_filesys_lock);
+  return result;
 }
 
-static void
+static bool
 mmap_writer_read (struct mmap_kpage *page)
 {
   ASSERT (page != NULL);
   ASSERT (intr_get_level () == INTR_ON);
-  ASSERT (lock_held_by_current_thread (&mmap_filesys_lock));
 
   lock_acquire (&mmap_filesys_lock);
   
   struct mmap_region *r = page->region;
   ASSERT (r != NULL);
   
+  
+  bool result;
   size_t start = PGSIZE * page->page_num;
   void *user_addr = page->kernel_page->user_addr;
+  
   if (r->length >= start+PGSIZE)
     {
       off_t read UNUSED;
       read = file_read_at (r->file, user_addr, PGSIZE, start);
-      ASSERT (read == PGSIZE);
+      result = read == PGSIZE;
     }
   else
     {
       off_t len = r->length >= start+PGSIZE ? PGSIZE : r->length - start;
       off_t read UNUSED;
       read = file_read_at (r->file, user_addr, len, start);
-      ASSERT (read == len);
+      result = read == len;
       memset (user_addr+len, 0, PGSIZE-len);
     }
     
   lock_release (&mmap_filesys_lock);
+  return result;
 }
 
 static void
@@ -108,8 +112,8 @@ mmap_writer_func (void *aux UNUSED)
               break;
             }
         }
-      intr_set_level (old_level);
       lock_release (&mmap_writer_lock);
+      intr_set_level (old_level);
       
       while (!list_empty (&task_list))
         {
@@ -446,11 +450,31 @@ struct mmap_kpage *
 mmap_load_kpage (struct mmap_upage *upage, struct vm_page *kernel_page)
 {
   ASSERT (upage != NULL);
+  ASSERT (upage->kpage == NULL);
+  ASSERT (upage->alias != NULL);
+  ASSERT (upage->alias->region != NULL);
   ASSERT (kernel_page != NULL);
+  ASSERT (kernel_page->user_addr != NULL);
+  ASSERT (kernel_page->type == VMPPT_MMAP_KPAGE);
   ASSERT (intr_get_level () == INTR_ON);
   
-  // TODO
-  return false;
+  struct mmap_kpage *kpage = calloc (1, sizeof (*kpage));
+  if (!kpage)
+    return NULL;
+  kpage->kernel_page = kernel_page;
+  kpage->region      = upage->alias->region;
+  kpage->page_num    = upage->page_num;
+  list_init (&kpage->upages);
+  
+  if (!mmap_writer_read (kpage))
+    {
+      free (kpage);
+      return NULL;
+    }
+  
+  list_push_front (&kpage->upages, &upage->kpage_elem);
+  upage->kpage = kpage;
+  return kpage;
 }
 
 struct mmap_upage *
@@ -466,4 +490,27 @@ mmap_retreive_upage (struct vm_page *vm_page)
   
   ASSERT (e != NULL);
   return hash_entry (e, struct mmap_upage, upages_elem);
+}
+
+struct mmap_kpage *
+mmap_assign_kpage (struct mmap_upage *upage)
+{
+  ASSERT (upage != NULL);
+  ASSERT (upage->kpage == NULL);
+  ASSERT (upage->alias != NULL);
+  ASSERT (upage->alias->region != NULL);
+  
+  struct mmap_kpage key;
+  memset (&key, 0, sizeof (key));
+  key.region = upage->alias->region;
+  key.page_num = upage->page_num;
+  struct hash_elem *e = hash_find (&upage->alias->region->kpages,
+                                   &key.region_elem);
+  if (!e)
+    return NULL;
+    
+  struct mmap_kpage *kpage = hash_entry (e, struct mmap_kpage, region_elem);
+  upage->kpage = kpage;
+  list_push_front (&kpage->upages, &upage->kpage_elem);
+  return kpage;
 }
