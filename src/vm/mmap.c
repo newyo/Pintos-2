@@ -108,7 +108,7 @@ mmap_writer_func (void *aux UNUSED)
           
           if (!sema_try_down (&mmap_writer_sema))
             {
-              ASSERT (list_empty (&mmap_writer_tasks))
+              ASSERT (list_empty (&mmap_writer_tasks));
               break;
             }
         }
@@ -255,7 +255,7 @@ mmap_alias_upage_destroy_sub (struct hash_elem *e, void *alias UNUSED)
 }
 
 static void
-mmap_alias_dispose_real (struct thread *owner, struct mmap_alias *ee)
+mmap_alias_dispose_real (struct thread *owner UNUSED, struct mmap_alias *ee)
 {
   ASSERT (owner != NULL);
   ASSERT (ee != NULL);
@@ -326,7 +326,7 @@ mmap_alias_upage_less (const struct hash_elem *a,
 }
 
 static unsigned
-mmap_region_kpage_hash (const struct hash_elem *e, void *region)
+mmap_region_kpage_hash (const struct hash_elem *e, void *region UNUSED)
 {
   typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (size_t))];
   ASSERT (e != NULL);

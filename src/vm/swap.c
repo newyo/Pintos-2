@@ -267,7 +267,7 @@ swap_read_and_retain (struct thread *owner,
 }
 
 static unsigned
-swap_page_hash (const struct hash_elem *e, void *t)
+swap_page_hash (const struct hash_elem *e, void *t UNUSED)
 {
   typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void *))];
   ASSERT (e != NULL);
@@ -294,7 +294,7 @@ swap_init_thread (struct thread *owner)
 }
 
 static void
-swap_clean_sub (struct hash_elem *e, void *t)
+swap_clean_sub (struct hash_elem *e, void *t UNUSED)
 {
   ASSERT (e != NULL);
   struct swap_page *ee = hash_entry (e, struct swap_page, hash_elem);

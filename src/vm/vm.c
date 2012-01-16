@@ -24,8 +24,8 @@ static bool vm_is_initialized;
 static struct lru pages_lru;
 static struct lock vm_lock;
 
-static void
-assert_t_addr (struct thread *t, const void *addr)
+static inline void
+assert_t_addr (struct thread *t UNUSED, const void *addr UNUSED)
 {
   ASSERT (vm_is_initialized);
   ASSERT (t != NULL);
@@ -51,7 +51,7 @@ vm_init (void)
 }
 
 static inline struct vm_page *
-vmlp_entry (const struct hash_elem *e, void *t)
+vmlp_entry (const struct hash_elem *e, void *t UNUSED)
 {
   if (e == NULL)
     return NULL;
@@ -382,7 +382,7 @@ vm_handle_page_usage (struct vm_page *ee)
 }
 
 static void
-vm_tick_sub (struct hash_elem *e, void *t)
+vm_tick_sub (struct hash_elem *e, void *t UNUSED)
 {
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (e != NULL);
@@ -808,7 +808,7 @@ vm_ensure_group_get (struct vm_ensure_group  *g,
 }
 
 static unsigned
-vm_ensure_group_hash (const struct hash_elem *e, void *t)
+vm_ensure_group_hash (const struct hash_elem *e, void *t UNUSED)
 {
   typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (void *))];
   
@@ -842,7 +842,7 @@ vm_ensure_group_init (struct vm_ensure_group *g, struct thread *t, void *esp)
 }
 
 static void
-vm_ensure_group_dispose_real (struct hash_elem *e, void *t)
+vm_ensure_group_dispose_real (struct hash_elem *e, void *t UNUSED)
 {
   ASSERT (lock_held_by_current_thread (&vm_lock));
   ASSERT (intr_get_level () == INTR_OFF);

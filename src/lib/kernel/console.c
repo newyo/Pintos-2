@@ -111,7 +111,7 @@ release_console (void)
 
 /* Returns true if the current thread has the console lock,
    false otherwise. */
-static bool
+static bool UNUSED
 console_locked_by_current_thread (void) 
 {
   return (intr_context ()

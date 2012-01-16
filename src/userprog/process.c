@@ -110,7 +110,7 @@ elf_stack_push_data (char **sp, void *data, off_t data_len, char *end)
   if (data_len == 0)
     return *sp;
 
-  if (*sp - end < data_len)
+  if ((uintptr_t) *sp - (uintptr_t) end < (uintptr_t) data_len)
     {
       // memory exceeded
       *sp = NULL;

@@ -105,14 +105,14 @@ static void sleep_wakeup (void);
 static int thread_get_priority_of (struct thread *t);
 static void thread_recalculate_recent_cpu (struct thread *t, void *aux);
 
-#define ASSERT_STACK_NOT_EXCEEDED(T)          \
-({                                            \
-  const struct thread *_t = (T);              \
-  const uintptr_t _s = (uintptr_t) _t->stack; \
-  const uintptr_t _n = (uintptr_t) _t;        \
-  ASSERT (_s <= _n + PGSIZE);                 \
-  ASSERT (_s >= _n + sizeof (struct thread)); \
-  (void) 0;                                   \
+#define ASSERT_STACK_NOT_EXCEEDED(T)                 \
+({                                                   \
+  const struct thread *_t = (T);                     \
+  const uintptr_t _s UNUSED = (uintptr_t) _t->stack; \
+  const uintptr_t _n UNUSED = (uintptr_t) _t;        \
+  ASSERT (_s <= _n + PGSIZE);                        \
+  ASSERT (_s >= _n + sizeof (struct thread));        \
+  (void) 0;                                          \
 })
 
 static inline struct thread *
@@ -123,14 +123,14 @@ thread_list_entry (const struct list_elem *e)
   return result;
 }
 
-static void*
-ready_lists_arent_messed_up_sub (struct list_elem *e, void *aux)
+static void * UNUSED
+ready_lists_arent_messed_up_sub (struct list_elem *e UNUSED, void *aux)
 {
   ASSERT (thread_list_entry (e) != NULL);
   return aux;
 }
 
-static bool
+static bool UNUSED
 ready_lists_arent_messed_up (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
