@@ -341,9 +341,13 @@ vm_handle_page_usage (struct vm_page *ee)
           break;
           
         case VMPPT_MMAP_ALIAS:
-          // TODO: set kpage dirty
-          // TODO: lru_use kpage
-          break;
+          {
+            struct mmap_upage *mmap_upage = mmap_retreive_upage (ee);
+            ASSERT (mmap_upage != NULL);
+            ASSERT (mmap_upage->kpage != NULL);
+            mmap_upage->kpage->dirty = true;
+            break;
+          }
         
         case VMPPT_MMAP_KPAGE:
         case VMPPT_UNUSED:
@@ -363,7 +367,16 @@ vm_handle_page_usage (struct vm_page *ee)
   else
     return VMPU_CLEAR;
   
-  lru_use (&pages_lru, &ee->lru_elem);
+  if (ee->type != VMPPT_MMAP_ALIAS)
+    lru_use (&pages_lru, &ee->lru_elem);
+  else
+    {
+      struct mmap_upage *mmap_upage = mmap_retreive_upage (ee);
+      ASSERT (mmap_upage != NULL);
+      ASSERT (mmap_upage->kpage != NULL);
+      if (lru_is_interior (&mmap_upage->kpage->kernel_page->lru_elem))
+        lru_use (&pages_lru, &mmap_upage->kpage->kernel_page->lru_elem);
+    }
   
   return result;
 }
@@ -389,12 +402,11 @@ vm_tick (struct thread *t)
   
   if (!vm_is_initialized || lock_held_by_current_thread (&vm_lock))
     return;
-  
-  if (lock_try_acquire (&vm_lock))
-    {
-      hash_apply (&t->vm_pages, &vm_tick_sub);
-      lock_release (&vm_lock);
-    }
+  if (!lock_try_acquire (&vm_lock))
+    return;
+    
+  hash_apply (&t->vm_pages, &vm_tick_sub);
+  lock_release (&vm_lock);
 }
 
 static void *
