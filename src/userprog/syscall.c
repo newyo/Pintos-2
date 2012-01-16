@@ -419,9 +419,9 @@ syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
     }
   
   mapid_t id = vm_mmap_acquire (g->thread, fd_data->file);
-  if (id == MAP_FAILED)
-    if_->eax = MAP_FAILED;
-  else if (!vm_mmap_pages (g->thread, id, base))
+  if (id == MAP_FAILED || vm_mmap_pages (g->thread, id, base))
+    if_->eax = id;
+  else
     {
       bool dispose_result UNUSED;
       dispose_result = vm_mmap_dispose (g->thread, id);
@@ -436,7 +436,7 @@ syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
   // void munmap (mapid_t);
   ENSURE_USER_ARGS (1);
   
-  mapid_t id = *(mapid_t *) arg2;
+  mapid_t id = *(mapid_t *) arg1;
   vm_ensure_group_destroy (g);
   
   if (id == MAP_FAILED)
