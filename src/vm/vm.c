@@ -124,9 +124,6 @@ vm_dispose_real (struct vm_page *ee)
       break;
       
     case VMPPT_MMAP_KPAGE:
-      // TODO
-      break;
-      
     default:
       PANIC ("ee->type == %d", ee->type);
     }
@@ -409,6 +406,56 @@ vm_tick (struct thread *t)
   lock_release (&vm_lock);
 }
 
+static struct vm_page *
+vm_mmap_evict_real (struct mmap_kpage *kpage)
+{
+  ASSERT (kpage != NULL);
+  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  
+  bool dirty = kpage->dirty;
+  while (!list_empty (&kpage->upages))
+    {
+      struct list_elem *e = list_pop_front (&kpage->upages);
+      struct mmap_upage *ee = list_entry (e, struct mmap_upage, kpage_elem);
+      ee->kpage = NULL;
+      if (!dirty)
+        dirty = pagedir_is_dirty (ee->vm_page->thread->pagedir,
+                                  ee->vm_page->user_addr);
+    }
+  
+  if (kpage->dirty)
+    {
+      intr_enable ();
+      mmap_write_kpage (kpage);
+      intr_disable ();
+    }
+    
+  hash_delete (&kpage->region->kpages, &kpage->region_elem);
+  
+  struct vm_page *result = kpage->kernel_page;
+  lru_dispose (&pages_lru, &result->lru_elem, false);
+  ASSERT (result->thread == NULL);
+  free (kpage);
+  return result;
+}
+
+void
+vm_mmap_evicting (struct mmap_kpage *kpage)
+{
+  ASSERT (kpage != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
+  
+  struct vm_page *vm_page = vm_mmap_evict_real (kpage);
+  vm_dispose_real (vm_page);
+  
+  lock_release (&vm_lock);
+  intr_enable ();
+}
+
 static void *
 vm_free_a_page (void)
 {
@@ -486,9 +533,16 @@ vm_free_a_page (void)
           }
           
         case VMPPT_MMAP_KPAGE:
-          // TODO: write kpage, remove upages
-          ASSERT (0);
-          break;
+          {
+            struct mmap_kpage *mmap_kpage = mmap_retreive_kpage (ee);
+            ASSERT (mmap_kpage != NULL);
+            struct vm_page *vm_page = vm_mmap_evict_real (mmap_kpage);
+            ASSERT (!lru_is_interior (&vm_page->lru_elem));
+            kpage = vm_page->user_addr;
+            free (vm_page);
+            result = true;
+            break;
+          }
           
         case VMPPT_MMAP_ALIAS:
         case VMPPT_UNUSED:

@@ -181,7 +181,9 @@ start:
 
 # main() shouldn't ever return.  If it does, spin.
 
-1:	jmp 1b
+1:	cli
+  hlt
+  jmp 1b
 .endfunc
 
 #### GDT

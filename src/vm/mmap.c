@@ -8,19 +8,11 @@
 #include "threads/synch.h"
 #include "threads/interrupt.h"
 
-enum mmap_writer_task_type
-{
-  MMWTT_READ = 1,
-  MMWTT_WRITE,
-};
-
 struct mmap_writer_task
 {
-  struct mmap_kpage          *page;
-  enum mmap_writer_task_type  type;
-  struct list_elem            tasks_elem;
-  struct semaphore           *sema;
-  struct lock                *lock;
+  struct mmap_kpage *page;
+  struct list_elem   tasks_elem;
+  struct semaphore  *sema;
 };
 
 static struct lock mmap_filesys_lock;
@@ -32,8 +24,8 @@ static struct lock      mmap_writer_lock;
 static struct list      mmap_writer_tasks;
 static tid_t            mmap_writer_thread;
 
-static bool
-mmap_writer_write (struct mmap_kpage *page)
+void
+mmap_write_kpage (struct mmap_kpage *page)
 {
   ASSERT (page != NULL);
   ASSERT (intr_get_level () == INTR_ON);
@@ -47,10 +39,9 @@ mmap_writer_write (struct mmap_kpage *page)
   off_t len = r->length >= start+PGSIZE ? PGSIZE : r->length - start;
   off_t wrote UNUSED;
   wrote = file_write_at (r->file, page->kernel_page->user_addr, len, start);
-  bool result = wrote == len;
+  ASSERT (wrote == len);
   
   lock_release (&mmap_filesys_lock);
-  return result;
 }
 
 static bool
@@ -95,57 +86,28 @@ mmap_writer_func (void *aux UNUSED)
   
   for(;;)
     {
-      struct list task_list = LIST_INITIALIZER (task_list);
       sema_down (&mmap_writer_sema);
       
       enum intr_level old_level;
       lock_acquire2 (&mmap_writer_lock, &old_level);
-      for (;;)
-        {
-          struct list_elem *e = list_pop_front (&mmap_writer_tasks);
-          ASSERT (e != NULL);
-          list_push_back (&task_list, e);
-          
-          if (!sema_try_down (&mmap_writer_sema))
-            {
-              ASSERT (list_empty (&mmap_writer_tasks));
-              break;
-            }
-        }
+      
+      struct list_elem *e = list_pop_front (&mmap_writer_tasks);
+      ASSERT (e != NULL);
+      
       lock_release (&mmap_writer_lock);
       intr_set_level (old_level);
-      
-      while (!list_empty (&task_list))
+          
+      struct mmap_writer_task *task;
+      task = list_entry (e, struct mmap_writer_task, tasks_elem);
+      if (!task->page)
         {
-          struct list_elem *e = list_pop_front (&task_list);
-          ASSERT (e != NULL);
-          
-          struct mmap_writer_task *task;
-          task = list_entry (e, struct mmap_writer_task, tasks_elem);
-          
-          if (!task->page)
-            {
-              if (task->sema)
-                sema_up (task->sema);
-              free (task);
-              return;
-            }
-          
-          switch (task->type)
-            {
-            case MMWTT_READ:
-              mmap_writer_read (task->page);
-              break;
-            case MMWTT_WRITE:
-              mmap_writer_write (task->page);
-              break;
-            default:
-              ASSERT (0);
-            }
-          
-          if (task->sema)
-            sema_up (task->sema);
-          free (task);
+          sema_up (task->sema);
+          return;
+        }
+      else
+        {
+          vm_mmap_evicting (task->page);
+          sema_up (task->sema);
         }
     }
 }
@@ -246,7 +208,7 @@ mmap_alias_upage_destroy_sub (struct hash_elem *e, void *alias UNUSED)
       list_remove (&ee->kpage_elem);
       if (list_empty (&ee->kpage->upages))
         {
-          // TODO
+          // TODO: no more references to kpage, set task for eviction
         }
     }
   if (ee->vm_page)
@@ -267,7 +229,7 @@ mmap_alias_dispose_real (struct thread *owner UNUSED, struct mmap_alias *ee)
   ASSERT (hash_delete (&owner->mmap_aliases, &ee->aliases_elem) == NULL);
   if (list_empty (&ee->region->aliases))
     {
-      // TODO
+      // TODO: no more references to region, set task to deletion
     }
   free (ee);
 }
@@ -521,6 +483,16 @@ mmap_retreive_upage (struct vm_page *vm_page)
   
   ASSERT (e != NULL);
   return hash_entry (e, struct mmap_upage, upages_elem);
+}
+
+struct mmap_kpage *
+mmap_retreive_kpage (struct vm_page *vm_page)
+{
+  ASSERT (vm_page != NULL);
+  ASSERT (vm_page->type == VMPPT_MMAP_KPAGE);
+  
+  // TODO
+  return NULL;
 }
 
 struct mmap_kpage *

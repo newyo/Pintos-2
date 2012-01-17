@@ -36,7 +36,6 @@ struct mmap_kpage
   bool                dirty;
   struct list         upages;
   
-  struct hash_elem    upage_elem;
   struct hash_elem    region_elem;
 };
 
@@ -60,6 +59,7 @@ mapid_t mmap_alias_acquire (struct thread *owner, struct file *file);
 bool mmap_alias_dispose (struct thread *owner, mapid_t id);
 
 struct mmap_upage *mmap_retreive_upage (struct vm_page *vm_page);
+struct mmap_kpage *mmap_retreive_kpage (struct vm_page *vm_page);
 struct mmap_kpage *mmap_assign_kpage (struct mmap_upage *upage);
 struct mmap_kpage *mmap_load_kpage (struct mmap_upage *upage,
                                     struct vm_page    *kernel_page);
@@ -69,5 +69,7 @@ size_t mmap_alias_pages_count (struct mmap_alias *alias);
 struct mmap_upage *mmap_alias_map_upage (struct mmap_alias *alias,
                                          struct vm_page    *vm_page,
                                          size_t             nth_page);
+
+void mmap_write_kpage (struct mmap_kpage *kpage);
 
 #endif

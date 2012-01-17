@@ -109,4 +109,7 @@ bool vm_mmap_pages (struct thread *owner,
                     mapid_t        id,
                     void          *base);
 
+struct mmap_kpage;
+void vm_mmap_evicting (struct mmap_kpage *kpage);
+
 #endif
