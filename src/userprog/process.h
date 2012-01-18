@@ -3,7 +3,7 @@
 
 #include "threads/thread.h"
 
-#define PROCESS_STACK_SIZE (1*1024*1024)
+#define PROCESS_STACK_SIZE (8*1024*1024)
 
 tid_t process_execute (const char *file_name);
 int process_wait (tid_t);
