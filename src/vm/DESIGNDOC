@@ -16,9 +16,20 @@ René Kijewski    <kijewski@inf.fu-berlin.de>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+Nope.
+
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
+
+Pintos Task 3: Virtual Memory
+Eva Kalyvianaki
+Mark Rutland
+Imperial College London
+
+Beigefügt im git unter src/vm/8-task3.pdf.
+
+Großartige Dokumentation auf http://wiki.osdev.org/.
 
 			PAGE TABLE MANAGEMENT
 			=====================
@@ -29,24 +40,117 @@ René Kijewski    <kijewski@inf.fu-berlin.de>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Typ eines Frames im Userspace:
++enum vm_page_type
++{
++  VMPPT_UNUSED = 0,   // this physical page is not used, yet
++  
++  VMPPT_EMPTY,        // read from, but never written to -> all zeros
++  VMPPT_USED,         // allocated, no swap file equivalent
++  VMPPT_SWAPPED,      // retreived from swap and not dirty or disposed
++                      // OR removed from RAM
++  VMPPT_MMAP_ALIAS,   // upage belongs to an mmap'd region
++  VMPPT_MMAP_KPAGE,   // page is being used by (multiple) VMPPT_MMAP_ALIAS pages
++  
++  VMPPT_COUNT
++};
+
+Verwaltungsstruktur der Frames im Userspace
++struct vm_page
++{
++  void                *user_addr;   // virtual address
++  struct thread       *thread;      // owner thread
++  struct hash_elem     thread_elem; // for thread.vm_pages
++  struct lru_elem      lru_elem;    // for pages_lru
++  
++  struct
++  {
++    uint32_t           vmlp_magic :24; // vor debugging purposes
++    bool               readonly   :1;  // whether user must not change the page
++                                       // implies the same for syscalls
++    enum vm_page_type  type       :7;  // frame type
++  };
++};
+
+Enthält Speicherseiten, für die sichergestellt werden muss, dass sie für einen
+Zeitraum nicht weggezwappt werden dürfen:
++struct vm_ensure_group
++{
++  struct thread *thread;  // zugehöriger Thread
++  struct hash    entries; // zugesicherte Seiten
++  void          *esp;     // ESP des Aufrufers, um zu testen, ob eine
++                          // ungeframete Adresse gültig, da im Stack, ist
++};
+
+vm_tick wird bereits aufgerufen, bevor der VM initialisiert ist
++static bool vm_is_initialized;
+
+Liste von zuletzt verwendeten Seiten (nach access bit) → was weggeswappt werden
+sollte
++static struct lru pages_lru;
+
+Damit nur ein Thread aufeinmal das VM'ing zugreift (da Interrupts enabled für
+Dateioperationen aktiviert sein müssen)
++static struct lock vm_lock;
+
+In struct thread:
++    struct hash vm_pages; // alles frames des Threads
+
+In malloc.c: struct desc:
+-    struct lock lock; // Locking im Kernelspace ist unnötig, da er cli'en kann.
+-                      // Locking ist mit cli nicht möglich.
+
+In palloc.c: struct pool:
+-    struct lock lock; // Locking im Kernelspace ist unnötig, da er cli'en kann.
+-                      // Locking ist mit cli nicht möglich.
+
 ---- ALGORITHMS ----
 
 >> A2: In a few paragraphs, describe your code for locating the frame,
 >> if any, that contains the data of a given page.
 
+In thread::vm_pages werden die Frame-Zuordnungen verwaltet. Dies ist ein Hash
+void* → struct vm_page. Der void* ist die Basisadresse des Frames. Es wird die
+Hash-Struktur aus lib/kernel/hash.h verwendet.
+
 >> A3: How does your code coordinate accessed and dirty bits between
 >> kernel and user virtual addresses that alias a single frame, or
 >> alternatively how do you avoid the issue?
+
+Kernelcode, der auf Userspeicher zugreift, tut dies über vm_ensure_groups. Diese
+stellen sicher, dass benötigter Speicher während der Ausführung nicht nicht
+weggeswappt wird. Sichergestellter Speicher wird an den Anfang der LRU, welche
+Seiten zuletzt verwendet wurden, gestellt. Ein gesetztes accessed bit würde
+dasselbe bewirken.
+
+Mit vm_kernel_wrote (struct thread *t, void *user_addr, size_t amount) kann
+der Kernelcode das dirtybit setzen lassen.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: When two user processes both need a new frame at the same time,
 >> how are races avoided?
 
+Der gesamte virtuelle Speicher wird in vm/vm.c verwaltet. Funktionen aus mmap.c
+und swap.c werden nur von vm.c aufgerufen. In vm.c gibt es einen vm_lock, der
+sicherstellt, dass nur eine VM-Funktion aufeinmal benutzt wird. Bei Zugriffen,
+die Verwaltungsstrukturen verändern, werden zudem noch Interrupts deaktiviert.
+
 ---- RATIONALE ----
 
 >> A5: Why did you choose the data structure(s) that you did for
 >> representing virtual-to-physical mappings?
+
+Das Mapping von einem Frame zu einer Page wird durch das Pagedir
+(thread::pagedir) übernommen. An diesem wurde nichts geändert.
+
+Das Mapping von Frame zu Speicher im Swap wird von struct swap_page übernommen.
+Das Hashing geschieht ebenfalls mit void* → swap_page.
+
+Das Mapping bei mmap-Speicher wird von struct mmap_upage übernommen. mmap_upage
+wird über vm_page, die über die Adresse im Userspace gefunden werden kann,
+gehasht. mmap_upages haben einen Verweiß zu der Region, zu der sie gehören und
+dem Offset in der Datei. Die Region kennt die Datei, zu der sie gehört.
 
 		       PAGING TO AND FROM DISK
 		       =======================
@@ -57,18 +161,117 @@ René Kijewski    <kijewski@inf.fu-berlin.de>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Least recently use list:
++struct lru
++{
++  struct list         lru_list;             // Einträge: front=Neustes
++  size_t              lru_size, item_count; // unbenutzt
++  lru_dispose_action *dispose_action;       // unbenutzt
++  void               *aux;                  // unbenutzt
++};
+
+Ein Element in der LRU:
++struct lru_elem
++{
++  void             *datum;    // der Eintrag
++  struct list_elem  elem;     // für lru::lru_list
++  struct lru       *lru_list; // Verweis auf die Liste
++  char              end[0];   // dummy für das Makro lru_entry(...)
++};
+
+Um die externe Fragmentierung zu vermindern, wenn die maximale Anzahl an
+Elementen bekannt ist. Allokiert eine Reihe von sequenziellen Pages:
++struct allocator
++{
++  size_t         item_size; // Größe eines Elements
++  struct bitmap *used_map;  // Bitmap der Belegen Elemente
++  void          *items;     // Pointer zur ersten Page
++};
+
+Verwaltungsstruktur für eine ausgeswappte Seite (bzw. wieder eingeswappte
+Seiten, die noch nicht verändert wurden):
++struct swap_page
++{
++  swap_t            id;        // belegt n'te Swappage
++  struct hash_elem  id_elem;   // zur Einordnung in pages_hash
++  
++  struct lru_elem   lru_elem;  // zur Einordnung in swap_lru
++  struct thread    *thread;    // Besitzer-Thread
++  struct hash_elem  hash_elem; // zur Einordnung in thread::swap_pages
++  void             *user_addr; // Basisadresse
++  uint32_t          cksum;     // Checksum der ausgelagerten Daten
++};
+
+In struct thread:
++    struct hash swap_pages; // Verwaltung aller ausgelagertern Seiten des
++                            // Threads
+
++struct block *swap_disk; // Swapdevice
++size_t swap_pages_count; // Größe des Swapdevices in Pages
+
++struct bitmap    *used_pages; // belegte Seiten im Swapdevice
++struct lru        swap_lru; // Eingeswappte, noch nicht veränderte Seiten
++                            // Älteste würde zuerst verworfen, wenn swap leer
++struct allocator  pages_allocator; // Allocator für struct swap_pages
++struct hash       pages_hash; // Hashing von id → swap_page
+
 ---- ALGORITHMS ----
 
 >> B2: When a frame is required but none is free, some frame must be
 >> evicted.  Describe your code for choosing a frame to evict.
 
+In lru.c ist eine LRU-Struktur implementiert.
+Bei jedem Tick wird vm_tick aufgerufen, wenn gerade ein Userthread läuft.
+Für den aktuellen Userthread werden alle thread::vm_pages durchgegangen.
+- wenn modifiziert (dirty bit):
+  - Typ
+    - ist VMPPT_EMPTY: jetzt ist sie used
+    - ist mmap-Seite: bei assoziierter mmap_kpage dirty setzen
+      - kpage in lru nach vorne
+    - ist eingeswappte Seite: swappage löschen
+  - wenn nicht mmap, in pages_lru vorne anhägen
+- sonst, wenn benutzt (accessed bit):
+  - ist mmap: kpage nach vorne
+  - sonst: diese Seite nach vorne
+- die Bits werden zurückgesetzt
+
+pages_lru leer → oom zurückgeben.
+Die am längesten nicht benutzte Adresse wird aus pages_lru ausgelesen.
+Es wird auf die gleiche Art überprüft, ob diese Seite verändert/angefasst wurde
+und wenn ja, wird die nächste Seite genommen.
+- Ist die Seite leer (VMPPT_EMPTY), einfach löschen.
+- Ist die Seite gemmappt, dann wir die kpage weggeschrieben (mmap_write_kpage).
+- Ist die Seite eingeswappt und unverändert, swap sagen, dass die Seite nicht
+  gelöscht werden darf.
+- Sonst (normale Seite) wird sie weggeswappt.
+
 >> B3: When a process P obtains a frame that was previously used by a
 >> process Q, how do you adjust the page table (and any other data
 >> structures) to reflect the frame Q no longer has?
 
+Eine vm_page kennt die Useradresse und den Thread. Diese beiden Informationen
+werden an pagedir_clear_page übergeben. Mit der zusätzlichen Information
+aus vm_page::readonly wird pagedir_set_page aufgerufen.
+Wie bereits geschrieben: pagedir wurde nicht verändert.
+
 >> B4: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
 >> the page that faulted.
+
+static inline bool __attribute__ ((const))
+vm_is_stack_addr (void *user_addr)
+{
+  return (user_addr < PHYS_BASE) && (user_addr >= PHYS_BASE - MAX_STACK);
+}
+
+static inline bool __attribute__ ((const))
+vm_is_valid_stack_addr (void *esp, void *user_addr)
+{
+  return vm_is_stack_addr (esp) &&
+         (((esp    <= user_addr) && vm_is_stack_addr (user_addr))    ||
+          ((esp-4  == user_addr) && vm_is_stack_addr (user_addr-4))  ||
+          ((esp-32 == user_addr) && vm_is_stack_addr (user_addr-32)));
+}
 
 ---- SYNCHRONIZATION ----
 
@@ -77,21 +280,56 @@ René Kijewski    <kijewski@inf.fu-berlin.de>
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
 
+Kernelcode darf keinen Pagefault auslösen (sonst würde unser Exception-Handler
+eh eine PANIC auslösen), weshalb ein Thread nie "auf sich selbst" warten kann.
+Wir benutzen nur Locks und keine Semaphoren, sondern nur Locks.
+Wenn etwas durch mmap/swap gelesen oder geschrieben werden soll, ist vm_lock
+belegt. Eventuelle Locks in mmap/swap werden werden nur im Konzept eines
+geschlossenen vm_locks belegt.
+
 >> B6: A page fault in process P can cause another process Q's frame
 >> to be evicted.  How do you ensure that Q cannot access or modify
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
+
+Wann immer Daten aus VM-bezogenen Strukturen schrieben werden, sind Interrupts
+deaktiviert.
+Ebenso wenn gelesenen werden und eine Entscheidung diesbezüglich getroffen
+werden soll, sind Interrupts deaktiviert.
+Wenn Datei/Block-Operationen durchgeführt werden müssen, werden Interrupts
+zwar wieder aktiviert, aber die Strukturen sind dennoch durch das vm_lock
+geschützt.
+Wenn ein Tick auftritt, während das Lock geschlossen ist, wird vm_tick die
+Seiten Seiten in thread::vm_pages nicht überprüfen, sondern direkt abbrechen.
+Dies könnte Performance-Einbußen bedeuten, schützt aber zuverlässig vor Fehlern.
 
 >> B7: Suppose a page fault in process P causes a page to be read from
 >> the file system or swap.  How do you ensure that a second process Q
 >> cannot interfere by e.g. attempting to evict the frame while it is
 >> still being read in?
 
+Nur Seiten in vm.c:pages_lru sind entfernbar. Mit vm_ensure_groups, die vom
+Kernelcode verwendet werden, werden Seiten aus der LRU entfernt und sind so
+lange die Ensure Group besteht somit nicht entfernbar.
+Seiten, mit denen im Moment handtiert wird, sind nicht in der LRU oder die
+Interrupts sind deaktiviert.
+
 >> B8: Explain how you handle access to paged-out pages that occur
 >> during system calls.  Do you use page faults to bring in pages (as
 >> in user programs), or do you have a mechanism for "locking" frames
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
+
+Auch Ensure Groups. Die Ensure-Group-Funktionen müssen mit aktivierten
+Interrupts aufgerufen werden, so dass Seiten eingelagert werden könnten (bzw.
+ausgelagert, wenn der Speicher knapp wird). vm_ensure_group_add stellt sicher,
+dass eine Seite vorhanden ist, wenn darauf zugegriffen wird. Ebenso wird dem
+aufrufenden Kernelcode mitgeteilt, wie die kanonische kernel Seite ist.
+Wenn die sicherzustellende Adresse nun weder eine allokierte Seite, noch
+im gültigen Stack ist, wird dem Aufrufer VMER_SEGV (Posix-Nomenklatur), dass
+ein Seitenfehler auftreten _würde_, mitgeteilt. Wenn die Seite nicht
+einbgelagert werden konnte, weil keine andere Seite freigegeben werden konnte,
+wird VMER_OOM zurückgegeben. Beide Fehlerrückgaben werden gleich behandelt ...
 
 ---- RATIONALE ----
 
@@ -102,6 +340,15 @@ René Kijewski    <kijewski@inf.fu-berlin.de>
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
 
+Wir haben nur eine CPU und verwenden kein DMA, weshalb die Aussage "but limit
+parallelism" unsinn ist. Wir verwenden einen Lock (vm_lock) für das Locken
+des VM codes.
+
+Andererseits wird das Beenden eines Threads mit deaktivieren Interrupts
+durchgeführt, weshalb das Schreiben von Mmap-Seiten (sofern kein anderer Thread
+dieselbe Region und die selben Bereiche belegt) von einen Helferthread
+durchgeführt werden muss.
+
 			 MEMORY MAPPED FILES
 			 ===================
 
@@ -111,14 +358,102 @@ René Kijewski    <kijewski@inf.fu-berlin.de>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Threads haben für Mmapping Aliasse auf Regionen. Wenn drei mal "abc.txt"
+gemmappt ist, sind das drei Aliasse mit stets derselben Region.
++struct mmap_alias
++{
++  mapid_t             id;           // Id, die dem Userthread beim mmap-syscall
++                                    // mitgeteilt wurde
++  struct mmap_region *region;       // Verweis auf die Region
++  struct hash         upages;       // alle gemappten Frames, nicht nötiger
++                                    // Weise eingelagert
++  
++  struct hash_elem    aliases_elem; // zur Einordnung in thread::mmap_aliases
++  struct list_elem    region_elem;  // zur Einordnung in mmap_region::aliases
++};
+
+Eine Region ist eine gemmappte Datei. Regionen werden geshared.
++struct mmap_region
++{
++  struct file      *file;         // zugehörige Datei
++  size_t            length;       // Länge der Datei beim initialen Aufruf
++  struct list       aliases;      // Liste der Aliasse
++  struct hash       kpages;       // Hash page_num → mmap_kpage
++  
++  struct hash_elem  regions_elem; // zur Einordnung in mmap_regions.
++};
+
+Enthält Metainformationen zu vm_page[type=VMPPT_MMAP_KPAGE].
++struct mmap_kpage
++{
++  struct vm_page     *kernel_page; // zugehörige vm_page
++  struct mmap_region *region;      // zugehörige Region
++  size_t              page_num;    // n'te Seite
++  bool                dirty;       // Seite muss geschrieben werden, da
++                                   // verändert
++  struct list         upages;      // verweisende mmap_upages
++  
++  struct hash_elem    region_elem; // für mmap_region::upages
++};
+
+Enthält Metainformationen zu vm_page[type=VMPPT_MMAP_ALIAS].
++struct mmap_upage
++{
++  struct vm_page    *vm_page;     // zugehörige vm_page
++  struct mmap_alias *alias;       // zugehörige Alias
++  size_t             page_num;    // n'te Seite
++  struct mmap_kpage *kpage;       // zuhörige mmap_kpage, sofern eingelagert
++  
++  struct hash_elem   alias_elem;  // für mmap_alias::upages
++  struct hash_elem   upages_elem; // für mmap_upages
++  struct list_elem   kpage_elem;  // für mmap_kpage
++};
+
+Da beim Prozessende Interrupts disabled sind, muss ein Worker die Aliasse
+löschen.
++struct mmap_writer_task
++{
++  struct mmap_kpage *page;       // Sollte mmap_alias sein. Durch Zeitdruck
++                                 // ist das Schreiben beim beenden nicht
++                                 // implementiert. :-(
++  struct list_elem   tasks_elem; // für mmap_writer_tasks
++  struct semaphore  *sema;       // falls angegeben, zum signalisieren, dass
++                                 // durchgeführt
++};
+
++static struct lock mmap_filesys_lock; // unnötig
++static struct hash mmap_regions; // Hash inode → mmap_region
++static struct hash mmap_upages; // Hash vm_page → mmap_upage
+
++static struct semaphore mmap_writer_sema; // signalisieren, dass Elemente in
++                                          // mmap_writer_tasks sind
++static struct lock mmap_writer_lock; // beim Bearbeiten von mmap_writer_tasks
++static struct list mmap_writer_tasks; // Liste von zu löschenden Aliassen
++static tid_t mmap_writer_thread; // unnötig
+
+In struct thread:
++    struct hash mmap_aliases; // Hash int → mmap_alias, offene Aliases
+
 ---- ALGORITHMS ----
 
 >> C2: Describe how memory mapped files integrate into your virtual
 >> memory subsystem.  Explain how the page fault and eviction
 >> processes differ between swap pages and other pages.
 
+vm_pages haben einen Typen. Für Swap ist das eben VMPPT_SWAPPED und für mmapping
+VMPPT_MMAP_(ALIAS|KPAGE). Je nach Typ wird ein adäquates Vorgehen gewählt.
+Außerhalb des vm-Ordners, also z.B. in Exception- oder Syscall-Handlern, ist das
+Interface für alle Frame-Arten gleich.
+Das Swapping wird größtenteils in swap.c und das Mmapping größtenteils in
+mmap.c angewickelt.
+
 >> C3: Explain how you determine whether a new file mapping overlaps
 >> any existing segment.
+
+Es werden alle vm_pages für alle enthaltenen Seiten alloziert. Wenn es keine
+Kollision gab, wird der Alias unmapped, so dass es keinen teilweisen "Erfolg"
+geben kann.
+Mmapping im Stackbereich ist nicht erlaubt.
 
 ---- RATIONALE ----
 
@@ -128,6 +463,13 @@ René Kijewski    <kijewski@inf.fu-berlin.de>
 >> that much of their implementation can be shared.  Explain why your
 >> implementation either does or does not share much of the code for
 >> the two situations.
+
+Unser Programmierstil ist anders. Wir haben möglichst wenig
+Überschneidungspunkte, da möglichst einfach eine weitere VM-Frameart einbaubar
+sein soll bzw. man das Swapping und Mmmapping möglichst einfach wieder entfernen
+können soll.
+Zudem sind die benötigtigen Metadaten maximal disjunkt und auf due Verwendung
+von Tagged-Unions und ähnlichem wollten wir verzichten.
 
 			   SURVEY QUESTIONS
 			   ================
@@ -141,14 +483,41 @@ the quarter.
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
+Die Aufgabe war wesentlich zu schwer.
+
+Ich bezweifle stark, dass die Musterlösung, die wir ja nicht zu sehen bekommen,
+stilvoll im Sinne von Erweiterbarkeit und der Behandlung von Sonderfällen und
+der optimierung von allgemeinen und spezialfällen implementiert ist.
+
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+
+Gerade die Probleme bei der Verwaltung von mapped Memory bei ausgeschalteten
+Interrupts gab große Einsicht in die Probleme, auf Kernelentwickler zukommen.
+
+Insgesamt hat mir die Umsetzung des Projekts wesentlich geholfen, die
+X86-Architektur zu verstehen.
+
+Leider hatte ich eine Woche nicht am Projekt arbeiten können, weil ich mich auf
+meinen Bachelorvortrag konzentrieren musste.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
 
+Pintos verwendet fast schon zu viel "Magie", Dinge klappen zu einfach, so dass
+man nicht direkt versteht, dass das ganze Pagedir-handling manuell in Pintos
+implementiert ist und nicht zu x86 gehört.
+8-task3.pdf und das Osdev-Wiki gaben wesentlich bessere Informationen.
+
+Dass malloc und palloc Locking verwenden ist schon ein wenig fies. ;)
+
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters or the remaining projects?
 
+War schon okay. ;)
+
 >> Any other comments?
+
+Diesmal nur 93,6 %, beschämend. :(
+
