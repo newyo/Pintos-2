@@ -81,7 +81,7 @@ mmap_writer_read (struct mmap_kpage *page)
   return result;
 }
 
-static void
+static void __attribute__ ((noreturn))
 mmap_writer_func (void *aux UNUSED)
 { 
   ASSERT (intr_get_level () == INTR_ON);
@@ -218,11 +218,13 @@ mmap_alias_dispose (struct thread *owner, struct mmap_alias *alias)
   size_t kpages_count = hash_size (&alias->region->kpages);
   if (kpages_count > 0)
     {
+      auto void find_unused_kpages (struct hash_elem *, void *);
+
       size_t kpages_to_delete_count = 0;
       struct mmap_kpage **kpages_to_delete = calloc (kpages_count,
                                                      sizeof (void *));
       ASSERT (kpages_to_delete != NULL);
-      
+
       void find_unused_kpages (struct hash_elem *e, void *aux UNUSED) {
         struct mmap_kpage *ee = hash_entry (e, struct mmap_kpage, region_elem);
         if (list_empty (&ee->upages))
@@ -247,6 +249,9 @@ mmap_alias_dispose (struct thread *owner, struct mmap_alias *alias)
   list_remove (&alias->region_elem);
   if (list_empty (&alias->region->aliases))
     {
+      auto void
+      panic_if_not_empty (struct hash_elem *, void *) __attribute__ ((noreturn));
+
       void panic_if_not_empty (struct hash_elem *e UNUSED, void *aux UNUSED) {
         PANIC ("Unreferenced mmap region was not empty.");
       }
