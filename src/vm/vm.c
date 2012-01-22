@@ -475,7 +475,6 @@ vm_free_a_page (void)
   for (retry = 0; retry < 32; ++retry)
     {
       struct lru_elem *e = lru_peek_least (&pages_lru);
-      ASSERT (e != NULL); // TODO: remove line
       if (!e)
         break;
       struct vm_page *ee = lru_entry (e, struct vm_page, lru_elem);
@@ -587,13 +586,11 @@ vm_alloc_kpage (struct vm_page *ee)
           kpage = vm_free_a_page ();
           if (kpage == NULL)
             {
-              ASSERT (0); // TODO: remove line
               return NULL;
             }
           palloc_free_page (kpage);
         }
     }
-  ASSERT (0); // TODO: remove line
   return NULL;
 }
 
@@ -645,7 +642,6 @@ vm_ensure_mmap_alias (struct vm_page *vm_page, void **kpage_)
   struct vm_page *kernel_page = calloc (1, sizeof (*kernel_page));
   if (!kernel_page)
     {
-      ASSERT (0); // TODO: remove line
       palloc_free_page (*kpage_);
       *kpage_ = NULL;
       return VMER_OOM;
@@ -657,7 +653,6 @@ vm_ensure_mmap_alias (struct vm_page *vm_page, void **kpage_)
     
   if (!mmap_load_kpage (mmap_upage, kernel_page))
     {
-      ASSERT (0); // TODO: remove line
       free (kernel_page);
       palloc_free_page (*kpage_);
       *kpage_ = NULL;
@@ -742,7 +737,6 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
         else
           {
             result = VMER_SEGV;
-            ASSERT (0); // TODO: remove line;
           }
         break;
         
@@ -974,7 +968,6 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
     
   enum vm_ensure_result result;
   result = vm_ensure (g->thread, pg_round_down (user_addr), kpage_);
-  ASSERT (result != VMER_OOM); // TODO: remove line
   if (result == VMER_SEGV && vm_is_valid_stack_addr (g->esp, user_addr))
     {
       intr_disable ();
@@ -1036,7 +1029,6 @@ end2:
   ASSERT (result == VMER_OK ? *kpage_ != NULL : true);
   ASSERT (result != VMER_OK ? *kpage_ == NULL : true);
   lock_release (&vm_lock);
-  ASSERT (result != VMER_OOM); // TODO: remove line
   return result;
 }
 

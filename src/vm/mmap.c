@@ -383,13 +383,11 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
       region = calloc (1, sizeof (*region));
       if (region == NULL)
         {
-          ASSERT (0); // TODO: remove  line
           return MAP_FAILED;
         }
       region->file = file_reopen (file);
       if (region->file == NULL)
         {
-          ASSERT (0); // TODO: remove  line
           free (region);
           return MAP_FAILED;
         }
@@ -400,7 +398,6 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
   struct mmap_alias *alias = calloc (1, sizeof (*alias));
   if (alias == NULL)
     {
-      ASSERT (0); // TODO: remove  line
       if (e_region != NULL)
         free (region);
       return MAP_FAILED;
