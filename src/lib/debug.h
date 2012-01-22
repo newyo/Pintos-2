@@ -43,7 +43,7 @@ void debug_backtrace_all (void);
 
 #ifndef NDEBUG
 # define ASSERT(CONDITION)                                      \
-        if (CONDITION) { } else {                               \
+        if (!({ CONDITION; })) {                                \
                 PANIC ("assertion `%s' failed.", #CONDITION);   \
         }
 # define NOT_REACHED() PANIC ("executed an unreachable statement");

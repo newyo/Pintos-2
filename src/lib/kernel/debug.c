@@ -142,9 +142,9 @@ debug_hexdump (void *from, void *to)
   printf ("  0x%07xX  0 1 2 3  4 5 6 7  8 9 A B  C D E F\n",
           ((uintptr_t) from) >> 8);
   
-  intptr_t bottom = ((((intptr_t) (from))     ) & ~0x0F);
-  intptr_t top    = ((((intptr_t) (to  ))+0x0F) & ~0x0F);
-  intptr_t cur;
+  uintptr_t bottom = ((((intptr_t) (from))     ) & ~0x0F);
+  uintptr_t top    = ((((intptr_t) (to  ))+0x0F) & ~0x0F);
+  uintptr_t cur;
   for (cur = bottom; cur < top; cur += 0x10)
     {
       printf ("  0x%08x", cur);
