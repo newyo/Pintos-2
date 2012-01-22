@@ -28,6 +28,9 @@ mmap_write_kpage (struct mmap_kpage *page)
 {
   ASSERT (page != NULL);
   ASSERT (intr_get_level () == INTR_ON);
+  
+  if (!page->dirty)
+    return;
 
   lock_acquire (&mmap_filesys_lock);
   
@@ -191,13 +194,10 @@ mmap_clean_sub_upages (struct hash_elem *e, void *alias UNUSED)
   
   struct mmap_upage *upage = hash_entry (e, struct mmap_upage, alias_elem);
   
-  hash_delete (&mmap_upages, &upage->upages_elem);
   if (upage->kpage)
-    {
-      list_remove (&upage->kpage_elem);
-      upage->kpage = NULL;
-    }
+    list_remove (&upage->kpage_elem);
   vm_mmap_dispose_real (upage->vm_page);
+  hash_delete (&mmap_upages, &upage->upages_elem);
   free (upage);
 }
 

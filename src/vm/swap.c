@@ -69,12 +69,14 @@ swap_get_page_of_owner (struct thread *owner, void *user_addr)
 static void UNUSED
 swap_needlessly_zero_out_whole_swap_space (void)
 {
+  /*
   char zero[BLOCK_SECTOR_SIZE];
   memset (zero, 0xCC, sizeof (zero));
   
   block_sector_t i;
   for (i = 0; i < swap_pages_count; ++i)
     block_write (swap_disk, i, zero);
+  */
 }
 
 static unsigned

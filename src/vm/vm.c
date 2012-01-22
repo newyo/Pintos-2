@@ -1248,6 +1248,13 @@ vm_mmap_dispose_real (struct vm_page *ee)
           ee->type == VMPPT_MMAP_ALIAS);
   
   enum intr_level old_level = intr_disable ();
+  if (ee->type == VMPPT_MMAP_ALIAS && pagedir_is_dirty (ee->thread->pagedir,
+                                                        ee->user_addr))
+    {
+      struct mmap_upage *upage = mmap_retreive_upage (ee);
+      if (upage->kpage)
+        upage->kpage->dirty = true;
+    }
   vm_dispose_real (ee);
   intr_set_level (old_level);
 }
