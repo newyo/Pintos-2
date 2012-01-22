@@ -5,11 +5,9 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#ifdef VM
-# include "vm/vm.h"
-# include "threads/vaddr.h"
-# include "userprog/pagedir.h"
-#endif
+#include "vm/vm.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -159,12 +157,6 @@ page_fault (struct intr_frame *f)
           user ? "user" : "kernel",
           f->eip);
   */
-#ifndef VM
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  kill (f);
-#else
 
   if (!user)
     PANIC ("Page fault at %p: %s error %s page in kernel context.\n",
@@ -198,8 +190,6 @@ page_fault (struct intr_frame *f)
       default:
         PANIC ("Wrong vm_ensure_result: %u", result);
     }
-    
-#endif
 }
 
 static void NO_RETURN

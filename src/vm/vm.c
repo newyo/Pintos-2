@@ -634,7 +634,6 @@ vm_ensure_mmap_alias (struct vm_page *vm_page, void **kpage_)
   *kpage_ = vm_alloc_kpage (vm_page);
   if (!*kpage_)
     {
-      ASSERT (0); // TODO: remove line
       *kpage_ = NULL;
       return VMER_OOM;
     }
@@ -715,7 +714,6 @@ vm_ensure (struct thread *t, void *user_addr, void **kpage_)
   *kpage_ = vm_alloc_kpage (ee);
   if (!*kpage_)
     {
-      ASSERT (0); // TODO: remove line
       result = VMER_OOM;
       goto end;
     }

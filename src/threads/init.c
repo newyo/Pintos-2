@@ -22,20 +22,17 @@
 #include "threads/palloc.h"
 #include "threads/pte.h"
 #include "threads/thread.h"
-#ifdef USERPROG
-# include "userprog/process.h"
-# include "userprog/exception.h"
-# include "userprog/gdt.h"
-# include "userprog/syscall.h"
-# include "userprog/tss.h"
-#else
+#include "userprog/process.h"
+#include "userprog/exception.h"
+#include "userprog/gdt.h"
+#include "userprog/syscall.h"
+#include "userprog/tss.h"
+#if 0
 # include "tests/threads/tests.h"
 #endif
-#ifdef VM
-# include "vm/swap.h"
-# include "vm/vm.h"
-# include "vm/mmap.h"
-#endif
+#include "vm/swap.h"
+#include "vm/vm.h"
+#include "vm/mmap.h"
 #ifdef FILESYS
 # include "devices/block.h"
 # include "devices/ide.h"
@@ -55,9 +52,7 @@ static bool format_filesys;
    overriding the defaults. */
 static const char *filesys_bdev_name;
 static const char *scratch_bdev_name;
-#ifdef VM
 static const char *swap_bdev_name;
-#endif
 #endif /* FILESYS */
 
 /* -ul: Maximum number of pages to put into palloc's user pool. */
@@ -76,9 +71,7 @@ static void locate_block_devices (void);
 static void locate_block_device (enum block_type, const char *name);
 #endif
 
-#ifdef USERPROG
 static bool tick_print_free = false;
-#endif
 
 int main (void) NO_RETURN;
 
@@ -110,20 +103,16 @@ main (void)
   paging_init ();
 
   /* Segmentation. */
-#ifdef USERPROG
   tss_init ();
   gdt_init ();
-#endif
 
   /* Initialize interrupt handlers. */
   intr_init ();
   timer_init ();
   kbd_init ();
   input_init ();
-#ifdef USERPROG
   exception_init ();
   syscall_init ();
-#endif
 
   /* Start thread scheduler and enable interrupts. */
   thread_start ();
@@ -137,15 +126,11 @@ main (void)
   filesys_init (format_filesys);
 #endif
 
-#ifdef VM
   swap_init ();
   vm_init ();
   mmap_init ();
-#endif
 
-#ifdef USERPROG
   thread_activate_pool_statistics (tick_print_free);
-#endif
 
   thread_load_avg = fp_from_int (0);
   printf ("Boot complete.\n");
@@ -267,21 +252,17 @@ parse_options (char **argv)
         filesys_bdev_name = value;
       else if (!strcmp (name, "-scratch"))
         scratch_bdev_name = value;
-#ifdef VM
       else if (!strcmp (name, "-swap"))
         swap_bdev_name = value;
-#endif
 #endif
       else if (!strcmp (name, "-rs"))
         random_init ((unsigned) atoi (value));
       else if (!strcmp (name, "-mlfqs"))
         thread_mlfqs = true;
-#ifdef USERPROG
       else if (!strcmp (name, "-ul"))
         user_page_limit = (unsigned) atoi (value);
       else if (!strcmp (name, "-free"))
         tick_print_free = true;
-#endif
       else
         PANIC ("unknown option `%s' (use -h for help)", name);
     }
@@ -306,11 +287,7 @@ run_task (char **argv)
   const char *task = argv[1];
   
   printf ("Executing '%s':\n", task);
-#ifdef USERPROG
   process_wait (process_execute (task));
-#else
-  run_test (task);
-#endif
   printf ("Execution of '%s' complete.\n", task);
 }
 
@@ -374,11 +351,7 @@ usage (void)
           "Options must precede actions.\n"
           "Actions are executed in the order specified.\n"
           "\nAvailable actions:\n"
-#ifdef USERPROG
           "  run 'PROG [ARG...]' Run PROG and wait for it to complete.\n"
-#else
-          "  run TEST           Run TEST.\n"
-#endif
 #ifdef FILESYS
           "  ls                 List files in the root directory.\n"
           "  cat FILE           Print FILE to the console.\n"
@@ -395,15 +368,11 @@ usage (void)
           "  -f                 Format file system device during startup.\n"
           "  -filesys=BDEV      Use BDEV for file system instead of default.\n"
           "  -scratch=BDEV      Use BDEV for scratch instead of default.\n"
-#ifdef VM
           "  -swap=BDEV         Use BDEV for swap instead of default.\n"
-#endif
 #endif
           "  -rs=SEED           Set random number seed to SEED.\n"
           "  -mlfqs             Use multi-level feedback queue scheduler.\n"
-#ifdef USERPROG
           "  -ul=COUNT          Limit user memory to COUNT pages.\n"
-#endif
           );
   shutdown_power_off ();
 }
@@ -415,9 +384,7 @@ locate_block_devices (void)
 {
   locate_block_device (BLOCK_FILESYS, filesys_bdev_name);
   locate_block_device (BLOCK_SCRATCH, scratch_bdev_name);
-#ifdef VM
   locate_block_device (BLOCK_SWAP, swap_bdev_name);
-#endif
 }
 
 /* Figures out what block device to use for the given ROLE: the

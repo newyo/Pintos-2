@@ -4,12 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
-#ifdef USERPROG
 #include <hash.h>
 #include "synch.h"
-#endif
-
 #include "fixed-point.h"
 
 /* States in a thread's life cycle. */
@@ -108,7 +104,6 @@ struct thread
     struct list_elem elem;              /* List element. */
     struct list lock_list;              /* list of held locks */
 
-#ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct hash fds;                    /* open file descriptors */
@@ -121,14 +116,11 @@ struct thread
     struct semaphore wait_sema;         /* semaphore the parent waits for */
     struct file *executable;            /* for rox, executable it was loaded */
                                         /* from */
-#endif
 
-#ifdef VM
     /* Owned by vm */
     struct hash swap_pages;
     struct hash vm_pages;
     struct hash mmap_aliases;
-#endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -184,11 +176,9 @@ extern fp_t thread_load_avg;
 
 struct thread *thread_find_tid (tid_t t);
 
-#ifdef USERPROG
 void thread_dispel_zombie (struct thread *t);
 bool thread_is_file_currently_executed (struct file *f);
 
 bool thread_activate_pool_statistics (bool yes);
-#endif
 
 #endif /* threads/thread.h */

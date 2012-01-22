@@ -12,15 +12,11 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "../devices/timer.h"
-#ifdef USERPROG
-# include "userprog/process.h"
-# include "filesys/file.h"
-#endif
-#ifdef VM
-# include "vm/vm.h"
-# include "vm/swap.h"
-# include "vm/mmap.h"
-#endif
+#include "userprog/process.h"
+#include "filesys/file.h"
+#include "vm/vm.h"
+#include "vm/swap.h"
+#include "vm/mmap.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -32,9 +28,7 @@
 static struct list ready_list;
 
 static struct list sleep_list;
-#ifdef USERPROG
 static struct list zombie_list;
-#endif
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -62,7 +56,6 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
-#ifdef USERPROG
 static bool tick_print_free;
 
 bool
@@ -72,7 +65,6 @@ thread_activate_pool_statistics (bool yes)
   tick_print_free = yes;
   return old;
 }
-#endif
 
 fp_t thread_load_avg;
 
@@ -216,11 +208,9 @@ thread_tick (void)
   else
     {
       fp_incr_inplace (&t->recent_cpu);
-#ifdef USERPROG
       if (t->pagedir != NULL)
         user_ticks++;
       else
-#endif
         kernel_ticks++;
     }
 
@@ -237,10 +227,8 @@ thread_tick (void)
       thread_foreach2 (thread_recalculate_priorities, NULL);
     }
     
-#ifdef VM
   if (t->pagedir != NULL)
     vm_tick (t);
-#endif
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -318,14 +306,12 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
   
-#ifdef USERPROG
   hash_init (&t->fds, fd_hash, fd_less, t);
   t->exit_code = -1;
   
   struct thread *current_thread = thread_current ();
   t->parent = current_thread;
   list_push_back (&current_thread->children, &t->parent_elem);
-#endif
 
   intr_set_level (old_level);
 
@@ -426,7 +412,6 @@ thread_exit (void)
   intr_disable ();
   list_remove (&t->allelem);
 
-#ifdef USERPROG
   // when the parent dies, all children must be disposed
   while (!list_empty (&t->children))
     {
@@ -458,9 +443,6 @@ thread_exit (void)
       sema_up (&t->wait_sema);
       t->status = THREAD_ZOMBIE;
     }
-#else
-  t->status = THREAD_DYING;
-#endif
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
@@ -469,13 +451,11 @@ thread_exit (void)
   NOT_REACHED ();
 }
 
-#ifdef USERPROG
 void
 thread_dispel_zombie (struct thread *t)
 {
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (is_thread (t));
-  ASSERT (t->status == THREAD_ZOMBIE);
   
   if (t->parent)
     {
@@ -488,7 +468,6 @@ thread_dispel_zombie (struct thread *t)
   list_remove (&t->elem);
   palloc_free_page (t);
 }
-#endif
 
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
@@ -502,10 +481,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
     
-#ifdef VM
   if (tick_print_free)
     thread_print_tick_status (cur);
-#endif
 
   if (cur != idle_thread)
     list_push_back (&ready_list, &cur->elem);
@@ -536,9 +513,7 @@ void
 thread_foreach (thread_action_func *func, void *aux)
 {
   thread_for_list (func, aux, &all_list);
-#ifdef USERPROG
   thread_for_list (func, aux, &zombie_list);
-#endif
 }
 
 static void
@@ -914,11 +889,9 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->lock_list);
   list_push_back (&all_list, &t->allelem);
   
-#ifdef USERPROG
   list_elem_init (&t->parent_elem);
   list_init (&t->children);
   sema_init (&t->wait_sema, 0);
-#endif
   
   if (!thread_mlfqs)
     {
@@ -974,10 +947,8 @@ thread_schedule_tail (struct thread *prev)
   /* Start new time slice. */
   thread_ticks = 0;
 
-#ifdef USERPROG
   /* Activate the new address space. */
   process_activate ();
-#endif
 
   /* If the thread we switched from is dying, destroy its struct
      thread.  This must happen late so that thread_exit() doesn't
@@ -1060,7 +1031,6 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 const uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-#ifdef USERPROG
 struct thread *
 thread_find_tid (tid_t tid)
 {
@@ -1121,4 +1091,3 @@ thread_is_file_currently_executed (struct file *f)
   intr_set_level (old_level);
   return result;
 }
-#endif

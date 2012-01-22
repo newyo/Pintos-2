@@ -20,9 +20,7 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
-#ifdef VM
-# include "vm/vm.h"
-#endif
+#include "vm/vm.h"
 
 struct process_start_aux
 {
@@ -329,9 +327,7 @@ process_exit (void)
     
   hash_destroy (&cur->fds, fd_free);
 
-#ifdef VM
   vm_clean (cur);
-#endif
 
   uint32_t *pd = cur->pagedir;
   cur->pagedir = NULL;
@@ -439,9 +435,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
-#ifdef VM
   vm_init_thread (t);
-#endif
 
   /* Open executable file. */
   struct file *file = filesys_open (file_name);

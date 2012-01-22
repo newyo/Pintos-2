@@ -15,9 +15,7 @@
 #include "threads/synch.h"
 #include "threads/interrupt.h"
 #include "devices/input.h"
-#ifdef VM
-# include "vm/vm.h"
-#endif
+#include "vm/vm.h"
 
 #define TODO_NO_RETURN NO_RETURN
 
