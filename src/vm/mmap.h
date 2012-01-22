@@ -56,10 +56,9 @@ void mmap_init_thread (struct thread *owner);
 void mmap_clean (struct thread *owner);
 
 mapid_t mmap_alias_acquire (struct thread *owner, struct file *file);
-bool mmap_alias_dispose (struct thread *owner, mapid_t id);
+void mmap_alias_dispose (struct thread *owner, struct mmap_alias *alias);
 
 struct mmap_upage *mmap_retreive_upage (struct vm_page *vm_page);
-struct mmap_kpage *mmap_retreive_kpage (struct vm_page *vm_page);
 struct mmap_kpage *mmap_assign_kpage (struct mmap_upage *upage);
 struct mmap_kpage *mmap_load_kpage (struct mmap_upage *upage,
                                     struct vm_page    *kernel_page);

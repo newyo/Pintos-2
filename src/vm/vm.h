@@ -9,6 +9,11 @@
 
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
 
+struct mmap_region;
+struct mmap_alias;
+struct mmap_upage;
+struct mmap_kpage;
+
 enum vm_page_type
 {
   VMPPT_UNUSED = 0,   // this physical page is not used, yet
@@ -101,6 +106,8 @@ void *vm_palloc (void);
 
 mapid_t vm_mmap_acquire (struct thread *owner, struct file *file);
 bool vm_mmap_dispose (struct thread *owner, mapid_t id);
+void vm_mmap_dispose2 (struct mmap_alias *alias);
+void vm_mmap_dispose_real (struct vm_page *ee);
 bool vm_mmap_page (struct thread *owner,
                    mapid_t        id,
                    void          *base,
@@ -109,7 +116,6 @@ bool vm_mmap_pages (struct thread *owner,
                     mapid_t        id,
                     void          *base);
 
-struct mmap_kpage;
 void vm_mmap_evicting (struct mmap_kpage *kpage);
 
 #endif

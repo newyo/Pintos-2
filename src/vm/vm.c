@@ -107,32 +107,39 @@ vm_dispose_real (struct vm_page *ee)
   ASSERT (ee->vmlp_magic == VMLP_MAGIC);
   
   lru_dispose (&pages_lru, &ee->lru_elem, false);
-  hash_delete (&ee->thread->vm_pages, &ee->thread_elem);
+  if (ee->thread)
+    hash_delete (&ee->thread->vm_pages, &ee->thread_elem);
   
   switch (ee->type)
     {
     case VMPPT_USED:
     case VMPPT_EMPTY:
+    case VMPPT_MMAP_ALIAS:
+    case VMPPT_MMAP_KPAGE:
       break;
       
     case VMPPT_SWAPPED:
       (void) swap_dispose (ee->thread, ee->user_addr);
       break;
-      
-    case VMPPT_MMAP_ALIAS:
-      // TODO;
-      break;
-      
-    case VMPPT_MMAP_KPAGE:
+    
     default:
       PANIC ("ee->type == %d", ee->type);
     }
     
-  void *kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
-  if (kpage != NULL)
+  if (ee->thread)
     {
-      pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
-      palloc_free_page (kpage);
+      void *kpage = pagedir_get_page (ee->thread->pagedir, ee->user_addr);
+      if (kpage != NULL)
+        {
+          pagedir_clear_page (ee->thread->pagedir, ee->user_addr);
+          if (ee->type != VMPPT_MMAP_ALIAS)
+            palloc_free_page (kpage);
+        }
+    }
+  else
+    {
+      ASSERT (ee->type == VMPPT_MMAP_KPAGE);
+      palloc_free_page (ee->user_addr);
     }
   
   free (ee);
@@ -168,27 +175,18 @@ vm_clean (struct thread *t)
   intr_set_level (old_level);
 }
 
-bool
-vm_alloc_zero (struct thread *t, void *addr, bool readonly)
+static bool
+vm_alloc_zero_real (struct thread *t, void *addr, bool readonly)
 {
   assert_t_addr (t, addr);
-  
-  bool result;
-  
-  // TODO: my have race conditions
-  bool outer_lock = lock_held_by_current_thread (&vm_lock);
-  if (!outer_lock)
-    lock_acquire (&vm_lock);
-  enum intr_level old_level = intr_disable ();
+  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
   
   //printf ("   ALLOC ZERO: %8p\n", addr);
   
   struct vm_page *page = calloc (1, sizeof (*page));
   if (!page)
-    {
-      result = false;
-      goto end;
-    }
+    return false;
     
   page->type       = VMPPT_EMPTY;
   page->thread     = t;
@@ -197,11 +195,18 @@ vm_alloc_zero (struct thread *t, void *addr, bool readonly)
   page->readonly   = !!readonly;
   hash_insert (&t->vm_pages, &page->thread_elem);
   
-  result = true;
+  return true;
+}
+
+bool
+vm_alloc_zero (struct thread *t, void *addr, bool readonly)
+{
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
   
-end:
-  if (!outer_lock)
-    lock_release (&vm_lock);
+  bool result = vm_alloc_zero_real (t, addr, readonly);
+  
+  lock_release (&vm_lock);
   intr_set_level (old_level);
   return result;
 }
@@ -534,13 +539,8 @@ vm_free_a_page (void)
           
         case VMPPT_MMAP_KPAGE:
           {
-            struct mmap_kpage *mmap_kpage = mmap_retreive_kpage (ee);
-            ASSERT (mmap_kpage != NULL);
-            struct vm_page *vm_page = vm_mmap_evict_real (mmap_kpage);
-            ASSERT (!lru_is_interior (&vm_page->lru_elem));
-            kpage = vm_page->user_addr;
-            free (vm_page);
-            result = true;
+            ASSERT (0);
+            // TODO
             break;
           }
           
@@ -771,23 +771,52 @@ end:
   return result;
 }
 
-void
-vm_dispose (struct thread *t, void *addr)
+static void
+vm_dispose_real2 (struct thread *t, void *addr)
 {
   assert_t_addr (t, addr);
-  
-  // TODO: may have race conditions
-  bool outer_lock = lock_held_by_current_thread (&vm_lock);
-  if (!outer_lock)
-    lock_acquire (&vm_lock);
-  enum intr_level old_level = intr_disable ();
+  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
   
   struct vm_page *ee = vm_get_logical_page (t, addr);
   vm_dispose_real (ee);
+}
+
+void
+vm_dispose (struct thread *t, void *addr)
+{
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
   
-  if (!outer_lock)
-    lock_release (&vm_lock);
+  vm_dispose_real2 (t, addr);
+  
+  lock_release (&vm_lock);
   intr_set_level (old_level);
+}
+
+static void *
+vm_alloc_and_ensure_real (struct thread *t, void *addr, bool readonly)
+{
+  assert_t_addr (t, addr);
+  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  
+  void *kpage = NULL;
+  
+  if (!vm_alloc_zero_real (t, addr, readonly))
+    goto end;
+  
+  intr_enable ();
+  enum vm_ensure_result result = vm_ensure (t, addr, &kpage);
+  if (result == VMER_OK)
+    goto end;
+    
+  ASSERT (result == VMER_OOM);
+  intr_disable ();
+  vm_dispose_real2 (t, addr);
+  
+end:
+  return kpage;
 }
 
 void *
@@ -796,26 +825,14 @@ vm_alloc_and_ensure (struct thread *t, void *addr, bool readonly)
   assert_t_addr (t, addr);
   ASSERT (intr_get_level () == INTR_ON);
   
-  void *kpage = NULL;
+  enum intr_level old_level;
+  lock_acquire2 (&vm_lock, &old_level);
   
-  bool outer_lock = lock_held_by_current_thread (&vm_lock);
-  if (!outer_lock)
-    lock_acquire (&vm_lock);
+  void *result = vm_alloc_and_ensure_real (t, addr, readonly);
   
-  if (!vm_alloc_zero (t, addr, readonly))
-    goto end;
-  
-  enum vm_ensure_result result = vm_ensure (t, addr, &kpage);
-  if (result == VMER_OK)
-    goto end;
-    
-  ASSERT (result == VMER_OOM);
-  vm_dispose (t, addr);
-  
-end:
-  if (!outer_lock)
-    lock_release (&vm_lock);
-  return kpage;
+  lock_release (&vm_lock);
+  intr_enable ();
+  return result;
 }
 
 enum vm_is_readonly_result
@@ -960,8 +977,11 @@ vm_ensure_group_add (struct vm_ensure_group *g, void *user_addr, void **kpage_)
   ASSERT (result != VMER_OOM); // TODO: remove line
   if (result == VMER_SEGV && vm_is_valid_stack_addr (g->esp, user_addr))
     {
-      *kpage_ = vm_alloc_and_ensure (g->thread, pg_round_down (user_addr),
-                                     false);
+      intr_disable ();
+      *kpage_ = vm_alloc_and_ensure_real (g->thread, pg_round_down (user_addr),
+                                          false);
+      intr_enable ();
+      
       result = *kpage_ ? VMER_OK : VMER_OOM;
     }
   if (result != VMER_OK)
@@ -1090,6 +1110,17 @@ vm_mmap_acquire (struct thread *owner, struct file *file)
   return result;
 }
 
+void
+vm_mmap_dispose2 (struct mmap_alias *alias)
+{
+  ASSERT (alias != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  lock_acquire (&vm_lock);
+  mmap_alias_dispose (NULL, alias);
+  lock_release (&vm_lock);
+}
+
 bool
 vm_mmap_dispose (struct thread *owner, mapid_t id)
 {
@@ -1098,13 +1129,20 @@ vm_mmap_dispose (struct thread *owner, mapid_t id)
   
   enum intr_level old_level;
   lock_acquire2 (&vm_lock, &old_level);
-  
-  bool result = mmap_alias_dispose (owner, id);
-  
-  lock_release (&vm_lock);
-  intr_set_level (old_level);
-  
-  return result;
+  struct mmap_alias *alias = mmap_retreive_alias (owner, id);
+  if (alias != NULL)
+    {
+      intr_enable ();
+      mmap_alias_dispose (owner, alias);
+      lock_release (&vm_lock);
+      return true;
+    }
+  else
+    {
+      lock_release (&vm_lock);
+      intr_enable ();
+      return false;
+    }
 }
 
 bool
@@ -1207,4 +1245,17 @@ end:
   lock_release (&vm_lock);
   intr_set_level (old_level);
   return result;
+}
+
+void
+vm_mmap_dispose_real (struct vm_page *ee)
+{
+  ASSERT (ee != NULL);
+  ASSERT (lock_held_by_current_thread (&vm_lock));
+  ASSERT (ee->type == VMPPT_MMAP_KPAGE ||
+          ee->type == VMPPT_MMAP_ALIAS);
+  
+  enum intr_level old_level = intr_disable ();
+  vm_dispose_real (ee);
+  intr_set_level (old_level);
 }

@@ -10,9 +10,8 @@
 
 struct mmap_writer_task
 {
-  struct mmap_kpage *page;
+  struct mmap_alias *alias;
   struct list_elem   tasks_elem;
-  struct semaphore  *sema;
 };
 
 static struct lock mmap_filesys_lock;
@@ -88,27 +87,18 @@ mmap_writer_func (void *aux UNUSED)
     {
       sema_down (&mmap_writer_sema);
       
-      enum intr_level old_level;
-      lock_acquire2 (&mmap_writer_lock, &old_level);
-      
+      intr_disable ();
       struct list_elem *e = list_pop_front (&mmap_writer_tasks);
       ASSERT (e != NULL);
-      
-      lock_release (&mmap_writer_lock);
-      intr_set_level (old_level);
-          
       struct mmap_writer_task *task;
       task = list_entry (e, struct mmap_writer_task, tasks_elem);
-      if (!task->page)
-        {
-          sema_up (task->sema);
-          return;
-        }
-      else
-        {
-          vm_mmap_evicting (task->page);
-          sema_up (task->sema);
-        }
+      struct mmap_alias *alias = task->alias;
+      ASSERT (alias != NULL);
+      free (task);
+      ASSERT (hash_empty (&alias->upages));
+      intr_enable ();
+      
+      vm_mmap_dispose2 (alias);
     }
 }
 
@@ -194,55 +184,96 @@ mmap_init_thread (struct thread *owner)
 }
 
 static void
-mmap_alias_upage_destroy_sub (struct hash_elem *e, void *alias UNUSED)
+mmap_clean_sub_upages (struct hash_elem *e, void *alias UNUSED)
 {
   ASSERT (e != NULL);
-  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (alias != NULL);
   
-  struct mmap_upage *ee = hash_entry (e, struct mmap_upage, alias_elem);
-  ASSERT (ee->alias == alias);
-  hash_delete (&mmap_upages, &ee->upages_elem);
-  hash_delete (&ee->alias->upages, &ee->alias_elem);
-  if (ee->kpage)
+  struct mmap_upage *upage = hash_entry (e, struct mmap_upage, alias_elem);
+  
+  hash_delete (&mmap_upages, &upage->upages_elem);
+  if (upage->kpage)
     {
-      list_remove (&ee->kpage_elem);
-      if (list_empty (&ee->kpage->upages))
-        {
-          // TODO: no more references to kpage, set task for eviction
-        }
+      list_remove (&upage->kpage_elem);
+      upage->kpage = NULL;
     }
-  if (ee->vm_page)
-    vm_mmap_disposed (ee->vm_page);
-  free (ee);
+  vm_mmap_dispose_real (upage->vm_page);
+  free (upage);
 }
 
-static void
-mmap_alias_dispose_real (struct thread *owner UNUSED, struct mmap_alias *ee)
+void
+mmap_alias_dispose (struct thread *owner, struct mmap_alias *alias)
 {
-  ASSERT (owner != NULL);
-  ASSERT (ee != NULL);
-  ASSERT (ee->region != NULL);
-  ASSERT (intr_get_level () == INTR_OFF);
+  ASSERT (alias != NULL);
+  ASSERT (alias->region != NULL);
+  ASSERT (hash_empty (&alias->upages) || owner != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   
-  hash_destroy (&ee->upages, &mmap_alias_upage_destroy_sub);
-  list_remove (&ee->region_elem);
-  ASSERT (hash_delete (&owner->mmap_aliases, &ee->aliases_elem) == NULL);
-  if (list_empty (&ee->region->aliases))
+  if (owner != NULL)
     {
-      // TODO: no more references to region, set task to deletion
+      hash_destroy (&alias->upages, &mmap_clean_sub_upages);
+      hash_delete (&owner->mmap_aliases, &alias->aliases_elem);
     }
-  free (ee);
+  
+  size_t kpages_count = hash_size (&alias->region->kpages);
+  if (kpages_count > 0)
+    {
+      size_t kpages_to_delete_count = 0;
+      struct mmap_kpage **kpages_to_delete = calloc (kpages_count,
+                                                     sizeof (void *));
+      ASSERT (kpages_to_delete != NULL);
+      
+      void find_unused_kpages (struct hash_elem *e, void *aux UNUSED) {
+        struct mmap_kpage *ee = hash_entry (e, struct mmap_kpage, region_elem);
+        if (list_empty (&ee->upages))
+          kpages_to_delete[kpages_to_delete_count ++] = ee;
+      }
+      hash_apply (&alias->region->kpages, &find_unused_kpages);
+      
+      size_t i;
+      for (i = 0; i < kpages_to_delete_count; ++i)
+        {
+          struct mmap_kpage *ee = kpages_to_delete[i];
+          ASSERT (list_empty (&ee->upages));
+          hash_delete (&ee->region->kpages, &ee->region_elem);
+          mmap_write_kpage (ee);
+          ASSERT (ee->kernel_page->type == VMPPT_MMAP_KPAGE);
+          vm_mmap_dispose_real (ee->kernel_page);
+          free (ee);
+        }
+      free (kpages_to_delete);
+    }
+  
+  list_remove (&alias->region_elem);
+  if (list_empty (&alias->region->aliases))
+    {
+      void panic_if_not_empty (struct hash_elem *e UNUSED, void *aux UNUSED) {
+        PANIC ("Unreferenced mmap region was not empty.");
+      }
+      hash_destroy (&alias->region->kpages, &panic_if_not_empty);
+      file_close (alias->region->file);
+      hash_delete (&mmap_regions, &alias->region->regions_elem);
+      free (alias->region);
+    }
+  
+  free (alias);
 }
 
 static void
-mmap_clean_sub (struct hash_elem *e, void *t)
+mmap_clean_sub_aliases (struct hash_elem *e, void *t)
 {
   ASSERT (e != NULL);
   ASSERT (t != NULL);
   ASSERT (intr_get_level () == INTR_OFF);
   
-  struct mmap_alias *ee = hash_entry (e, struct mmap_alias, aliases_elem);
-  mmap_alias_dispose_real (t, ee);
+  struct mmap_alias *alias = hash_entry (e, struct mmap_alias, aliases_elem);
+  hash_destroy (&alias->upages, &mmap_clean_sub_upages);
+  
+  struct mmap_writer_task *task = calloc (1, sizeof (*task));
+  task->alias = alias;
+  list_push_back (&mmap_writer_tasks, &task->tasks_elem);
+  
+  sema_up (&mmap_writer_sema);
 }
 
 void
@@ -251,7 +282,7 @@ mmap_clean (struct thread *owner)
   ASSERT (owner != NULL);
   ASSERT (intr_get_level () == INTR_OFF);
   
-  hash_destroy (&owner->mmap_aliases, &mmap_clean_sub);
+  hash_destroy (&owner->mmap_aliases, &mmap_clean_sub_aliases);
 }
 
 static unsigned
@@ -392,27 +423,6 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
   return alias->id;
 }
 
-bool
-mmap_alias_dispose (struct thread *owner, mapid_t id)
-{
-  ASSERT (owner != NULL);
-  ASSERT (intr_get_level () == INTR_OFF);
-  
-  if (id == MAP_FAILED)
-    return false;
-    
-  struct mmap_alias key;
-  memset (&key, 0, sizeof (key));
-  key.id = id;
-  struct hash_elem *e = hash_delete (&owner->mmap_aliases, &key.aliases_elem);
-  if (!e)
-    return false;
-  
-  struct mmap_alias *ee = hash_entry (e, struct mmap_alias, aliases_elem);
-  mmap_alias_dispose_real (owner, ee);
-  return true;
-}
-
 struct mmap_upage *
 mmap_alias_map_upage (struct mmap_alias *alias,
                       struct vm_page    *vm_page,
@@ -466,6 +476,7 @@ mmap_load_kpage (struct mmap_upage *upage, struct vm_page *kernel_page)
     }
   
   list_push_front (&kpage->upages, &upage->kpage_elem);
+  hash_insert (&kpage->region->kpages, &kpage->region_elem);
   upage->kpage = kpage;
   return kpage;
 }
@@ -483,16 +494,6 @@ mmap_retreive_upage (struct vm_page *vm_page)
   
   ASSERT (e != NULL);
   return hash_entry (e, struct mmap_upage, upages_elem);
-}
-
-struct mmap_kpage *
-mmap_retreive_kpage (struct vm_page *vm_page)
-{
-  ASSERT (vm_page != NULL);
-  ASSERT (vm_page->type == VMPPT_MMAP_KPAGE);
-  
-  // TODO
-  return NULL;
 }
 
 struct mmap_kpage *
