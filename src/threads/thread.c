@@ -123,25 +123,6 @@ thread_list_entry (const struct list_elem *e)
   return result;
 }
 
-static void * UNUSED
-ready_lists_arent_messed_up_sub (struct list_elem *e UNUSED, void *aux)
-{
-  ASSERT (thread_list_entry (e) != NULL);
-  return aux;
-}
-
-static bool UNUSED
-ready_lists_arent_messed_up (void)
-{
-  ASSERT (intr_get_level () == INTR_OFF);
-  
-  list_foldl (&ready_list, ready_lists_arent_messed_up_sub, NULL);
-#ifdef USERPROG
-  list_foldl (&zombie_list, ready_lists_arent_messed_up_sub, NULL);
-#endif
-  return true;
-}
-
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -398,7 +379,6 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   
-  ASSERT (ready_lists_arent_messed_up ());
   intr_set_level (old_level);
 }
 
@@ -809,13 +789,11 @@ thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
   if (t == running_thread ())
     return;
   
-  ASSERT (ready_lists_arent_messed_up ());
   if (t->status == THREAD_RUNNING)
     {
       list_remove (&t->elem);
       list_push_back (&ready_list, &t->elem);
     }
-  ASSERT (ready_lists_arent_messed_up ());
   
 }
 
@@ -844,7 +822,6 @@ thread_get_ready_threads (void)
   size_t result = list_size (&ready_list);
   if (thread_current () != idle_thread)
     ++result;
-  ASSERT (ready_lists_arent_messed_up ());
   return result;
 }
 
