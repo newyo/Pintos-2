@@ -26,9 +26,9 @@ static unsigned loops_per_tick;
 
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
-static void busy_wait (int64_t loops);
-static void real_time_sleep (int64_t num, int32_t denom);
-static void real_time_delay (int64_t num, int32_t denom);
+static void busy_wait (uint64_t loops);
+static void real_time_sleep (uint64_t num, uint32_t denom);
+static void real_time_delay (uint64_t num, uint32_t denom);
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -198,7 +198,7 @@ too_many_loops (unsigned loops)
    differently in different places the results would be difficult
    to predict. */
 static void NO_INLINE
-busy_wait (int64_t loops) 
+busy_wait (uint64_t loops) 
 {
   while (loops-- > 0)
     barrier ();
@@ -206,7 +206,7 @@ busy_wait (int64_t loops)
 
 /* Sleep for approximately NUM/DENOM seconds. */
 static void
-real_time_sleep (int64_t num, int32_t denom) 
+real_time_sleep (uint64_t num, uint32_t denom) 
 {
   /* Convert NUM/DENOM seconds into timer ticks, rounding down.
           
@@ -214,7 +214,7 @@ real_time_sleep (int64_t num, int32_t denom)
      ---------------------- = NUM * TIMER_FREQ / DENOM ticks. 
      1 s / TIMER_FREQ ticks
   */
-  int64_t ticks_ = num * TIMER_FREQ / denom;
+  uint64_t ticks_ = num * TIMER_FREQ / denom;
 
   ASSERT (intr_get_level () == INTR_ON);
   if (ticks_ > 0)
@@ -234,7 +234,7 @@ real_time_sleep (int64_t num, int32_t denom)
 
 /* Busy-wait for approximately NUM/DENOM seconds. */
 static void
-real_time_delay (int64_t num, int32_t denom)
+real_time_delay (uint64_t num, uint32_t denom)
 {
   /* Scale the numerator and denominator down by 1000 to avoid
      the possibility of overflow. */

@@ -13,7 +13,7 @@ struct fp_t
 {
   uint16_t frac_part  : _FP_T_FRAC_LEN;
   uint32_t int_part   : _FP_T_INT_LEN;
-  int8_t   signedness : _FP_T_SGN_LEN;
+  _Bool    signedness : _FP_T_SGN_LEN;
 } __attribute__ ((packed));
 
 static inline uint32_t
@@ -45,7 +45,7 @@ fp_from_int (int32_t val)
   ASSERT (!fp_value_exceeds_bits (int_abs (val), _FP_T_INT_LEN));
   
   struct fp_t result;
-  result.signedness = val < 0 ? 1 : 0;
+  result.signedness = val < 0 ? -1 : 0;
   result.int_part = int_abs (val);
   result.frac_part = 0;
   return result;

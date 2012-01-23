@@ -477,7 +477,7 @@ format_integer (uintmax_t value, bool is_signed, bool negative,
   int sign;                     /* Sign character or 0 if none. */
   int precision;                /* Rendered precision. */
   int pad_cnt;                  /* # of pad characters to fill field width. */
-  int digit_cnt;                /* # of digits output so far. */
+  unsigned digit_cnt;           /* # of digits output so far. */
 
   /* Determine sign character, if any.
      An unsigned conversion will never have a sign character,
