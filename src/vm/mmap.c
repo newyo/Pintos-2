@@ -31,6 +31,7 @@ mmap_write_kpage (struct mmap_kpage *page)
   
   if (!page->dirty)
     return;
+  page->dirty = false;
 
   lock_acquire (&mmap_filesys_lock);
   
