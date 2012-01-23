@@ -14,8 +14,6 @@
 #include "threads/synch.h"
 #include "userprog/pagedir.h"
 
-#define SWAP_PERCENT_AT_ONCE 3
-
 #define VMLP_MAGIC (('V'<<16) + ('L'<<8) + 'P')
 typedef char _CASSERT_VMLP_MAGIC24[0 - !(VMLP_MAGIC < (1<<24))];
 typedef char _CASSERT_VMPPT_SIZE[0 - !(VMPPT_COUNT < (1<<7))];

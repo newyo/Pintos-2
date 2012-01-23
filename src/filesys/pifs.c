@@ -5,6 +5,9 @@
 #include <debug.h>
 #include "threads/malloc.h"
 
+#define PIFS_DEFAULT_HEADER_BLOCK 0
+#define PIFS_DEFAULT_ROOT_BLOCK 1
+
 typedef char pifs_magic[4];
 
 const pifs_magic PIFS_HEADER_MAGIC = "PIFS";
@@ -73,16 +76,18 @@ pifs_format (struct pifs_device *pifs)
   memset (header, 0, sizeof (*header));
   memcpy (header->magic, PIFS_HEADER_MAGIC, sizeof (header->magic));
   header->block_count = blocks;
-  header->root_folder = 1;
-  bitset_mark (header->used_map, 0);
-  bitset_mark (header->used_map, 1);
-  block_cache_write (pifs->device, 0, (block_cache_page *) header);
+  header->root_folder = PIFS_DEFAULT_ROOT_BLOCK;
+  bitset_mark (header->used_map, PIFS_DEFAULT_HEADER_BLOCK);
+  bitset_mark (header->used_map, PIFS_DEFAULT_ROOT_BLOCK);
+  block_cache_write_out (pifs->device, PIFS_DEFAULT_HEADER_BLOCK,
+                         (block_data *) header);
   free (header);
   
   struct pifs_folder *root = malloc (sizeof (*root));
   ASSERT (root != NULL);
   memset (root, 0, sizeof (*root));
   memcpy (root->magic, PIFS_FOLDER_MAGIC, sizeof (root->magic));
-  block_cache_write (pifs->device, 0, (block_cache_page *) root);
+  block_cache_write_out (pifs->device, PIFS_DEFAULT_ROOT_BLOCK,
+                         (block_data *) root);
   free (root);
 }
