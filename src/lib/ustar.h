@@ -1,6 +1,8 @@
 #ifndef __LIB_USTAR_H
 #define __LIB_USTAR_H
 
+// http://www.gnu.org/software/tar/manual/html_node/Standard.html
+
 /* Support for the standard Posix "ustar" format.  See the
    documentation of the "pax" utility in [SUSv3] for the the
    "ustar" format specification. */
@@ -12,9 +14,16 @@
    Only types of interest to Pintos are listed here. */
 enum ustar_type
   {
-    USTAR_REGULAR = '0',        /* Ordinary file. */
-    USTAR_DIRECTORY = '5',      /* Directory. */
-    USTAR_EOF = -1              /* End of archive (not an official value). */
+    USTAR_AREGULAR       = '\0',
+    USTAR_REGULAR        = '0', /* Ordinary file. */
+    USTAR_HARD_LINK      = '1',
+    USTAR_SOFT_LINK      = '2',
+    USTAR_NODE_CHAR_DEV  = '3',
+    USTAR_NODE_BLOCK_DEV = '4',
+    USTAR_DIRECTORY      = '5', /* Directory. */
+    USTAR_NODE_FIFO      = '6',
+    USTAR_RESERVED       = '7',
+    USTAR_EOF            = -1   /* End of archive (not an official value). */
   };
 
 /* Size of a ustar archive header, in bytes. */

@@ -19,19 +19,23 @@ void debug_panic (const char *file, int line, const char *function,
                   const char *message, ...) PRINTF_FORMAT (4, 5) NO_RETURN;
 void debug_backtrace (void);
 void debug_backtrace_all (void);
- 
-# define UNSAFE_PRINTF(...) \
-  ({ \
-    enum intr_level _old_level = intr_disable (); \
-    struct thread *_current_thread = running_thread (); \
-    enum thread_status _old_status =  _current_thread->status; \
-    _current_thread->status = THREAD_RUNNING; \
-    printf (__VA_ARGS__); \
-    _current_thread->status = _old_status; \
-    intr_set_level (_old_level); \
-    (void)0; \
-  })
-  
+
+#define _IN(KEY, ...)                                                         \
+({                                                                            \
+  __extension__ typedef __typeof (KEY) _t;                                    \
+  __extension__ register const _t _key = (KEY);                               \
+  __extension__ const _t _values[] = { __VA_ARGS__ };                         \
+  __extension__ register _Bool _r = 0;                                        \
+  __extension__ register unsigned int _i;                                     \
+  for (_i = 0; _i < sizeof (_values) / sizeof (_values[0]); ++_i)             \
+    if (_key == _values[_i])                                                  \
+      {                                                                       \
+        _r = 1;                                                               \
+        break;                                                                \
+      }                                                                       \
+  _r;                                                                         \
+})
+
 #endif // ifndef __LIB_DEBUG_H
 
 

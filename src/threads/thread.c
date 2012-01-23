@@ -167,6 +167,18 @@ thread_start (void)
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
 }
+ 
+# define UNSAFE_PRINTF(...) \
+  ({ \
+    enum intr_level _old_level = intr_disable (); \
+    struct thread *_current_thread = running_thread (); \
+    enum thread_status _old_status =  _current_thread->status; \
+    _current_thread->status = THREAD_RUNNING; \
+    printf (__VA_ARGS__); \
+    _current_thread->status = _old_status; \
+    intr_set_level (_old_level); \
+    (void)0; \
+  })
 
 static void
 thread_print_tick_status (struct thread *t)

@@ -32,6 +32,9 @@ struct ustar_header
   }
 PACKED;
 
+typedef char _CASSERT_USTAR_HEADER_SIZE[0 - !(sizeof (struct ustar_header) ==
+                                              USTAR_HEADER_SIZE)];
+
 /* Returns the checksum for the given ustar format HEADER. */
 static unsigned int
 calculate_chksum (const struct ustar_header *h)
@@ -86,7 +89,7 @@ ustar_make_header (const char *file_name, enum ustar_type type,
   struct ustar_header *h = (struct ustar_header *) header;
 
   ASSERT (sizeof (struct ustar_header) == USTAR_HEADER_SIZE);
-  ASSERT (type == USTAR_REGULAR || type == USTAR_DIRECTORY);
+  ASSERT (_IN (type, USTAR_AREGULAR, USTAR_REGULAR, USTAR_DIRECTORY));
 
   /* Check file name. */
   file_name = strip_antisocial_prefixes (file_name);
@@ -100,7 +103,7 @@ ustar_make_header (const char *file_name, enum ustar_type type,
   memset (h, 0, sizeof *h);
   strlcpy (h->name, file_name, sizeof h->name);
   snprintf (h->mode, sizeof h->mode, "%07o",
-            type == USTAR_REGULAR ? 0644 : 0755);
+            _IN (type, USTAR_AREGULAR, USTAR_REGULAR) ? 0644 : 0755);
   strlcpy (h->uid, "0000000", sizeof h->uid);
   strlcpy (h->gid, "0000000", sizeof h->gid);
   snprintf (h->size, sizeof h->size, "%011o", size);
@@ -164,10 +167,20 @@ parse_octal_field (const char *s, size_t size, unsigned long int *value)
 /* Returns true if the CNT bytes starting at BLOCK are all zero,
    false otherwise. */
 static bool
-is_all_zeros (const char *block, size_t cnt)
+is_all_zeros (register const char *block, size_t cnt)
 {
-  while (cnt-- > 0)
-    if (*block++ != 0)
+  register const int ofs = cnt % 4;
+  cnt /= 4;
+  switch (ofs)
+    {
+    case 3: if (*block++) return false;
+    case 2: if (*block++) return false;
+    case 1: if (*block++) return false;
+    }
+  register const uint32_t *i = (void *) block;
+  register const uint32_t *const end = i + cnt;
+  while (i < end)
+    if (*i++ != 0)
       return false;
   return true;
 }
@@ -197,7 +210,7 @@ ustar_parse_header (const char header[USTAR_HEADER_SIZE],
     }
 
   /* Validate ustar header. */
-  if (memcmp (h->magic, "ustar", 6))
+  if (memcmp (h->magic, "ustar", sizeof (h->magic)))
     return "not a ustar archive";
   else if (h->version[0] != '0' || h->version[1] != '0')
     return "invalid ustar version";
@@ -207,9 +220,10 @@ ustar_parse_header (const char header[USTAR_HEADER_SIZE],
     return "checksum mismatch";
   else if (h->name[sizeof h->name - 1] != '\0' || h->prefix[0] != '\0')
     return "file name too long";
-  else if (h->typeflag != USTAR_REGULAR && h->typeflag != USTAR_DIRECTORY)
+  else if (!_IN (h->typeflag, USTAR_AREGULAR, USTAR_REGULAR) &&
+           h->typeflag != USTAR_DIRECTORY)
     return "unimplemented file type";
-  if (h->typeflag == USTAR_REGULAR)
+  if (_IN (h->typeflag, USTAR_AREGULAR, USTAR_REGULAR))
     {
       if (!parse_octal_field (h->size, sizeof h->size, &size_ul))
         return "corrupt file size field";
