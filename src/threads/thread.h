@@ -122,6 +122,11 @@ struct thread
     struct hash vm_pages;
     struct hash mmap_aliases;
 
+#ifdef FILESYS
+    /* Owned by filesys */
+    char *cwd; /* current working directory */
+#endif
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

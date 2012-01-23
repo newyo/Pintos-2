@@ -61,7 +61,7 @@ userprog_SRC += userprog/syscall.c	# System call handler.
 userprog_SRC += userprog/gdt.c		# GDT initialization.
 userprog_SRC += userprog/tss.c		# TSS management.
 
-# No virtual memory code yet.
+# virtual memory code.
 vm_SRC  = vm/lru.c
 vm_SRC += vm/swap.c
 vm_SRC += vm/vm.c
@@ -77,6 +77,8 @@ filesys_SRC += filesys/directory.c	# Directories.
 filesys_SRC += filesys/inode.c		# File headers.
 filesys_SRC += filesys/fsutil.c		# Utilities.
 filesys_SRC += filesys/pifs.c
+filesys_SRC += filesys/cache.c
+filesys_SRC += filesys/canonical_path.c
 
 SOURCES = $(foreach dir,$(KERNEL_SUBDIRS),$($(dir)_SRC))
 OBJECTS = $(patsubst %.c,%.o,$(patsubst %.S,%.o,$(SOURCES)))
