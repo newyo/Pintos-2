@@ -18,7 +18,7 @@ typedef char _CASSERT_PIFS_ATTRS_SIZE[0 - !(sizeof (struct pifs_attrs) == 1)];
 
 struct pifs_device
 {
-  struct block_cache *device;
+  struct block_cache *bc;
   uint32_t            clock;
 };
 

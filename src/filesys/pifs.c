@@ -67,27 +67,35 @@ void
 pifs_format (struct pifs_device *pifs)
 {
   ASSERT (pifs != NULL);
-  ASSERT (pifs->device != NULL);
+  ASSERT (pifs->bc != NULL);
   
-  block_sector_t blocks = block_size (block_cache_get_device (pifs->device));
+  block_sector_t blocks = block_size (block_cache_get_device (pifs->bc));
   
-  struct pifs_header *header = malloc (sizeof (*header));
-  ASSERT (header != NULL);
+  struct block_page *page;
+  
+  // write file system header:
+  
+  page = block_cache_write (pifs->bc, PIFS_DEFAULT_HEADER_BLOCK);
+  ASSERT (page !=  NULL);
+  page->dirty = true;
+  struct pifs_header *header = (void *) &page->data;
+  
   memset (header, 0, sizeof (*header));
   memcpy (header->magic, PIFS_HEADER_MAGIC, sizeof (header->magic));
   header->block_count = blocks;
   header->root_folder = PIFS_DEFAULT_ROOT_BLOCK;
   bitset_mark (header->used_map, PIFS_DEFAULT_HEADER_BLOCK);
   bitset_mark (header->used_map, PIFS_DEFAULT_ROOT_BLOCK);
-  block_cache_write_out (pifs->device, PIFS_DEFAULT_HEADER_BLOCK,
-                         (block_data *) header);
-  free (header);
+  block_cache_return (pifs->bc, page);
   
-  struct pifs_folder *root = malloc (sizeof (*root));
-  ASSERT (root != NULL);
+  // write root directory:
+  
+  page = block_cache_write (pifs->bc, PIFS_DEFAULT_ROOT_BLOCK);
+  ASSERT (page !=  NULL);
+  page->dirty = true;
+  struct pifs_folder *root = (void *) &page->data;
+  
   memset (root, 0, sizeof (*root));
   memcpy (root->magic, PIFS_FOLDER_MAGIC, sizeof (root->magic));
-  block_cache_write_out (pifs->device, PIFS_DEFAULT_ROOT_BLOCK,
-                         (block_data *) root);
-  free (root);
+  block_cache_return (pifs->bc, page);
 }
