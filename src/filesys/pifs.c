@@ -4,6 +4,7 @@
 #include <string.h>
 #include <debug.h>
 #include "threads/malloc.h"
+#include "threads/interrupt.h"
 
 #define PIFS_DEFAULT_HEADER_BLOCK 0
 #define PIFS_DEFAULT_ROOT_BLOCK 1
@@ -63,6 +64,48 @@ typedef char _CASSERT_PIFS_FOLDER_SIZE[0 - !(sizeof (struct pifs_folder) ==
 typedef char _CASSERT_PIFS_FILE_SIZE[0 - !(sizeof (struct pifs_file) ==
                                            BLOCK_SECTOR_SIZE)];
 
+
+static unsigned
+pifs_open_inodes_hash (const struct hash_elem *e, void *pifs)
+{
+  ASSERT (e != NULL);
+  struct pifs_inode *ee = hash_entry (e, struct pifs_inode, elem);
+  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (ee->inum))];
+  ASSERT (ee->pifs == pifs);
+  return (unsigned) ee->inum;
+}
+
+static bool
+pifs_open_inodes_less (const struct hash_elem *a,
+                       const struct hash_elem *b,
+                       void                   *pifs)
+{
+  return pifs_open_inodes_hash (a, pifs) < pifs_open_inodes_hash (b, pifs);
+}
+                             
+bool
+pifs_init (struct pifs_device *pifs, struct block_cache *bc)
+{
+  ASSERT (pifs != NULL);
+  ASSERT (bc != NULL);
+  
+  memset (pifs, 0, sizeof (*pifs));
+  pifs->bc = bc;
+  hash_init (&pifs->open_inodes, &pifs_open_inodes_hash, &pifs_open_inodes_less,
+             pifs);
+  rwlock_init (&pifs->pifs_rwlock);
+  
+  return true;
+}
+
+void
+pifs_destroy (struct pifs_device *pifs)
+{
+  ASSERT (pifs != NULL);
+  
+  // TODO
+}
+
 void
 pifs_format (struct pifs_device *pifs)
 {
@@ -96,4 +139,118 @@ pifs_format (struct pifs_device *pifs)
   memset (root, 0, sizeof (*root));
   memcpy (root->magic, PIFS_FOLDER_MAGIC, sizeof (root->magic));
   block_cache_return (pifs->bc, page);
+}
+
+
+struct pifs_inode *
+pifs_open (struct pifs_device *pifs,
+           const char         *path,
+           enum pifs_create    create)
+{
+  ASSERT (pifs != NULL);
+  ASSERT (path != NULL);
+  ASSERT (path[0] == '/');
+  ASSERT (_IN (create, PIFS_NO_CREATE, PIFS_DO_CREATE, PIFS_MAY_CREATE));
+  
+  if (create == PIFS_NO_CREATE)
+    rwlock_acquire_read (&pifs->pifs_rwlock);
+  else
+    rwlock_acquire_write (&pifs->pifs_rwlock);
+    
+  // TODO
+    
+  if (create == PIFS_NO_CREATE)
+    rwlock_release_read (&pifs->pifs_rwlock);
+  else
+    rwlock_release_write (&pifs->pifs_rwlock);
+  
+  return NULL;
+}
+
+void
+pifs_close (struct pifs_inode *inode)
+{
+  if (inode == NULL)
+    return;
+    
+  rwlock_acquire_write (&inode->pifs->pifs_rwlock);
+    
+  // TODO
+  
+  rwlock_release_write (&inode->pifs->pifs_rwlock);
+}
+
+const char *
+pifs_readdir (struct pifs_inode *inode, size_t index)
+{
+  ASSERT (inode !=  NULL);
+  
+  rwlock_acquire_read (&inode->pifs->pifs_rwlock);
+  
+  // TODO
+  (void) index;
+  
+  rwlock_release_read (&inode->pifs->pifs_rwlock);
+  return NULL;
+}
+
+size_t
+pifs_read (struct pifs_inode *inode,
+           size_t             start,
+           size_t             length,
+           void              *dest_)
+{
+  char *dest = dest_;
+  ASSERT (inode != NULL);
+  ASSERT (dest != NULL);
+  
+  if (length == 0)
+    return 0;
+  
+  rwlock_acquire_read (&inode->pifs->pifs_rwlock);
+    
+  // TODO
+  (void) start;
+  
+  rwlock_release_read (&inode->pifs->pifs_rwlock);
+  return 0;
+}
+
+size_t
+pifs_write (struct pifs_inode *inode,
+            size_t             start,
+            size_t             length,
+            const void        *src_)
+{
+  const char *src = src_;
+  ASSERT (inode != NULL);
+  ASSERT (src != NULL);
+  
+  if (length == 0)
+    return 0;
+  
+  rwlock_acquire_write (&inode->pifs->pifs_rwlock);
+    
+  // TODO
+  (void) start;
+  
+  rwlock_release_write (&inode->pifs->pifs_rwlock);
+  return 0;
+}
+
+void
+pifs_delete (struct pifs_inode *inode)
+{
+  ASSERT (inode != NULL);
+  
+  rwlock_acquire_write (&inode->pifs->pifs_rwlock);
+  if (!inode->deleted)
+    {
+      inode->deleted = true;
+      
+      struct hash_elem *e UNUSED;
+      e = hash_delete (&inode->pifs->open_inodes, &inode->elem);
+      ASSERT (e == &inode->elem);
+    }
+  rwlock_release_write (&inode->pifs->pifs_rwlock);
 }
