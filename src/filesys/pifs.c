@@ -15,8 +15,6 @@ static const pifs_magic PIFS_HEADER_MAGIC = "PIFS";
 static const pifs_magic PIFS_FOLDER_MAGIC = "FLDR";
 static const pifs_magic PIFS_FILE_MAGIC   = "FILE";
 
-#define PIFS_NAME_LENGTH 16
-
 typedef uint32_t pifs_ptr;
 
 struct pifs_header

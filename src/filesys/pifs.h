@@ -9,6 +9,8 @@
 #include "threads/synch.h"
 #include "cache.h"
 
+#define PIFS_NAME_LENGTH 16
+
 struct pifs_attrs
 {
   bool readable   : 1;
@@ -54,6 +56,8 @@ struct pifs_inode *pifs_open (struct pifs_device *pifs,
                               enum pifs_create    create);
 void pifs_close (struct pifs_inode *inode);
 
+// Returns nth filename in directory.
+// May not be null terminated. Max. PIFS_NAME_LENGTH characters.
 const char *pifs_readdir (struct pifs_inode *inode, size_t index);
 
 size_t pifs_read (struct pifs_inode *inode,
