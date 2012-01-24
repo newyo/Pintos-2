@@ -41,6 +41,7 @@ lru_use (struct lru *l, struct lru_elem *e)
 {
   assert_filling (l);
   ASSERT (e != NULL);
+  
   if (e->lru_list == NULL)
     {
       e->lru_list = l;
@@ -48,11 +49,11 @@ lru_use (struct lru *l, struct lru_elem *e)
       if (l->lru_size > 0 && l->item_count > l->lru_size)
         lru_dispose (l, lru_peek_least (l), true);
     }
+  else if (e->lru_list == l)
+    list_remove (&e->elem);
   else
-    {
-      ASSERT (e->lru_list == l);
-      list_remove (&e->elem);
-    }
+    lru_dispose (e->lru_list, e, false);
+    
   list_push_front (&l->lru_list, &e->elem);
   assert_filling (l);
 }

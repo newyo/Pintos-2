@@ -73,10 +73,8 @@ static void locate_block_device (enum block_type, const char *name);
 
 static bool tick_print_free = false;
 
-int main (void) NO_RETURN;
-
 /* Pintos main program. */
-int
+int NO_RETURN
 main (void)
 {
   char **argv;
@@ -142,7 +140,7 @@ main (void)
   shutdown ();
   thread_exit ();
 }
-
+
 /* Clear the "BSS", a segment that should be initialized to
    zeros.  It isn't actually stored on disk or zeroed by the
    kernel loader, so we have to zero it ourselves.

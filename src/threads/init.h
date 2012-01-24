@@ -9,4 +9,6 @@
 /* Page directory with kernel mappings only. */
 extern uint32_t *init_page_dir;
 
+int main (void) NO_RETURN;
+
 #endif /* threads/init.h */

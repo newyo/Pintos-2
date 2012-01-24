@@ -10,9 +10,9 @@
 
 typedef char pifs_magic[4];
 
-const pifs_magic PIFS_HEADER_MAGIC = "PIFS";
-const pifs_magic PIFS_FOLDER_MAGIC = "FLDR";
-const pifs_magic PIFS_FILE_MAGIC   = "FILE";
+static const pifs_magic PIFS_HEADER_MAGIC = "PIFS";
+static const pifs_magic PIFS_FOLDER_MAGIC = "FLDR";
+static const pifs_magic PIFS_FILE_MAGIC   = "FILE";
 
 #define PIFS_NAME_LENGTH 16
 
@@ -69,7 +69,7 @@ pifs_format (struct pifs_device *pifs)
   ASSERT (pifs != NULL);
   ASSERT (pifs->bc != NULL);
   
-  block_sector_t blocks = block_size (block_cache_get_device (pifs->bc));
+  block_sector_t blocks = block_size (pifs->bc->device);
   
   struct block_page *page;
   
@@ -77,7 +77,6 @@ pifs_format (struct pifs_device *pifs)
   
   page = block_cache_write (pifs->bc, PIFS_DEFAULT_HEADER_BLOCK);
   ASSERT (page !=  NULL);
-  page->dirty = true;
   struct pifs_header *header = (void *) &page->data;
   
   memset (header, 0, sizeof (*header));
@@ -92,7 +91,6 @@ pifs_format (struct pifs_device *pifs)
   
   page = block_cache_write (pifs->bc, PIFS_DEFAULT_ROOT_BLOCK);
   ASSERT (page !=  NULL);
-  page->dirty = true;
   struct pifs_folder *root = (void *) &page->data;
   
   memset (root, 0, sizeof (*root));
