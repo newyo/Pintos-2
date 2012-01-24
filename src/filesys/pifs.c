@@ -240,10 +240,7 @@ pifs_open (struct pifs_device *pifs,
   ASSERT (path[0] == '/');
   ASSERT (_IN (create, PIFS_NO_CREATE, PIFS_DO_CREATE, PIFS_MAY_CREATE));
   
-  if (create == PIFS_NO_CREATE)
-    rwlock_acquire_read (&pifs->pifs_rwlock);
-  else
-    rwlock_acquire_write (&pifs->pifs_rwlock);
+  rwlock_acquire_write (&pifs->pifs_rwlock);
     
   block_sector_t root_block = pifs_get_root_block (pifs);
   block_sector_t found_sector = pifs_open_traverse (pifs, root_block, &path);
@@ -259,11 +256,7 @@ pifs_open (struct pifs_device *pifs,
   else
     result = NULL;
     
-  if (create == PIFS_NO_CREATE)
-    rwlock_release_read (&pifs->pifs_rwlock);
-  else
-    rwlock_release_write (&pifs->pifs_rwlock);
-  
+  rwlock_release_write (&pifs->pifs_rwlock);
   return result;
 }
 
