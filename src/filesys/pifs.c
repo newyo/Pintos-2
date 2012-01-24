@@ -17,6 +17,9 @@ static const pifs_magic PIFS_FILE_MAGIC   = "FILE";
 
 typedef uint32_t pifs_ptr;
 
+typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
+                                          sizeof (block_sector_t))];
+
 struct pifs_header
 {
   pifs_magic magic;
@@ -139,6 +142,93 @@ pifs_format (struct pifs_device *pifs)
   block_cache_return (pifs->bc, page);
 }
 
+static block_sector_t
+pifs_get_root_block (struct pifs_device *pifs)
+{
+  ASSERT (pifs != NULL);
+  
+  struct block_page *page = block_cache_read (pifs->bc,
+                                              PIFS_DEFAULT_HEADER_BLOCK);
+  ASSERT (page != NULL);
+  struct pifs_header *header = (struct pifs_header *) &page->data;
+  block_sector_t result = header->root_folder;
+  block_cache_return (pifs->bc, page);
+  
+  return result;
+}
+
+static inline block_sector_t
+pifs_open_traverse (struct pifs_device  *pifs,
+                    block_sector_t       cur, 
+                    const char         **path_)
+{
+  ASSERT (pifs != NULL);
+  ASSERT (path_ != NULL && *path_ != NULL);
+  ASSERT (**path_ == '/');
+  
+  ++*path_; // strip leading slash
+  if (**path_ == 0)
+    {
+      // we hit end, a folder was looked up
+      return cur;
+    }
+  
+  const char *next = strchrnul (*path_, '/');
+  size_t path_elem_len = (uintptr_t) (next - *path_);
+  if (path_elem_len > PIFS_NAME_LENGTH)
+    {
+      // path element is invalid, as it is longer than PIFS_NAME_LENGTH
+      return 0;
+    }
+    
+  struct block_page *page = block_cache_read (pifs->bc, cur);
+  if (memcpy (&page->data, PIFS_FOLDER_MAGIC, sizeof (pifs_magic)) != 0)
+    {
+      if (memcmp (&page->data, PIFS_FILE_MAGIC, sizeof (pifs_magic)) == 0)
+        {
+          // we are hit a file, but the path indicated it was a folder
+          block_cache_return (pifs->bc, page);
+          return 0;
+        }
+      PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
+    }
+    
+  for (;;)
+    {
+      struct pifs_folder *folder = (struct pifs_folder *) &page->data;
+      
+      unsigned i;
+      for (i = 0; i < folder->entries_count; ++i)
+        {
+          if (memcmp (folder->entries[i].name, *path_, path_elem_len) != 0 ||
+              folder->entries[i].name[path_elem_len] != 0)
+            continue;
+            
+          // found!
+            
+          block_sector_t next_block = folder->entries[i].block;
+          if (next_block == 0)
+            PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
+          block_cache_return (pifs->bc, page);
+          
+          if (next[0] == 0 || next[1] == 0)
+            return next_block;
+            
+          // We are not finished yet
+          *path_ = next;
+          return pifs_open_traverse (pifs, next_block, path_); // TCO
+        }
+          
+      block_sector_t extends = folder->extends;
+      block_cache_return (pifs->bc, page);
+      if (extends == 0)
+        return 0;
+        
+      page = block_cache_read (pifs->bc, extends);
+      if (memcpy (&page->data, PIFS_FOLDER_MAGIC, sizeof (pifs_magic)) != 0)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
+    }
+}
 
 struct pifs_inode *
 pifs_open (struct pifs_device *pifs,
@@ -155,14 +245,26 @@ pifs_open (struct pifs_device *pifs,
   else
     rwlock_acquire_write (&pifs->pifs_rwlock);
     
-  // TODO
+  block_sector_t root_block = pifs_get_root_block (pifs);
+  block_sector_t found_sector = pifs_open_traverse (pifs, root_block, &path);
+  struct pifs_inode *result;
+  if (found_sector != 0)
+    {
+      bool must_be_folder = *path == 0;
+      
+      // TODO: retreive inode or open new one
+      result = NULL;
+      (void) must_be_folder;
+    }
+  else
+    result = NULL;
     
   if (create == PIFS_NO_CREATE)
     rwlock_release_read (&pifs->pifs_rwlock);
   else
     rwlock_release_write (&pifs->pifs_rwlock);
   
-  return NULL;
+  return result;
 }
 
 void

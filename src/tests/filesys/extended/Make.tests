@@ -36,9 +36,7 @@ GETCMD += $(PINTOSOPTS)
 GETCMD += $(SIMULATOR)
 GETCMD += $(FILESYSSOURCE)
 GETCMD += -g fs.tar -a $(TEST).tar
-ifeq ($(filter vm, $(KERNEL_SUBDIRS)), vm)
 GETCMD += --swap-size=4
-endif
 GETCMD += -- -q
 GETCMD += $(KERNELFLAGS)
 GETCMD += run 'tar fs.tar /'
