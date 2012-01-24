@@ -24,7 +24,7 @@ struct pifs_device
 {
   struct block_cache *bc;
   int                 next_inum;
-  struct hash         open_inodes; // [inum -> struct pifs_inode]
+  struct hash         open_inodes; // [sector -> struct pifs_inode]
   struct rwlock       pifs_rwlock;
 };
 
@@ -40,20 +40,32 @@ struct pifs_inode
   struct hash_elem    elem; // struct pifs_device::open_inodes
 };
 
-enum pifs_create
+#define POO_MASK_NO     0b0001
+#define POO_MASK_MUST   0b0010
+#define POO_MASK_FILE   0b0100
+#define POO_MASK_FOLDER 0b1000
+#define POO_MASK        0b1111
+
+enum pifs_open_opts
 {
-  PIFS_NO_CREATE,
-  PIFS_DO_CREATE,
-  PIFS_MAY_CREATE,
+  POO_NO_CREATE          = POO_MASK_NO,
+  
+  POO_FILE_MAY_CREATE    = POO_MASK_FILE,
+  POO_FILE_NO_CREATE     = POO_MASK_FILE   | POO_MASK_NO,
+  POO_FILE_MUST_CREATE   = POO_MASK_FILE   | POO_MASK_MUST,
+  
+  POO_FOLDER_MAY_CREATE  = POO_MASK_FOLDER,
+  POO_FOLDER_NO_CREATE   = POO_MASK_FOLDER | POO_MASK_NO,
+  POO_FOLDER_MSUT_CREATE = POO_MASK_FOLDER | POO_MASK_MUST,
 };
 
 bool pifs_init (struct pifs_device *pifs, struct block_cache *bc);
 void pifs_destroy (struct pifs_device *pifs);
 void pifs_format (struct pifs_device *pifs);
 
-struct pifs_inode *pifs_open (struct pifs_device *pifs,
-                              const char         *path,
-                              enum pifs_create    create);
+struct pifs_inode *pifs_open (struct pifs_device  *pifs,
+                              const char          *path,
+                              enum pifs_open_opts  opts);
 void pifs_close (struct pifs_inode *inode);
 
 // Returns nth filename in directory.

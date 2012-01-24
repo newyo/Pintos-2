@@ -71,9 +71,9 @@ pifs_open_inodes_hash (const struct hash_elem *e, void *pifs)
 {
   ASSERT (e != NULL);
   struct pifs_inode *ee = hash_entry (e, struct pifs_inode, elem);
-  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (ee->inum))];
+  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (ee->sector))];
   ASSERT (ee->pifs == pifs);
-  return (unsigned) ee->inum;
+  return (unsigned) ee->sector;
 }
 
 static bool
@@ -200,8 +200,9 @@ pifs_open_traverse (struct pifs_device  *pifs,
       unsigned i;
       for (i = 0; i < folder->entries_count; ++i)
         {
-          if (memcmp (folder->entries[i].name, *path_, path_elem_len) != 0 ||
-              folder->entries[i].name[path_elem_len] != 0)
+          const char *name = &folder->entries[i].name;
+          if ((memcmp (name, *path_, path_elem_len) != 0) ||
+              (path_elem_len < PIFS_NAME_LENGTH && name[path_elem_len] != 0))
             continue;
             
           // found!
@@ -211,7 +212,7 @@ pifs_open_traverse (struct pifs_device  *pifs,
             PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
           block_cache_return (pifs->bc, page);
           
-          if (next[0] == 0 || next[1] == 0)
+          if (*next == 0)
             return next_block;
             
           // We are not finished yet
@@ -222,7 +223,7 @@ pifs_open_traverse (struct pifs_device  *pifs,
       block_sector_t extends = folder->extends;
       block_cache_return (pifs->bc, page);
       if (extends == 0)
-        return 0;
+        return cur;
         
       page = block_cache_read (pifs->bc, extends);
       if (memcpy (&page->data, PIFS_FOLDER_MAGIC, sizeof (pifs_magic)) != 0)
@@ -231,31 +232,91 @@ pifs_open_traverse (struct pifs_device  *pifs,
 }
 
 struct pifs_inode *
-pifs_open (struct pifs_device *pifs,
-           const char         *path,
-           enum pifs_create    create)
+pifs_open (struct pifs_device  *pifs,
+           const char          *path,
+           enum pifs_open_opts  opts)
 {
   ASSERT (pifs != NULL);
   ASSERT (path != NULL);
   ASSERT (path[0] == '/');
-  ASSERT (_IN (create, PIFS_NO_CREATE, PIFS_DO_CREATE, PIFS_MAY_CREATE));
+  
+  ASSERT ((opts & ~POO_MASK) == 0);
+  ASSERT (!((opts & POO_MASK_FILE) && (opts & POO_MASK_FOLDER)));
+  ASSERT (!((opts & POO_MASK_NO)   && (opts & POO_MASK_MUST)));
+  ASSERT ((opts & POO_NO_CREATE) || ((opts & POO_MASK_FILE) ||
+                                     (opts & POO_MASK_FOLDER))):
   
   rwlock_acquire_write (&pifs->pifs_rwlock);
     
   block_sector_t root_block = pifs_get_root_block (pifs);
   block_sector_t found_sector = pifs_open_traverse (pifs, root_block, &path);
-  struct pifs_inode *result;
-  if (found_sector != 0)
+  
+  struct pifs_inode *result = NULL;
+  if (found_sector == 0)
+    goto end; // path was invalid
+  else if (path[0] == 0 || path[1] == 0)
     {
-      bool must_be_folder = *path == 0;
+      // we found a file or folder
       
-      // TODO: retreive inode or open new one
-      result = NULL;
-      (void) must_be_folder;
+      if (opts & POO_MUST_CREATE))
+        goto end;
+        
+      bool must_be_file   = (opts & POO_MASK_FILE);
+      bool must_be_folder = (opts & POO_MASK_FOLDER) || (path[0] == '/');
+      if (must_be_file && must_be_folder)
+        goto end;
+      
+      // look if already open
+      
+      struct pifs_inode key;
+      memset (&key, 0, sizeof (key));
+      key->pifs = pifs;
+      key->sector = found_sector;
+      struct hash_elem *e = hash_find (&pifs->open_inodes, &key->elem);
+      if (e != NULL)
+        {
+          struct pifs_inode *ee = hash_entry (e, struct pifs_inode, elem);
+          if (!((must_be_file   &&  ee->is_directory) ||
+                (must_be_folder && !ee->is_directory)))
+            result = ee;
+          goto end;
+        }
+        
+      // create inode
+      
+      struct block_page *page = block_cache_read (pifs->bc, found_sector);
+      if (memcpy (&page->data, PIFS_FOLDER_MAGIC, sizeof (pifs_magic)) != 0)
+        {
+          // TODO
+        }
+      else if (memcmp (&page->data, PIFS_FILE_MAGIC, sizeof (pifs_magic)) == 0)
+        {
+          // TODO
+        }
+      else
+        PANIC ("Block %"PRDSNu" of filesystem is messed up.", found_sector);
+      
+      result = malloc (sizeof (*result));
+      if (!result)
+        goto end;
+      memset (result, 0, sizeof (*result));
+      result->inum = __sync_add_and_fetch (pifs->next_inum, 1);
+      if (result->inum == 0)
+        printf ("[PIFS] Inode numbers flew over, expect errors!\n");
+      result->pifs = pifs;
+      result->sector = found_sector;
+      
+      result->is_directory = 
     }
   else
-    result = NULL;
-    
+    {
+      // we did not find a file or folder
+      // if there is only "abc" or "abc/" left, the path is valid for creation
+    }
+
+end:
+  if (result)
+    ++result->open_count;
   rwlock_release_write (&pifs->pifs_rwlock);
   return result;
 }
