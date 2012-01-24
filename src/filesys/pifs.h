@@ -81,26 +81,38 @@ size_t pifs_write (struct pifs_inode *inode,
                    size_t             length,
                    const void        *src);
 
-void pifs_delete (struct pifs_inode *inode);
+void pifs_delete_file (struct pifs_inode *inode);
+bool pifs_delete_folder (struct pifs_inode *inode);
 
 // Convenience methods:
 
 static inline bool
-pifs_delete_path (struct pifs_device *pifs, const char *path)
+pifs_delete_file_path (struct pifs_device *pifs, const char *path)
 {
-  struct pifs_inode *inode = pifs_open (pifs, path, PIFS_NO_CREATE);
+  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_NO_CREATE);
   if (!inode)
     return false;
-  pifs_delete (inode);
+  pifs_delete_file (inode);
   pifs_close (inode);
   return true;
+}
+
+static inline bool
+pifs_delete_folder_path (struct pifs_device *pifs, const char *path)
+{
+  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_NO_CREATE);
+  if (!inode)
+    return false;
+  bool result = pifs_delete_folder (inode);
+  pifs_close (inode);
+  return result;
 }
 
 static inline bool
 pifs_length_path (struct pifs_device *pifs, const char *path, size_t *result)
 {
   ASSERT (result != NULL);
-  struct pifs_inode *inode = pifs_open (pifs, path, PIFS_NO_CREATE);
+  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_NO_CREATE);
   if (!inode)
     return false;
   *result = inode->length;
@@ -111,7 +123,7 @@ pifs_length_path (struct pifs_device *pifs, const char *path, size_t *result)
 static inline bool
 pifs_exists_path (struct pifs_device *pifs, const char *path)
 {
-  struct pifs_inode *inode = pifs_open (pifs, path, PIFS_NO_CREATE);
+  struct pifs_inode *inode = pifs_open (pifs, path, POO_NO_CREATE);
   if (!inode)
     return false;
   pifs_close (inode);
@@ -119,13 +131,23 @@ pifs_exists_path (struct pifs_device *pifs, const char *path)
 }
 
 static inline bool
-pifs_isdir_path (struct pifs_device *pifs, const char *path, bool *result)
+pifs_is_file_path (struct pifs_device *pifs, const char *path, bool *result)
 {
   ASSERT (result != NULL);
-  struct pifs_inode *inode = pifs_open (pifs, path, PIFS_NO_CREATE);
+  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_NO_CREATE);
   if (!inode)
     return false;
-  *result = inode->is_directory;
+  pifs_close (inode);
+  return true;
+}
+
+static inline bool
+pifs_is_dir_path (struct pifs_device *pifs, const char *path, bool *result)
+{
+  ASSERT (result != NULL);
+  struct pifs_inode *inode = pifs_open (pifs, path, POO_FOLDER_NO_CREATE);
+  if (!inode)
+    return false;
   pifs_close (inode);
   return true;
 }
