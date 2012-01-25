@@ -52,7 +52,8 @@ struct pifs_folder
   uint8_t    entries_count;
   struct pifs_folder_entry entries[25];
   
-  char       reserved[3];
+  char       reserved[3]; // just padding, I have no idea what that space could
+                           // be used for
 } PACKED;
 
 struct pifs_file_block_ref
@@ -488,7 +489,7 @@ pifs_readdir (struct pifs_inode *inode, size_t index)
   return NULL;
 }
 
-size_t
+off_t
 pifs_read (struct pifs_inode *inode,
            size_t             start,
            size_t             length,
@@ -510,7 +511,7 @@ pifs_read (struct pifs_inode *inode,
   return 0;
 }
 
-size_t
+off_t
 pifs_write (struct pifs_inode *inode,
             size_t             start,
             size_t             length,

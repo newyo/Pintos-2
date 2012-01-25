@@ -11,7 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "../devices/timer.h"
+#include "devices/timer.h"
 #include "userprog/process.h"
 #include "filesys/file.h"
 #include "vm/vm.h"
@@ -1084,7 +1084,7 @@ thread_is_file_currently_executed (struct file *f)
   ASSERT (f != NULL);
   int old_level = intr_disable ();
   
-  struct inode *inode = file_get_inode (f);
+  struct pifs_inode *inode = file_get_inode (f);
   bool result = false;
   
   struct list_elem *e;

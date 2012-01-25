@@ -1,12 +1,15 @@
-#include "filesys/fsutil.h"
+#include "fsutil.h"
+#include "file.h"
+#include "filesys.h"
+#include "pifs.h"
+
 #include <debug.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ustar.h>
-#include "filesys/directory.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
+
+#include "devices/block.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
@@ -15,15 +18,19 @@
 void
 fsutil_ls (char **argv UNUSED) 
 {
-  struct dir *dir;
-  char name[NAME_MAX + 1];
   
   printf ("Files in the root directory:\n");
-  dir = dir_open_root ();
+  
+  struct pifs_inode *dir = pifs_open (&fs_pifs, "/", POO_FILE_NO_CREATE);
   if (dir == NULL)
     PANIC ("root dir open failed");
-  while (dir_readdir (dir, name))
-    printf ("%s\n", name);
+    
+  const char *name;
+  size_t nth = 0;
+  while ( (name = pifs_readdir (dir, nth++)) )
+    printf ("%.*s\n", PIFS_NAME_LENGTH, name);
+    
+  pifs_close (dir);
   printf ("End of listing.\n");
 }
 
@@ -71,35 +78,29 @@ fsutil_rm (char **argv)
 void
 fsutil_extract (char **argv UNUSED) 
 {
-  static block_sector_t sector = 0;
-
-  struct block *src;
-  void *header, *data;
-
-  /* Allocate buffers. */
-  header = malloc (BLOCK_SECTOR_SIZE);
-  data = malloc (BLOCK_SECTOR_SIZE);
-  if (header == NULL || data == NULL)
-    PANIC ("couldn't allocate buffers");
-
   /* Open source block device. */
-  src = block_get_role (BLOCK_SCRATCH);
+  struct block *src = block_get_role (BLOCK_SCRATCH);
   if (src == NULL)
     PANIC ("couldn't open scratch device");
 
   printf ("Extracting ustar archive from scratch device "
           "into file system...\n");
+  
+  /* Allocate buffers. */
+  void *header = malloc (BLOCK_SECTOR_SIZE);
+  void *data = malloc (BLOCK_SECTOR_SIZE);
 
+  block_sector_t sector = 0;
   for (;;)
     {
-      const char *file_name;
-      const char *error;
-      enum ustar_type type;
-      int size;
-
       /* Read and parse ustar header. */
       block_read (src, sector++, header);
-      error = ustar_parse_header (header, &file_name, &type, &size);
+      
+      const char *file_name;
+      enum ustar_type type;
+      int size;
+      const char *error = ustar_parse_header (header, &file_name, &type, &size);
+      
       if (error != NULL)
         PANIC ("bad ustar header in sector %"PRDSNu" (%s)", sector - 1, error);
 
@@ -109,8 +110,11 @@ fsutil_extract (char **argv UNUSED)
           break;
         }
       else if (type == USTAR_DIRECTORY)
-        printf ("ignoring directory %s\n", file_name);
-      else if (type == USTAR_REGULAR)
+        {
+          // ignore result
+          pifs_create_folder_path (&fs_pifs, file_name);
+        }
+      else if (_IN (type, USTAR_AREGULAR, USTAR_REGULAR))
         {
           struct file *dst;
 

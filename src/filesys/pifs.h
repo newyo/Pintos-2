@@ -7,6 +7,7 @@
 #include <packed.h>
 #include <hash.h>
 #include "threads/synch.h"
+#include "off_t.h"
 #include "cache.h"
 
 #define PIFS_NAME_LENGTH 16
@@ -37,6 +38,7 @@ struct pifs_inode
   size_t              open_count;
   size_t              length; // file = bytes, directory = files
   bool                deleted; // will be deleted when closed
+  size_t              deny_write_cnt;
   struct hash_elem    elem; // struct pifs_device::open_inodes
 };
 
@@ -56,7 +58,7 @@ enum pifs_open_opts
   
   POO_FOLDER_MAY_CREATE  = POO_MASK_FOLDER,
   POO_FOLDER_NO_CREATE   = POO_MASK_FOLDER | POO_MASK_NO,
-  POO_FOLDER_MSUT_CREATE = POO_MASK_FOLDER | POO_MASK_MUST,
+  POO_FOLDER_MUST_CREATE = POO_MASK_FOLDER | POO_MASK_MUST,
 };
 
 bool pifs_init (struct pifs_device *pifs, struct block_cache *bc);
@@ -72,19 +74,39 @@ void pifs_close (struct pifs_inode *inode);
 // May not be null terminated. Max. PIFS_NAME_LENGTH characters.
 const char *pifs_readdir (struct pifs_inode *inode, size_t index);
 
-size_t pifs_read (struct pifs_inode *inode,
+off_t pifs_read (struct pifs_inode *inode,
+                 size_t             start,
+                 size_t             length,
+                 void              *dest);
+off_t pifs_write (struct pifs_inode *inode,
                   size_t             start,
                   size_t             length,
-                  void              *dest);
-size_t pifs_write (struct pifs_inode *inode,
-                   size_t             start,
-                   size_t             length,
-                   const void        *src);
+                  const void        *src);
 
 void pifs_delete_file (struct pifs_inode *inode);
 bool pifs_delete_folder (struct pifs_inode *inode);
 
 // Convenience methods:
+
+static inline bool
+pifs_create_file_path (struct pifs_device *pifs, const char *path)
+{
+  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_MUST_CREATE);
+  if (!inode)
+    return false;
+  pifs_close (inode);
+  return true;
+}
+
+static inline bool
+pifs_create_folder_path (struct pifs_device *pifs, const char *path)
+{
+  struct pifs_inode *inode = pifs_open (pifs, path, POO_FOLDER_MUST_CREATE);
+  if (!inode)
+    return false;
+  pifs_close (inode);
+  return true;
+}
 
 static inline bool
 pifs_delete_file_path (struct pifs_device *pifs, const char *path)
@@ -100,7 +122,7 @@ pifs_delete_file_path (struct pifs_device *pifs, const char *path)
 static inline bool
 pifs_delete_folder_path (struct pifs_device *pifs, const char *path)
 {
-  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_NO_CREATE);
+  struct pifs_inode *inode = pifs_open (pifs, path, POO_FOLDER_NO_CREATE);
   if (!inode)
     return false;
   bool result = pifs_delete_folder (inode);

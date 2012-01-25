@@ -1,12 +1,12 @@
-#include "filesys/file.h"
+#include "file.h"
+#include "pifs.h"
 #include <debug.h>
-#include "filesys/inode.h"
 #include "threads/malloc.h"
 
 /* An open file. */
 struct file 
   {
-    struct inode *inode;        /* File's inode. */
+    struct pifs_inode *inode;   /* File's inode. */
     off_t pos;                  /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
   };
@@ -15,7 +15,7 @@ struct file
    and returns the new file.  Returns a null pointer if an
    allocation fails or if INODE is null. */
 struct file *
-file_open (struct inode *inode) 
+file_open (struct pifs_inode *inode) 
 {
   struct file *file = calloc (1, sizeof *file);
   if (inode != NULL && file != NULL)
@@ -27,7 +27,7 @@ file_open (struct inode *inode)
     }
   else
     {
-      inode_close (inode);
+      pifs_close (inode);
       free (file);
       return NULL; 
     }
@@ -38,7 +38,8 @@ file_open (struct inode *inode)
 struct file *
 file_reopen (struct file *file) 
 {
-  return file_open (inode_reopen (file->inode));
+  ++file->inode->open_count;
+  return file_open (file->inode);
 }
 
 /* Closes FILE. */
@@ -48,13 +49,13 @@ file_close (struct file *file)
   if (file != NULL)
     {
       file_allow_write (file);
-      inode_close (file->inode);
+      pifs_close (file->inode);
       free (file); 
     }
 }
 
 /* Returns the inode encapsulated by FILE. */
-struct inode *
+struct pifs_inode *
 file_get_inode (struct file *file) 
 {
   return file->inode;
@@ -68,8 +69,9 @@ file_get_inode (struct file *file)
 off_t
 file_read (struct file *file, void *buffer, off_t size) 
 {
-  off_t bytes_read = inode_read_at (file->inode, buffer, size, file->pos);
-  file->pos += bytes_read;
+  off_t bytes_read = pifs_read (file->inode, file->pos, size, buffer);
+  if (bytes_read > 0)
+    file->pos += bytes_read;
   return bytes_read;
 }
 
@@ -81,7 +83,7 @@ file_read (struct file *file, void *buffer, off_t size)
 off_t
 file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs) 
 {
-  return inode_read_at (file->inode, buffer, size, file_ofs);
+  return pifs_read (file->inode, file_ofs, size, buffer);
 }
 
 /* Writes SIZE bytes from BUFFER into FILE,
@@ -94,8 +96,9 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
 off_t
 file_write (struct file *file, const void *buffer, off_t size) 
 {
-  off_t bytes_written = inode_write_at (file->inode, buffer, size, file->pos);
-  file->pos += bytes_written;
+  off_t bytes_written = pifs_write (file->inode, file->pos, size, buffer);
+  if (bytes_written > 0)
+    file->pos += bytes_written;
   return bytes_written;
 }
 
@@ -110,7 +113,7 @@ off_t
 file_write_at (struct file *file, const void *buffer, off_t size,
                off_t file_ofs) 
 {
-  return inode_write_at (file->inode, buffer, size, file_ofs);
+  return pifs_write (file->inode, file_ofs, size, buffer);
 }
 
 /* Prevents write operations on FILE's underlying inode
@@ -122,7 +125,7 @@ file_deny_write (struct file *file)
   if (!file->deny_write) 
     {
       file->deny_write = true;
-      inode_deny_write (file->inode);
+      ++file->inode->deny_write_cnt;
     }
 }
 
@@ -136,7 +139,8 @@ file_allow_write (struct file *file)
   if (file->deny_write) 
     {
       file->deny_write = false;
-      inode_allow_write (file->inode);
+      ASSERT (file->inode->deny_write_cnt > 0);
+      --file->inode->deny_write_cnt;
     }
 }
 
@@ -145,7 +149,7 @@ off_t
 file_length (struct file *file) 
 {
   ASSERT (file != NULL);
-  return inode_length (file->inode);
+  return file->inode->length;
 }
 
 /* Sets the current position in FILE to NEW_POS bytes from the

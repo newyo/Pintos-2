@@ -109,13 +109,14 @@ mmap_writer_func (void *aux UNUSED)
 static unsigned
 mmap_region_hash (const struct hash_elem *e, void *aux UNUSED)
 {
-  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (struct inode*))];
+  typedef char _CASSERT[0 - !(sizeof (unsigned) ==
+                              sizeof (struct pifs_inode*))];
   ASSERT (e != NULL);
   
   struct mmap_region *ee = hash_entry (e, struct mmap_region, regions_elem);
   ASSERT (ee->file != NULL);
   
-  struct inode *result = file_get_inode (ee->file);
+  struct pifs_inode *result = file_get_inode (ee->file);
   ASSERT (result != NULL);
   return (unsigned) result;
 }

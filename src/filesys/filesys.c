@@ -1,16 +1,21 @@
-#include "filesys/filesys.h"
+#include "filesys.h"
+#include "cache.h"
+#include "pifs.h"
+#include "file.h"
+
 #include <debug.h>
 #include <stdio.h>
 #include <string.h>
-#include "filesys/file.h"
-#include "filesys/free-map.h"
-#include "filesys/inode.h"
-#include "filesys/directory.h"
+
+#include "threads/malloc.h"
+
+#define FS_CACHE_SIZE 64
+#define FS_CACHE_IN_USERSPACE false
 
 /* Partition that contains the file system. */
-struct block *fs_device;
-
-static void do_format (void);
+static struct block       *fs_device;
+static struct block_cache  fs_cache;
+struct pifs_device         fs_pifs;
 
 /* Initializes the file system module.
    If FORMAT is true, reformats the file system. */
@@ -20,14 +25,16 @@ filesys_init (bool format)
   fs_device = block_get_role (BLOCK_FILESYS);
   if (fs_device == NULL)
     PANIC ("No file system device found, can't initialize file system.");
-
-  inode_init ();
-  free_map_init ();
+  if (!block_cache_init (&fs_cache, fs_device, FS_CACHE_SIZE,
+                         FS_CACHE_IN_USERSPACE))
+    PANIC ("Filesys cache could not be intialized.");
+  if (!pifs_init (&fs_pifs, &fs_cache))
+    PANIC ("PIFS could not be intialized.");
 
   if (format) 
-    do_format ();
-
-  free_map_open ();
+    pifs_format (&fs_pifs);
+    
+  printf ("Initialized filesystem.\n");
 }
 
 /* Shuts down the file system module, writing any unwritten data
@@ -35,9 +42,11 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
-  free_map_close ();
+  pifs_destroy (&fs_pifs);
+  block_cache_destroy (&fs_cache);
+  printf ("Filesystem has shut down.\n");
 }
-
+
 /* Creates a file named NAME with the given INITIAL_SIZE.
    Returns true if successful, false otherwise.
    Fails if a file named NAME already exists,
@@ -45,17 +54,46 @@ filesys_done (void)
 bool
 filesys_create (const char *name, off_t initial_size) 
 {
-  block_sector_t inode_sector = 0;
-  struct dir *dir = dir_open_root ();
-  bool success = (dir != NULL
-                  && free_map_allocate (1, &inode_sector)
-                  && inode_create (inode_sector, initial_size)
-                  && dir_add (dir, name, inode_sector));
-  if (!success && inode_sector != 0) 
-    free_map_release (inode_sector, 1);
-  dir_close (dir);
-
-  return success;
+  struct pifs_inode *inode;
+  inode = pifs_open (&fs_pifs, name, POO_FILE_MUST_CREATE);
+  if (!inode)
+    return false;
+    
+  if (initial_size > 0)
+    {
+      pifs_close (inode);
+      return true;
+    }
+    
+  void *space = malloc (512);
+  if (!space)
+    {
+      pifs_delete_file (inode);
+      pifs_close (inode);
+      return false;
+    }
+  memset (space, 0, 512);
+    
+  size_t pos = 0;
+  while (initial_size > 0)
+    {
+      off_t len = initial_size > 512 ? 512  : initial_size;
+      off_t wrote = pifs_write (inode, pos, len, space);
+      if (wrote < 0)
+        {
+          free (space);
+          pifs_delete_file (inode);
+          pifs_close (inode);
+          return false;
+        }
+      pos += wrote;
+      initial_size -= wrote;
+    }
+    
+  free (space);
+  pifs_delete_file (inode);
+  pifs_close (inode);
+  return true;
 }
 
 /* Opens the file with the given NAME.
@@ -66,13 +104,9 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
-  struct dir *dir = dir_open_root ();
-  struct inode *inode = NULL;
-
-  if (dir != NULL)
-    dir_lookup (dir, name, &inode);
-  dir_close (dir);
-
+  struct pifs_inode *inode = pifs_open (&fs_pifs, name, POO_NO_CREATE);
+  if (!inode)
+    return NULL;
   return file_open (inode);
 }
 
@@ -83,21 +117,5 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  struct dir *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
-  dir_close (dir); 
-
-  return success;
-}
-
-/* Formats the file system. */
-static void
-do_format (void)
-{
-  printf ("Formatting file system...");
-  free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 16))
-    PANIC ("root directory creation failed");
-  free_map_close ();
-  printf ("done.\n");
+  return pifs_delete_file_path (&fs_pifs, name);
 }
