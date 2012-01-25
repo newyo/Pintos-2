@@ -7,8 +7,14 @@
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
 
+#define _ARR_LEN(A) (sizeof (A) / sizeof (((*(__typeof (A) *) NULL))[0]))
+
 #define PIFS_DEFAULT_HEADER_BLOCK 0
 #define PIFS_DEFAULT_ROOT_BLOCK 1
+
+// must not be relocated, as various code lines assume 0 to be an invalid
+// block for file/folder allocation
+typedef char _CASSERT_PIFS_HEADER_BLOCK[0 - !(PIFS_DEFAULT_HEADER_BLOCK == 0)];
 
 typedef char pifs_magic[4];
 
@@ -24,9 +30,12 @@ typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
 struct pifs_header
 {
   pifs_magic magic;
-  uint32_t   block_count;
+  pifs_ptr   reserved; // could act as pointer to overflow bucket
+  
   pifs_ptr   root_folder;
-  char       used_map[500];
+  
+  uint16_t   block_count;
+  char       used_map[498];
 } PACKED;
 
 struct pifs_folder_entry
@@ -39,8 +48,11 @@ struct pifs_folder
 {
   pifs_magic magic;
   pifs_ptr   extends; // pointer to overflow bucket (struct pifs_folder)
-  uint32_t   entries_count;
-  struct pifs_folder_entry entries[25]; 
+  
+  uint8_t    entries_count;
+  struct pifs_folder_entry entries[25];
+  
+  char       reserved[3];
 } PACKED;
 
 struct pifs_file_block_ref
@@ -53,10 +65,15 @@ struct pifs_file
 {
   pifs_magic magic;
   pifs_ptr   extends; // pointer to overflow bucket (struct pifs_file::blocks)
+  
   uint32_t   length;
-  uint32_t   ref_blocks_count;
+  pifs_ptr   folder;
   struct pifs_attrs attrs;
-  struct pifs_file_block_ref blocks[99];
+  
+  uint8_t    ref_blocks_count;
+  struct pifs_file_block_ref blocks[98];
+  
+  pifs_ptr   reserved; // could act as pointer to long filename
 } PACKED;
 
 typedef char _CASSERT_PIFS_HEADER_SIZE[0 - !(sizeof (struct pifs_header) ==
@@ -115,6 +132,8 @@ pifs_format (struct pifs_device *pifs)
   ASSERT (pifs->bc != NULL);
   
   block_sector_t blocks = block_size (pifs->bc->device);
+  if (blocks > _ARR_LEN (((struct pifs_header *) 0)->used_map) * 8)
+    PANIC ("Device is too big and not supported by PIFS.");
   
   struct block_page *page;
   
@@ -160,7 +179,7 @@ pifs_get_root_block (struct pifs_device *pifs)
 
 static inline block_sector_t
 pifs_open_traverse (struct pifs_device  *pifs,
-                    block_sector_t       cur, 
+                    pifs_ptr             cur, 
                     const char         **path_)
 {
   ASSERT (pifs != NULL);
@@ -197,6 +216,8 @@ pifs_open_traverse (struct pifs_device  *pifs,
   for (;;)
     {
       struct pifs_folder *folder = (struct pifs_folder *) &page->data;
+      if (folder->entries_count > _ARR_LEN (folder->entries))
+        PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
       
       unsigned i;
       for (i = 0; i < folder->entries_count; ++i)
@@ -208,7 +229,7 @@ pifs_open_traverse (struct pifs_device  *pifs,
             
           // found!
             
-          block_sector_t next_block = folder->entries[i].block;
+          pifs_ptr next_block = folder->entries[i].block;
           if (next_block == 0)
             PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
           block_cache_return (pifs->bc, page);
@@ -221,7 +242,7 @@ pifs_open_traverse (struct pifs_device  *pifs,
           return pifs_open_traverse (pifs, next_block, path_); // TCO
         }
           
-      block_sector_t extends = folder->extends;
+      pifs_ptr extends = folder->extends;
       block_cache_return (pifs->bc, page);
       if (extends == 0)
         return cur;
@@ -233,8 +254,11 @@ pifs_open_traverse (struct pifs_device  *pifs,
 }
 
 static inline struct pifs_inode *
-pifs_alloc_inode (struct pifs_device  *pifs, block_sector_t found_sector)
+pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
 {
+  ASSERT (pifs != NULL);
+  ASSERT (cur != 0);
+  
   struct pifs_inode *result = malloc (sizeof (*result));
   if (!result)
     return NULL;
@@ -243,30 +267,28 @@ pifs_alloc_inode (struct pifs_device  *pifs, block_sector_t found_sector)
   if (result->inum == 0)
     printf ("[PIFS] Inode numbers flew over, expect errors!\n");
   result->pifs = pifs;
-  result->sector = found_sector;
+  result->sector = cur;
   
-  struct hash_elem *e2 UNUSED = hash_insert (&pifs->open_inodes,
-                                             &result->elem);
-  ASSERT (e2 != NULL);
-  
-  struct block_page *page = block_cache_read (pifs->bc, found_sector);
+  struct block_page *page = block_cache_read (pifs->bc, cur);
   if (memcpy (&page->data, PIFS_FOLDER_MAGIC, sizeof (pifs_magic)) != 0)
     {
       result->is_directory = true;
       for (;;)
         {
           struct pifs_folder *folder = (struct pifs_folder *) &page->data;
+          if (folder->entries_count > _ARR_LEN (folder->entries))
+            PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
           result->length += folder->entries_count;
           
-          block_sector_t extends = folder->extends;
-          if (extends == 0)
+          cur = folder->extends;
+          if (cur == 0)
             break;
           block_cache_return (pifs->bc, page);
           
-          page = block_cache_read (pifs->bc, extends);
+          page = block_cache_read (pifs->bc, cur);
           if (memcpy (&page->data, PIFS_FOLDER_MAGIC,
                       sizeof (pifs_magic)) != 0)
-            PANIC ("Block %"PRDSNu" of filesystem is messed up.", extends);
+            PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
         }
     }
   else if (memcmp (&page->data, PIFS_FILE_MAGIC, sizeof (pifs_magic)) == 0)
@@ -276,10 +298,44 @@ pifs_alloc_inode (struct pifs_device  *pifs, block_sector_t found_sector)
       result->length = file->length;
     }
   else
-    PANIC ("Block %"PRDSNu" of filesystem is messed up.", found_sector);
+    PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
   block_cache_return (pifs->bc, page);
   
   return result;
+}
+
+static inline struct pifs_inode *
+pifs_create_file (struct pifs_device  *pifs,
+                  pifs_ptr             parent_folder,
+                  const char          *name,
+                  size_t               name_len)
+{
+  ASSERT (pifs != NULL);
+  ASSERT (parent_folder != 0);
+  ASSERT (name != NULL);
+  ASSERT (*name != 0);
+  ASSERT (name_len > 0 && name_len <= PIFS_NAME_LENGTH);
+  
+  // TODO
+  
+  return NULL;
+}
+
+static inline struct pifs_inode *
+pifs_create_folder (struct pifs_device  *pifs,
+                    pifs_ptr             parent_folder,
+                    const char          *name,
+                    size_t               name_len)
+{
+  ASSERT (pifs != NULL);
+  ASSERT (parent_folder != 0);
+  ASSERT (name != NULL);
+  ASSERT (*name != 0);
+  ASSERT (name_len > 0 && name_len <= PIFS_NAME_LENGTH);
+  
+  // TODO
+  
+  return NULL;
 }
 
 struct pifs_inode *
@@ -299,8 +355,8 @@ pifs_open (struct pifs_device  *pifs,
   
   rwlock_acquire_write (&pifs->pifs_rwlock);
     
-  block_sector_t root_block = pifs_get_root_block (pifs);
-  block_sector_t found_sector = pifs_open_traverse (pifs, root_block, &path);
+  pifs_ptr root_block = pifs_get_root_block (pifs);
+  pifs_ptr found_sector = pifs_open_traverse (pifs, root_block, &path);
   
   struct pifs_inode *result = NULL;
   if (found_sector == 0)
@@ -327,10 +383,10 @@ pifs_open (struct pifs_device  *pifs,
       struct hash_elem *e = hash_find (&pifs->open_inodes, &key.elem);
       if (e != NULL)
         {
-          struct pifs_inode *ee = hash_entry (e, struct pifs_inode, elem);
-          if (!((must_be_file   &&  ee->is_directory) ||
-                (must_be_folder && !ee->is_directory)))
-            return ee;
+          result = hash_entry (e, struct pifs_inode, elem);
+          if (!((must_be_file   &&  result->is_directory) ||
+                (must_be_folder && !result->is_directory)))
+            goto end;
         }
         
       // alloc an inode:
@@ -343,12 +399,54 @@ pifs_open (struct pifs_device  *pifs,
       // If there is only "abc" or "abc/" left, the path is valid for creation.
       // Otherwise path is invalid, as we do not support "mkdir -p".
       
+      ++path; // strip leading slash
+      
       if (opts & POO_NO_CREATE)
         goto end;
+      // POO_NO_CREATE not being set implies POO_MASK_FILE ^ POO_MASK_FOLDER
         
-      // TODO: test path validity
-      // TODO: create file
-      // TODO: create inode ()
+      // test path validity:
+      
+      bool must_be_file   = (opts & POO_MASK_FILE);
+      bool must_be_folder = (opts & POO_MASK_FOLDER);
+        
+      const char *end = strchrnul (path, '/');
+      if (end[0] == 0)
+        {
+          // points to simple a file/folder
+        }
+      else if (end[1] == 0)
+        {
+          // points to a folder
+          must_be_folder = true;
+          --end; // strip trailing slash
+        }
+      else
+        {
+          // path is of type abc/def ...
+          goto end;
+        }
+        
+      if (must_be_file == must_be_folder)
+        goto end;
+        
+      uintptr_t elem_len = end - path;
+      if (elem_len > PIFS_NAME_LENGTH)
+        goto end; // invalid file name
+        
+      // create file or folder:
+      
+      if (must_be_file)
+        result = pifs_create_file (pifs, found_sector, path, elem_len);
+      else
+        result = pifs_create_folder (pifs, found_sector, path, elem_len);
+    }
+  
+  if (result != 0)
+    {
+      struct hash_elem *e UNUSED;
+      e = hash_insert (&pifs->open_inodes, &result->elem);
+      ASSERT (e != NULL);
     }
 
 end:
