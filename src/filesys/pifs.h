@@ -27,6 +27,7 @@ struct pifs_device
   int                 next_inum;
   struct hash         open_inodes; // [sector -> struct pifs_inode]
   struct rwlock       pifs_rwlock;
+  struct block_page  *header_block;
 };
 
 struct pifs_inode
