@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
+#include <hash.h>
 #include "threads/synch.h"
 #include "devices/block.h"
 #include "vm/lru.h"
@@ -23,19 +24,24 @@ struct block_cache
   struct semaphore  use_count;        // count of items left in pages_allocator
   struct allocator  pages_allocator;  // allocator of struct block_page
   struct lru        pages_disposable; // returned pages (the cache)
-  struct lru        pages_in_use;     // pages currently leased
+  struct hash       hash;             // [nth -> struct block_page]
   struct lock       bc_lock;          // concurrent modification lock
+  
+  uint32_t          magic;
 };
 
 struct block_page
 {
 /* public: */
-  block_data      data;
-  bool            dirty;
+  block_data       data;
+  bool             dirty;
 /* private: */  
-  size_t          lease_counter;
-  block_sector_t  nth;
-  struct lru_elem elem;
+  size_t           lease_counter;
+  block_sector_t   nth;
+  struct lru_elem  lru_elem;
+  struct hash_elem hash_elem;
+  
+  uint32_t         magic;
 };
 
 bool block_cache_init (struct block_cache *bc,
