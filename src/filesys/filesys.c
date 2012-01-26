@@ -33,6 +33,8 @@ filesys_init (bool format)
 
   if (format) 
     pifs_format (&fs_pifs);
+  else if (!pifs_sanity_check (&fs_pifs))
+    PANIC ("PIFS's basic sanity check failed.");
     
   printf ("Initialized filesystem.\n");
 }

@@ -28,19 +28,28 @@ typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
                                           sizeof (block_sector_t))];
 
 #define PIFS_COUNT_USED_MAP_ENTRIES 498
-#define PIFS_COUNT_FOLDER_ENTRIES 25
+#define PIFS_COUNT_FOLDER_ENTRIES 24
 #define PIFS_COUNT_FILE_BLOCKS 98
 
 struct pifs_header
 {
   pifs_magic magic;
-  pifs_ptr   reserved; // could act as pointer to overflow bucket
+  pifs_ptr   extends; // if there are too many blocks
   
   pifs_ptr   root_folder;
   
   uint16_t   block_count;
   char       used_map[PIFS_COUNT_USED_MAP_ENTRIES];
 } PACKED;
+
+struct pifs_inode_header
+{
+  pifs_magic        magic;
+  pifs_ptr          extends; // pointer to overflow bucket
+  pifs_ptr          parent_folder;
+  struct pifs_attrs attrs;
+  pifs_ptr          reserved; // could act as pointer to long filename
+};
 
 struct pifs_folder_entry
 {
@@ -50,14 +59,16 @@ struct pifs_folder_entry
 
 struct pifs_folder
 {
-  pifs_magic magic;
-  pifs_ptr   extends; // pointer to overflow bucket (struct pifs_folder)
+  pifs_magic               magic;
+  pifs_ptr                 extends; // if there are too many files
+  pifs_ptr                 parent_folder;
+  struct pifs_attrs        attrs;
+  pifs_ptr                 reserved;
   
-  uint8_t    entries_count;
+  char                     padding[14];
+  
+  uint8_t                  entries_count;
   struct pifs_folder_entry entries[PIFS_COUNT_FOLDER_ENTRIES];
-  
-  char       reserved[3]; // just padding, I have no idea what that space could
-                          // be used for
 } PACKED;
 
 struct pifs_file_block_ref
@@ -68,17 +79,16 @@ struct pifs_file_block_ref
 
 struct pifs_file
 {
-  pifs_magic magic;
-  pifs_ptr   extends; // pointer to overflow bucket (struct pifs_file::blocks)
+  pifs_magic                 magic;
+  pifs_ptr                   extends; // if there are too many blocks
+  pifs_ptr                   parent_folder;
+  struct pifs_attrs          attrs;
+  pifs_ptr                   reserved;
   
-  uint32_t   length;
-  pifs_ptr   folder;
-  struct pifs_attrs attrs;
+  uint32_t                   length;
   
-  uint8_t    ref_blocks_count;
+  uint8_t                    blocks_count;
   struct pifs_file_block_ref blocks[PIFS_COUNT_FILE_BLOCKS];
-  
-  pifs_ptr   reserved; // could act as pointer to long filename
 } PACKED;
 
 typedef char _CASSERT_PIFS_HEADER_SIZE[0 - !(sizeof (struct pifs_header) ==
@@ -169,6 +179,18 @@ pifs_format (struct pifs_device *pifs)
   memset (root, 0, sizeof (*root));
   memcpy (root->magic, PIFS_FOLDER_MAGIC, sizeof (root->magic));
   block_cache_return (pifs->bc, page);
+}
+
+bool
+pifs_sanity_check (struct pifs_device *pifs)
+{
+  ASSERT (pifs != NULL);
+  ASSERT (pifs->bc != NULL);
+  
+  const struct pifs_header *header = (void *) &pifs->header_block->data;
+  return memcmp (&header->magic, PIFS_HEADER_MAGIC, sizeof (pifs_magic)) == 0
+      && header->block_count == block_size (pifs->bc->device)
+      && header->root_folder != 0;
 }
 
 static inline block_sector_t
@@ -298,23 +320,6 @@ pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
   return result;
 }
 
-static inline struct pifs_inode *
-pifs_create_file (struct pifs_device  *pifs,
-                  pifs_ptr             parent_folder,
-                  const char          *name,
-                  size_t               name_len)
-{
-  ASSERT (pifs != NULL);
-  ASSERT (parent_folder != 0);
-  ASSERT (name != NULL);
-  ASSERT (*name != 0);
-  ASSERT (name_len > 0 && name_len <= PIFS_NAME_LENGTH);
-  
-  // TODO
-  
-  return NULL;
-}
-
 static pifs_ptr
 pifs_alloc_block (struct pifs_device *pifs)
 {
@@ -329,22 +334,24 @@ pifs_alloc_block (struct pifs_device *pifs)
   return result;
 }
 
-static inline struct pifs_inode *
-pifs_create_folder (struct pifs_device  *pifs,
-                    pifs_ptr             parent_folder_ptr,
-                    const char          *name,
-                    size_t               name_len)
+static inline struct block_page *
+pifs_create (struct pifs_device  *pifs,
+             pifs_ptr             parent_folder_ptr,
+             const char          *name,
+             size_t               name_len,
+             pifs_ptr            *new_block_)
 {
   ASSERT (pifs != NULL);
   ASSERT (parent_folder_ptr != 0);
   ASSERT (name != NULL);
   ASSERT (*name != 0);
   ASSERT (name_len > 0 && name_len <= PIFS_NAME_LENGTH);
+  ASSERT (new_block_ != NULL);
   
   // find space for new folder:
     
-  pifs_ptr folder_block = pifs_alloc_block (pifs);
-  if (folder_block == 0)
+  pifs_ptr new_block = pifs_alloc_block (pifs);
+  if (new_block == 0)
     return NULL;
     
   // open parent folder:
@@ -352,7 +359,7 @@ pifs_create_folder (struct pifs_device  *pifs,
   struct block_page *page = block_cache_read (pifs->bc, parent_folder_ptr);
   if (page == NULL)
     {
-      bitset_reset (&pifs_header (pifs)->used_map[0], folder_block);
+      bitset_reset (&pifs_header (pifs)->used_map[0], new_block);
       return NULL;
     }
   struct pifs_folder *folder = (void *) &page->data;
@@ -373,22 +380,12 @@ pifs_create_folder (struct pifs_device  *pifs,
   memcpy (folder->entries[folder->entries_count].name, name, name_len);
   if (name_len < PIFS_NAME_LENGTH)
     folder->entries[folder->entries_count].name[name_len] = 0;
-  folder->entries[folder->entries_count].block = folder_block;
+  folder->entries[folder->entries_count].block = new_block;
   ++folder->entries_count;
   page->dirty = true;
   block_cache_return (pifs->bc, page);
   
-  // write new empty folder:
-  
-  page = block_cache_write (pifs->bc, folder_block);
-  ASSERT (page != NULL); // we made room for one page w/ a full rw lock
-  folder = (void *) &page->data;
-  memset (folder, 0, sizeof (*folder));
-  memcpy (folder->magic, PIFS_FOLDER_MAGIC, sizeof (pifs_magic));
-  page->dirty = true;
-  block_cache_return (pifs->bc, page);
-  
-  // update inode:
+  // update parent_folder inode:
   
   struct pifs_inode key;
   memset (&key, 0, sizeof (key));
@@ -398,9 +395,63 @@ pifs_create_folder (struct pifs_device  *pifs,
   if (e != NULL)
     ++hash_entry (e, struct pifs_inode, elem)->length;
     
+  // return and clear page for new inode:
+  
+  page = block_cache_write (pifs->bc, new_block);
+  ASSERT (page != NULL); // we made room for one page w/ a full rw lock
+  memset (&page->data, 0, sizeof (page->data));
+  page->dirty = true;
+  struct pifs_inode_header *inode_header = (void *) &page->data;
+  inode_header->parent_folder = parent_folder_ptr;
+  
+  *new_block_ = new_block;
+  return page;
+}
+
+static inline struct pifs_inode *
+pifs_create_file (struct pifs_device  *pifs,
+                  pifs_ptr             parent_folder_ptr,
+                  const char          *name,
+                  size_t               name_len)
+{
+  pifs_ptr new_block;
+  struct block_page *page;
+  page = pifs_create (pifs, parent_folder_ptr, name, name_len, &new_block);
+  if (!page)
+    return NULL;
+    
+  // write new empty folder:
+  
+  struct pifs_file *file = (void *) &page->data;
+  memcpy (file->magic, PIFS_FOLDER_MAGIC, sizeof (pifs_magic));
+  block_cache_return (pifs->bc, page);
+    
   // return inode:
   
-  return pifs_alloc_inode (pifs, folder_block);
+  return pifs_alloc_inode (pifs, new_block);
+}
+
+static inline struct pifs_inode *
+pifs_create_folder (struct pifs_device  *pifs,
+                    pifs_ptr             parent_folder_ptr,
+                    const char          *name,
+                    size_t               name_len)
+{
+  pifs_ptr new_block;
+  struct block_page *page;
+  page = pifs_create (pifs, parent_folder_ptr, name, name_len, &new_block);
+  if (!page)
+    return NULL;
+    
+  // write new empty folder:
+  
+  struct pifs_folder *folder = (void *) &page->data;
+  memcpy (folder->magic, PIFS_FOLDER_MAGIC, sizeof (pifs_magic));
+  block_cache_return (pifs->bc, page);
+    
+  // return inode:
+  
+  return pifs_alloc_inode (pifs, new_block);
 }
 
 struct pifs_inode *
