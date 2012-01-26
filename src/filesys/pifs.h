@@ -3,6 +3,9 @@
 
 // pifs = Pintos Filesystem :)
 
+// All functions expect the paths to be in absolute form.
+// Non-absolute paths will cause a PANIC!
+
 #include <stdbool.h>
 #include <packed.h>
 #include <hash.h>
@@ -12,7 +15,7 @@
 
 #define PIFS_NAME_LENGTH 16
 
-struct pifs_attrs
+struct pifs_attrs // Even though we won't implement attributes ...
 {
   bool readable   : 1;
   bool writable   : 1;
@@ -23,7 +26,9 @@ typedef char _CASSERT_PIFS_ATTRS_SIZE[0 - !(sizeof (struct pifs_attrs) == 1)];
 
 struct pifs_device
 {
+/* public (readonly): */
   struct block_cache *bc;
+/* private: */
   int                 next_inum;
   struct hash         open_inodes; // [sector -> struct pifs_inode]
   struct rwlock       pifs_rwlock;
@@ -32,14 +37,16 @@ struct pifs_device
 
 struct pifs_inode
 {
+/* public (readonly): */
+  bool                is_directory;
+  size_t              length; // file size in bytes (random for folders)
+  size_t              deny_write_cnt;
   int                 inum;
+/* private: */
   struct pifs_device *pifs;
   block_sector_t      sector;
-  bool                is_directory;
   size_t              open_count;
-  size_t              length; // file = bytes, directory = files
   bool                deleted; // will be deleted when closed
-  size_t              deny_write_cnt;
   struct hash_elem    elem; // struct pifs_device::open_inodes
 };
 
@@ -48,7 +55,6 @@ struct pifs_inode
 #define POO_MASK_FILE   0b0100
 #define POO_MASK_FOLDER 0b1000
 #define POO_MASK        0b1111
-
 enum pifs_open_opts
 {
   POO_NO_CREATE          = POO_MASK_NO,
@@ -73,7 +79,8 @@ struct pifs_inode *pifs_open (struct pifs_device  *pifs,
 void pifs_close (struct pifs_inode *inode);
 
 // Returns nth filename in directory.
-// May not be null terminated. Max. PIFS_NAME_LENGTH characters.
+// May not be null terminated. Max. PIFS_NAME_LENGTH characters are valid.
+// Cost: ceil((index+1) / 24).
 const char *pifs_readdir (struct pifs_inode *inode, size_t index);
 
 off_t pifs_read (struct pifs_inode *inode,
