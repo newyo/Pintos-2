@@ -12,6 +12,8 @@
 #define FS_CACHE_SIZE 64
 #define FS_CACHE_IN_USERSPACE false
 
+static bool fs_initialized;
+
 /* Partition that contains the file system. */
 static struct block       *fs_device;
 static struct block_cache  fs_cache;
@@ -32,11 +34,15 @@ filesys_init (bool format)
     PANIC ("PIFS could not be intialized.");
 
   if (format) 
-    pifs_format (&fs_pifs);
+    {
+      if (!pifs_format (&fs_pifs))
+        PANIC ("Your device is either too big or too small.");
+    }
   else if (!pifs_sanity_check (&fs_pifs))
     PANIC ("PIFS's basic sanity check failed.");
     
   printf ("Initialized filesystem.\n");
+  fs_initialized = true;
 }
 
 /* Shuts down the file system module, writing any unwritten data
@@ -44,6 +50,9 @@ filesys_init (bool format)
 void
 filesys_done (void) 
 {
+  if (!fs_initialized)
+    return;
+    
   pifs_destroy (&fs_pifs);
   block_cache_destroy (&fs_cache);
   printf ("Filesystem has shut down.\n");

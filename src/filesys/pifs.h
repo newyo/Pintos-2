@@ -64,7 +64,7 @@ enum pifs_open_opts
 
 bool pifs_init (struct pifs_device *pifs, struct block_cache *bc);
 void pifs_destroy (struct pifs_device *pifs);
-void pifs_format (struct pifs_device *pifs);
+bool pifs_format (struct pifs_device *pifs);
 bool pifs_sanity_check (struct pifs_device *pifs);
 
 struct pifs_inode *pifs_open (struct pifs_device  *pifs,

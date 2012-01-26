@@ -1,20 +1,14 @@
 #include "pifs.h"
 #include "bitset.h"
+
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <debug.h>
+#include <round.h>
+
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
-
-#define _ARR_LEN(A) (sizeof (A) / sizeof (((*(__typeof (A) *) NULL))[0]))
-
-#define PIFS_DEFAULT_HEADER_BLOCK 0
-#define PIFS_DEFAULT_ROOT_BLOCK 1
-
-// must not be relocated, as various code lines assume 0 to be an invalid
-// block for file/folder allocation
-typedef char _CASSERT_PIFS_HEADER_BLOCK[0 - !(PIFS_DEFAULT_HEADER_BLOCK == 0)];
 
 typedef char pifs_magic[4];
 
@@ -129,7 +123,7 @@ pifs_init (struct pifs_device *pifs, struct block_cache *bc)
              pifs);
   rwlock_init (&pifs->pifs_rwlock);
   
-  pifs->header_block = block_cache_read (pifs->bc, PIFS_DEFAULT_HEADER_BLOCK);
+  pifs->header_block = block_cache_read (pifs->bc, 0);
   ASSERT (pifs->header_block != NULL);
   
   return true;
@@ -149,48 +143,99 @@ pifs_header (struct pifs_device *pifs)
   return (struct pifs_header *) &pifs->header_block->data;
 }
 
-void
+bool
 pifs_format (struct pifs_device *pifs)
 {
   ASSERT (pifs != NULL);
   ASSERT (pifs->bc != NULL);
   
   block_sector_t blocks = block_size (pifs->bc->device);
-  if (blocks > _ARR_LEN (((struct pifs_header *) 0)->used_map) * 8)
-    PANIC ("Device is too big and not supported by PIFS.");
+  if (blocks % 8 != 0)
+    {
+      printf ("PIFS will waste %u of %u blocks.\n", blocks % 8, blocks);
+      blocks -= blocks % 8;
+    }
+  if (blocks < 2 || DIV_ROUND_UP (blocks, PIFS_COUNT_USED_MAP_ENTRIES) >
+      PIFS_COUNT_USED_MAP_ENTRIES - 1) // max. 125 MB
+    return false;
   
-  // write file system header:
+  // write file system headers:
   
-  struct pifs_header *header = pifs_header (pifs);
-  memset (header, 0, sizeof (*header));
-  memcpy (header->magic, PIFS_HEADER_MAGIC, sizeof (header->magic));
-  header->block_count = blocks;
-  header->root_folder = PIFS_DEFAULT_ROOT_BLOCK;
-  bitset_mark (header->used_map, PIFS_DEFAULT_HEADER_BLOCK);
-  bitset_mark (header->used_map, PIFS_DEFAULT_ROOT_BLOCK);
+  struct pifs_header *const header = pifs_header (pifs);
+  
+  auto void
+  init_header (struct block_page *page)
+  {
+    ASSERT (page != 0);
+    struct pifs_header *h = (void *) &page->data;
+    
+    memset (h, 0, sizeof (*h));
+    memcpy (h->magic, PIFS_HEADER_MAGIC, sizeof (h->magic));
+    if (blocks >= PIFS_COUNT_USED_MAP_ENTRIES)
+      h->block_count = PIFS_COUNT_USED_MAP_ENTRIES;
+    else
+      h->block_count = blocks;
+  }
+  
+  init_header (pifs->header_block);
+  bitset_mark (header->used_map, 0);
+  
+  pifs_ptr nth_block = 1;
+  if (blocks > PIFS_COUNT_USED_MAP_ENTRIES)
+    {
+      struct block_page *page = NULL, *last_page = NULL;
+      
+      do
+        {
+          blocks -= PIFS_COUNT_USED_MAP_ENTRIES;
+          
+          if (last_page != NULL)
+            {
+              struct pifs_header *last_header = (void *) &last_page->data;
+              last_header->extends = nth_block;
+              last_page->dirty = true;
+              block_cache_return (pifs->bc, page);
+            }
+          else
+            header->extends = nth_block;
+          last_page = page;
+          
+          page = block_cache_write (pifs->bc, nth_block);
+          init_header (page);
+          bitset_mark (header->used_map, nth_block);
+          
+          ++nth_block;
+        }
+      while (blocks > PIFS_COUNT_USED_MAP_ENTRIES);
+      
+      last_page->dirty = true;
+      block_cache_return (pifs->bc, page);
+    }
   
   // write root directory:
-  
-  struct block_page *page = block_cache_write (pifs->bc,
-                                               PIFS_DEFAULT_ROOT_BLOCK);
+   
+  bitset_mark (header->used_map, nth_block);
+  header->root_folder = nth_block;
+  struct block_page *page = block_cache_write (pifs->bc, nth_block);
   ASSERT (page !=  NULL);
   struct pifs_folder *root = (void *) &page->data;
   
   memset (root, 0, sizeof (*root));
   memcpy (root->magic, PIFS_FOLDER_MAGIC, sizeof (root->magic));
+  
+  page->dirty = true;
   block_cache_return (pifs->bc, page);
+  
+  pifs->header_block->dirty = true;
+  return true;
 }
 
 bool
 pifs_sanity_check (struct pifs_device *pifs)
 {
   ASSERT (pifs != NULL);
-  ASSERT (pifs->bc != NULL);
-  
   const struct pifs_header *header = (void *) &pifs->header_block->data;
-  return memcmp (&header->magic, PIFS_HEADER_MAGIC, sizeof (pifs_magic)) == 0
-      && header->block_count == block_size (pifs->bc->device)
-      && header->root_folder != 0;
+  return memcmp (&header->magic, PIFS_HEADER_MAGIC, sizeof (pifs_magic)) == 0;
 }
 
 static inline block_sector_t
@@ -232,7 +277,7 @@ pifs_open_traverse (struct pifs_device  *pifs,
   for (;;)
     {
       struct pifs_folder *folder = (struct pifs_folder *) &page->data;
-      if (folder->entries_count > _ARR_LEN (folder->entries))
+      if (folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
         PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
       
       unsigned i;
@@ -292,7 +337,7 @@ pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
       for (;;)
         {
           struct pifs_folder *folder = (struct pifs_folder *) &page->data;
-          if (folder->entries_count > _ARR_LEN (folder->entries))
+          if (folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
             PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
           result->length += folder->entries_count;
           
@@ -328,7 +373,7 @@ pifs_alloc_block (struct pifs_device *pifs)
   
   pifs_ptr result = bitset_find_and_set_1 (&header->used_map[0], len);
   if (result <= 0 || result < header->block_count)
-    return 0;
+    return 0; // TODO: iterate over extends
     
   pifs->header_block->dirty = true;
   return result;
