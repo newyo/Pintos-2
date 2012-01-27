@@ -2,6 +2,7 @@
 #include "file.h"
 #include "filesys.h"
 #include "pifs.h"
+#include "canonical_path.h"
 
 #include <debug.h>
 #include <stdio.h>
@@ -109,21 +110,24 @@ fsutil_extract (char **argv UNUSED)
           /* End of archive. */
           break;
         }
-      else if (type == USTAR_DIRECTORY)
+      
+      char *name = canonical_path_get ("/", file_name);
+      if (type == USTAR_DIRECTORY)
         {
           // ignore result
-          pifs_create_folder_path (&fs_pifs, file_name);
+          pifs_create_folder_path (&fs_pifs, name);
         }
       else if (_IN (type, USTAR_AREGULAR, USTAR_REGULAR))
         {
           struct file *dst;
 
-          printf ("Putting '%s' into the file system...\n", file_name);
+          printf ("Putting '%s' ('%s') into the file system...\n",
+                  file_name, name);
 
           /* Create destination file. */
-          if (!filesys_create (file_name, size))
+          if (!filesys_create (name, 0))
             PANIC ("%s: create failed", file_name);
-          dst = filesys_open (file_name);
+          dst = filesys_open (name);
           if (dst == NULL)
             PANIC ("%s: open failed", file_name);
 
@@ -143,6 +147,7 @@ fsutil_extract (char **argv UNUSED)
           /* Finish up. */
           file_close (dst);
         }
+      free (name);
     }
 
   /* Erase the ustar header from the start of the block device,
