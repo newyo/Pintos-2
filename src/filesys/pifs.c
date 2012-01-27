@@ -269,7 +269,8 @@ pifs_open_traverse (struct pifs_device  *pifs,
           block_cache_return (pifs->bc, page);
           return 0;
         }
-      PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
+      PANIC ("Block %"PRDSNu" of filesystem is messed up (magic = 0x%08X).",
+             cur, *(uint32_t *) &page->data);
     }
     
   for (;;)
@@ -308,7 +309,8 @@ pifs_open_traverse (struct pifs_device  *pifs,
         
       page = block_cache_read (pifs->bc, extends);
       if (memcpy (&page->data, PIFS_MAGIC_FOLDER, sizeof (pifs_magic)) != 0)
-        PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
+        PANIC ("Block %"PRDSNu" of filesystem is messed up (magic = 0x%08X).",
+               cur, *(uint32_t *) &page->data);
     }
 }
 
@@ -347,7 +349,8 @@ pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
           page = block_cache_read (pifs->bc, cur);
           if (memcpy (&page->data, PIFS_MAGIC_FOLDER,
                       sizeof (pifs_magic)) != 0)
-            PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
+            PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                   "(magic = 0x%08X).", cur, *(uint32_t *) &page->data);
         }
     }
   else if (memcmp (&page->data, PIFS_MAGIC_FILE, sizeof (pifs_magic)) == 0)
@@ -407,7 +410,8 @@ pifs_create (struct pifs_device  *pifs,
     }
   struct pifs_folder *folder = (void *) &page->data;
   if (memcmp (folder->magic, PIFS_MAGIC_FOLDER, sizeof (pifs_magic)) != 0)
-    PANIC ("Block %"PRDSNu" of filesystem is messed up.", parent_folder_ptr);
+    PANIC ("Block %"PRDSNu" of filesystem is messed up (magic = 0x%08X).",
+           parent_folder_ptr, *(uint32_t *) &folder->magic);
     
   // extend parent folder if needed:
   
