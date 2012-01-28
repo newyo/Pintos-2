@@ -81,36 +81,43 @@ shutdown_reboot (void)
     }
 }
 
+static int shutdown_power_off_recursion = 0;
+
 /* Powers down the machine we're running on,
    as long as we're running on Bochs or QEMU. */
 void
 shutdown_power_off (void)
 {
-  const uint8_t s[] = "Shutdown";
-  const uint8_t *p;
-
+  switch (shutdown_power_off_recursion ++)
+    {
+      case 0:
 #ifdef FILESYS
-  filesys_done ();
+        filesys_done ();
 #endif
+      case 1:
+        print_stats ();
+        printf ("Powering off...\n");
+        serial_flush ();
+        break;
+        
+      default:
+        shutdown_power_off_recursion = 2;
+    }
 
-  print_stats ();
+  for (;;)
+    {
+      /* This is a special power-off sequence supported by Bochs and
+         QEMU, but not by physical hardware. */
+      const char *p;
+      for (p = "Shutdown"; *p; ++p)
+        outb (0x8900, *p);
 
-  printf ("Powering off...\n");
-  serial_flush ();
-
-  /* This is a special power-off sequence supported by Bochs and
-     QEMU, but not by physical hardware. */
-  for (p = s; *p != '\0'; p++)
-    outb (0x8900, *p);
-
-  /* This will power off a VMware VM if "gui.exitOnCLIHLT = TRUE"
-     is set in its configuration file.  (The "pintos" script does
-     that automatically.)  */
-  asm volatile ("cli; hlt" : : : "memory");
-
-  /* None of those worked. */
-  printf ("still running...\n");
-  for (;;);
+      /* This will power off a VMware VM if "gui.exitOnCLIHLT = TRUE"
+         is set in its configuration file.  (The "pintos" script does
+         that automatically.)  */
+      asm volatile ("cli; hlt");
+      printf ("still running...\n");
+    }
 }
 
 /* Print statistics about Pintos execution. */
