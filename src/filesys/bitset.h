@@ -37,10 +37,10 @@ bitset_set (char *bitset, size_t nth, bool value)
 }
 
 static inline int __attribute__ ((always_inline))
-_bitset_find_least_one (int num)
+_bitset_find_least_one (int value)
 {
   int result;
-  asm volatile ("bsf %1, %0" : "=r"(result) : "g"(num));
+  asm volatile ("bsf %1, %0" : "=r"(result) : "g"(value));
   return result;
 }
 

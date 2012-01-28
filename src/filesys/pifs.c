@@ -34,20 +34,9 @@ typedef uint32_t pifs_ptr;
 typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
                                           sizeof (block_sector_t))];
 
-#define PIFS_COUNT_USED_MAP_ENTRIES 498 /* ~250 kB per block */
+#define PIFS_COUNT_USED_MAP_ENTRIES 493 /* ~250 kB per block */
 #define PIFS_COUNT_FOLDER_ENTRIES 24
 #define PIFS_COUNT_FILE_BLOCKS 98 /* ~50 kb per block (w/ max. fragmentation) */
-
-struct pifs_header
-{
-  pifs_magic magic;
-  pifs_ptr   extends; // if there are too many blocks
-  
-  pifs_ptr   root_folder;
-  
-  uint16_t   block_count;
-  char       used_map[PIFS_COUNT_USED_MAP_ENTRIES];
-} PACKED;
 
 struct pifs_inode_header
 {
@@ -57,6 +46,18 @@ struct pifs_inode_header
   struct pifs_attrs attrs;
   pifs_ptr          reserved; // could act as pointer to long filename
 };
+
+struct pifs_header
+{
+  pifs_magic        magic;
+  pifs_ptr          extends; // if there are too many blocks
+  pifs_ptr          root_folder;
+  struct pifs_attrs attrs; // unused for this inode type
+  pifs_ptr          reserved; // unused for this inode type
+  
+  uint16_t          block_count;
+  char              used_map[PIFS_COUNT_USED_MAP_ENTRIES];
+} PACKED;
 
 struct pifs_folder_entry
 {
@@ -176,7 +177,7 @@ pifs_format (struct pifs_device *pifs)
       blocks -= blocks % 8;
     }
   if (blocks < 2 || DIV_ROUND_UP (blocks, PIFS_COUNT_USED_MAP_ENTRIES) >
-      PIFS_COUNT_USED_MAP_ENTRIES - 1) // max. 125 MB
+      PIFS_COUNT_USED_MAP_ENTRIES - 1) // ~124 MB
     return false;
   
   // write file system headers:
