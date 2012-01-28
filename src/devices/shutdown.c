@@ -6,6 +6,7 @@
 #include "devices/timer.h"
 #include "threads/io.h"
 #include "threads/thread.h"
+#include "threads/interrupt.h"
 #include "userprog/exception.h"
 #ifdef FILESYS
 #include "devices/block.h"
@@ -92,7 +93,11 @@ shutdown_power_off (void)
     {
       case 0:
 #ifdef FILESYS
-        filesys_done ();
+        {
+          enum intr_level old_level = intr_enable ();
+          filesys_done ();
+          intr_set_level (old_level);
+        }
 #endif
       case 1:
         print_stats ();

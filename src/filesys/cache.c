@@ -72,6 +72,21 @@ block_cache_flush_all_sub (struct hash_elem *e, void *bc_)
   block_cache_flush (bc, ee);
 }
 
+static void
+block_cache_destroy_sub (struct hash_elem *e, void *bc_)
+{
+  struct block_cache *bc = bc_;
+  ASSERT (bc != NULL);
+  ASSERT (e != NULL);
+  
+  struct block_page *ee = hash_entry (e, struct block_page, hash_elem);
+  typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (ee->nth))];
+  ASSERT (ee->magic == BC_PAGE_MAGIC);
+  
+  block_cache_flush (bc, ee);
+  allocator_free (&bc->pages_allocator, ee, 1);
+}
+
 void
 block_cache_destroy (struct block_cache *bc)
 {
@@ -79,7 +94,7 @@ block_cache_destroy (struct block_cache *bc)
   ASSERT (bc->magic == BC_MAGIC);
   ASSERT (intr_get_level () == INTR_ON);
   
-  hash_destroy (&bc->hash, &block_cache_flush_all_sub);
+  hash_destroy (&bc->hash, &block_cache_destroy_sub);
   allocator_destroy (&bc->pages_allocator);
   
   bc->magic ^= -1u;
