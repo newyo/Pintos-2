@@ -2,8 +2,12 @@
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
 
-#define BC_MAGIC (('B'<<24) + ('l'<<16) + ('k'<<8) + 'C')
-#define BC_PAGE_MAGIC (('B'<<24) + ('l'<<16) + ('C'<<8) + 'P')
+#include <stdio.h>
+
+#define BC_MAGIC      (*(uint32_t *) &"BlkC")
+#define BC_PAGE_MAGIC (*(uint32_t *) &"Page")
+
+#define BC_DEBUG(...) printf (__VA_ARGS__)
 
 // TODO: implement interval-wise flushing (clock?)
 
@@ -81,7 +85,7 @@ block_cache_destroy (struct block_cache *bc)
   bc->magic ^= -1u;
 }
 
-// leaves with bc->bc_lock locked!
+// exits with bc->bc_lock locked!
 static struct block_page *
 block_cache_retreive (struct block_cache *bc,
                       block_sector_t      nth,
@@ -102,6 +106,7 @@ block_cache_retreive (struct block_cache *bc,
       if (retreived)
         *retreived = true;
       result = hash_entry (e, struct block_page, hash_elem);
+      BC_DEBUG ("BC found %u (%p)\n", nth, &result->data);
       goto end;
     }
     
@@ -139,7 +144,10 @@ block_cache_retreive (struct block_cache *bc,
   struct hash_elem *f UNUSED = hash_insert (&bc->hash, &result->hash_elem);
   ASSERT (f == NULL);
   
+  BC_DEBUG ("BC created %u (%p)\n", nth, &result->data);
+  
 end:
+  ASSERT (result->magic == BC_PAGE_MAGIC);
   lru_dispose (&bc->pages_disposable, &result->lru_elem, false);
   ++result->lease_counter;
   return result;
@@ -151,6 +159,8 @@ block_cache_read (struct block_cache *bc, block_sector_t nth)
   ASSERT (bc != NULL);
   ASSERT (bc->magic == BC_MAGIC);
   ASSERT (intr_get_level () == INTR_ON);
+  
+  BC_DEBUG ("BC read %d\n", nth);
   
   bool retreived;
   struct block_page *result = block_cache_retreive (bc, nth, &retreived);
@@ -171,6 +181,8 @@ block_cache_write (struct block_cache *bc, block_sector_t nth)
   ASSERT (bc->magic == BC_MAGIC);
   ASSERT (intr_get_level () == INTR_ON);
   
+  BC_DEBUG ("BC write %d\n", nth);
+  
   struct block_page *result = block_cache_retreive (bc, nth, NULL);
   ASSERT (result != NULL);
   result->dirty = true;
@@ -188,6 +200,8 @@ block_cache_return (struct block_cache *bc, struct block_page *page)
   
   ASSERT (!lru_is_interior (&page->lru_elem));
   ASSERT (page->lease_counter > 0);
+  
+  BC_DEBUG ("BC return %d\n", page->nth);
   
   lock_acquire (&bc->bc_lock);
   if (--page->lease_counter == 0)

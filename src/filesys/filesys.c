@@ -53,6 +53,8 @@ filesys_done (void)
   if (!fs_initialized)
     return;
     
+  ASSERT (intr_get_level () == INTR_ON);
+    
   pifs_destroy (&fs_pifs);
   block_cache_destroy (&fs_cache);
   printf ("Filesystem has shut down.\n");

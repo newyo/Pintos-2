@@ -72,6 +72,7 @@ block_cache_write_out (struct block_cache *bc,
 {
   struct block_page *page = block_cache_write (bc, nth);
   memcpy (&page->data, data, BLOCK_SECTOR_SIZE);
+  page->dirty = true;
   block_cache_return (bc, page);
 }
 

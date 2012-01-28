@@ -10,10 +10,10 @@
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
 
-typedef char pifs_magic[4];
-static const pifs_magic PIFS_MAGIC_HEADER = "PIFS";
-static const pifs_magic PIFS_MAGIC_FOLDER = "FLDR";
-static const pifs_magic PIFS_MAGIC_FILE   = "FILE";
+typedef uint32_t pifs_magic;
+#define PIFS_MAGIC_HEADER (*(pifs_magic *) &"PIFS")
+#define PIFS_MAGIC_FOLDER (*(pifs_magic *) &"FLDR")
+#define PIFS_MAGIC_FILE   (*(pifs_magic *) &"FILE")
 
 typedef uint32_t pifs_ptr;
 typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
@@ -168,12 +168,14 @@ pifs_format (struct pifs_device *pifs)
     struct pifs_header *h = (void *) &page->data;
     
     memset (h, 0, sizeof (*h));
-    memcpy (h->magic, PIFS_MAGIC_HEADER, sizeof (h->magic));
+    h->magic = PIFS_MAGIC_HEADER;
     if (blocks >= PIFS_COUNT_USED_MAP_ENTRIES)
       h->block_count = PIFS_COUNT_USED_MAP_ENTRIES;
     else
       h->block_count = blocks;
   }
+  
+  printf ("PIFS is formatting free-maps.\n");
   
   init_header (pifs->header_block);
   bitset_mark (header->used_map, 0);
@@ -192,10 +194,12 @@ pifs_format (struct pifs_device *pifs)
               struct pifs_header *last_header = (void *) &last_page->data;
               last_header->extends = nth_block;
               last_page->dirty = true;
-              block_cache_return (pifs->bc, page);
+              block_cache_return (pifs->bc, last_page);
             }
           else
-            header->extends = nth_block;
+            {
+              header->extends = nth_block;
+            }
           last_page = page;
           
           page = block_cache_write (pifs->bc, nth_block);
@@ -206,20 +210,27 @@ pifs_format (struct pifs_device *pifs)
         }
       while (blocks > PIFS_COUNT_USED_MAP_ENTRIES);
       
-      last_page->dirty = true;
+      if (last_page != NULL)
+        {
+          last_page->dirty = true;
+          block_cache_return (pifs->bc, last_page);
+        }
+      page->dirty = true;
       block_cache_return (pifs->bc, page);
     }
   
   // write root directory:
+  
+  printf ("PIFS is formatting root directory (%u).\n", nth_block);
    
   bitset_mark (header->used_map, nth_block);
   header->root_folder = nth_block;
   struct block_page *page = block_cache_write (pifs->bc, nth_block);
-  ASSERT (page !=  NULL);
+  ASSERT (page != NULL);
   struct pifs_folder *root = (void *) &page->data;
   
   memset (root, 0, sizeof (*root));
-  memcpy (root->magic, PIFS_MAGIC_FOLDER, sizeof (root->magic));
+  root->magic = PIFS_MAGIC_FOLDER;
   
   page->dirty = true;
   block_cache_return (pifs->bc, page);
@@ -233,7 +244,7 @@ pifs_sanity_check (struct pifs_device *pifs)
 {
   ASSERT (pifs != NULL);
   const struct pifs_header *header = (void *) &pifs->header_block->data;
-  return memcmp (&header->magic, PIFS_MAGIC_HEADER, sizeof (pifs_magic)) == 0;
+  return header->magic == PIFS_MAGIC_HEADER;
 }
 
 static inline block_sector_t
@@ -261,21 +272,22 @@ pifs_open_traverse (struct pifs_device  *pifs,
     }
     
   struct block_page *page = block_cache_read (pifs->bc, cur);
-  if (memcpy (&page->data, PIFS_MAGIC_FOLDER, sizeof (pifs_magic)) != 0)
+  struct pifs_inode_header *header = (void *) &page->data;
+  if (header->magic != PIFS_MAGIC_FOLDER)
     {
-      if (memcmp (&page->data, PIFS_MAGIC_FILE, sizeof (pifs_magic)) == 0)
+      if (header->magic == PIFS_MAGIC_FILE)
         {
           // we are hit a file, but the path indicated it was a folder
           block_cache_return (pifs->bc, page);
           return 0;
         }
-      PANIC ("Block %"PRDSNu" of filesystem is messed up (magic = 0x%08X).",
-             cur, *(uint32_t *) &page->data);
+      PANIC ("Block %"PRDSNu" (%p) of filesystem is messed up "
+             "(magic = 0x%08X).", cur, header, header->magic);
     }
     
   for (;;)
     {
-      struct pifs_folder *folder = (struct pifs_folder *) &page->data;
+      struct pifs_folder *folder = (void *) header;
       if (folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
         PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
       
@@ -308,9 +320,10 @@ pifs_open_traverse (struct pifs_device  *pifs,
         return cur;
         
       page = block_cache_read (pifs->bc, extends);
-      if (memcpy (&page->data, PIFS_MAGIC_FOLDER, sizeof (pifs_magic)) != 0)
+      header = (void *) &page->data;
+      if (header->magic != PIFS_MAGIC_FOLDER)
         PANIC ("Block %"PRDSNu" of filesystem is messed up (magic = 0x%08X).",
-               cur, *(uint32_t *) &page->data);
+               cur, header->magic);
     }
 }
 
@@ -331,12 +344,12 @@ pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
   result->sector = cur;
   
   struct block_page *page = block_cache_read (pifs->bc, cur);
-  if (memcpy (&page->data, PIFS_MAGIC_FOLDER, sizeof (pifs_magic)) != 0)
+  struct pifs_folder *folder = (void *) &page->data;
+  if (folder->magic == PIFS_MAGIC_FOLDER)
     {
       result->is_directory = true;
       for (;;)
         {
-          struct pifs_folder *folder = (struct pifs_folder *) &page->data;
           if (folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
             PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
           result->length += folder->entries_count;
@@ -347,15 +360,15 @@ pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
           block_cache_return (pifs->bc, page);
           
           page = block_cache_read (pifs->bc, cur);
-          if (memcpy (&page->data, PIFS_MAGIC_FOLDER,
-                      sizeof (pifs_magic)) != 0)
+          folder = (void *) &page->data;
+          if (folder->magic != PIFS_MAGIC_FOLDER)
             PANIC ("Block %"PRDSNu" of filesystem is messed up "
-                   "(magic = 0x%08X).", cur, *(uint32_t *) &page->data);
+                   "(magic = 0x%08X).", cur, folder->magic);
         }
     }
-  else if (memcmp (&page->data, PIFS_MAGIC_FILE, sizeof (pifs_magic)) == 0)
+  else if (folder->magic == PIFS_MAGIC_FILE)
     {
-      struct pifs_file *file = (struct pifs_file *) &page->data;
+      struct pifs_file *file = (struct pifs_file *) folder;
       result->is_directory = false;
       result->length = file->length;
     }
@@ -409,9 +422,9 @@ pifs_create (struct pifs_device  *pifs,
       return NULL;
     }
   struct pifs_folder *folder = (void *) &page->data;
-  if (memcmp (folder->magic, PIFS_MAGIC_FOLDER, sizeof (pifs_magic)) != 0)
+  if (folder->magic == PIFS_MAGIC_FOLDER)
     PANIC ("Block %"PRDSNu" of filesystem is messed up (magic = 0x%08X).",
-           parent_folder_ptr, *(uint32_t *) &folder->magic);
+           parent_folder_ptr, folder->magic);
     
   // extend parent folder if needed:
   
@@ -470,7 +483,7 @@ pifs_create_file (struct pifs_device  *pifs,
   // write new empty folder:
   
   struct pifs_file *file = (void *) &page->data;
-  memcpy (file->magic, PIFS_MAGIC_FOLDER, sizeof (pifs_magic));
+  file->magic = PIFS_MAGIC_FOLDER;
   block_cache_return (pifs->bc, page);
     
   // return inode:
@@ -493,7 +506,7 @@ pifs_create_folder (struct pifs_device  *pifs,
   // write new empty folder:
   
   struct pifs_folder *folder = (void *) &page->data;
-  memcpy (folder->magic, PIFS_MAGIC_FOLDER, sizeof (pifs_magic));
+  folder->magic = PIFS_MAGIC_FOLDER;
   block_cache_return (pifs->bc, page);
     
   // return inode:
