@@ -4,8 +4,22 @@
 
 #include <stdio.h>
 
-#define BC_MAGIC      (*(uint32_t *) &"BlkC")
-#define BC_PAGE_MAGIC (*(uint32_t *) &"Page")
+#define MAGIC4(C)                      \
+({                                     \
+  __extension__ const char _c[] = (C); \
+  __extension__ uint32_t _r = 0;       \
+  _r |= _c[3];                         \
+  _r <<= 8;                            \
+  _r |= _c[2];                         \
+  _r <<= 8;                            \
+  _r |= _c[1];                         \
+  _r <<= 8;                            \
+  _r |= _c[0];                         \
+  _r;                                  \
+})
+
+#define BC_MAGIC      MAGIC4 ("BlkC")
+#define BC_PAGE_MAGIC MAGIC4 ("Page")
 
 #define BC_DEBUG(...) printf (__VA_ARGS__)
 

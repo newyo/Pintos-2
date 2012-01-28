@@ -10,10 +10,24 @@
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
 
+#define MAGIC4(C)                      \
+({                                     \
+  __extension__ const char _c[] = (C); \
+  __extension__ uint32_t _r = 0;       \
+  _r |= _c[3];                         \
+  _r <<= 8;                            \
+  _r |= _c[2];                         \
+  _r <<= 8;                            \
+  _r |= _c[1];                         \
+  _r <<= 8;                            \
+  _r |= _c[0];                         \
+  _r;                                  \
+})
+
 typedef uint32_t pifs_magic;
-#define PIFS_MAGIC_HEADER (*(pifs_magic *) &"PIFS")
-#define PIFS_MAGIC_FOLDER (*(pifs_magic *) &"FLDR")
-#define PIFS_MAGIC_FILE   (*(pifs_magic *) &"FILE")
+#define PIFS_MAGIC_HEADER MAGIC4 ("PIFS")
+#define PIFS_MAGIC_FOLDER MAGIC4 ("FLDR")
+#define PIFS_MAGIC_FILE   MAGIC4 ("FILE")
 
 typedef uint32_t pifs_ptr;
 typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
