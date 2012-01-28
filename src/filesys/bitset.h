@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include "off_t.h"
 
 static inline bool
@@ -46,7 +47,7 @@ _bitset_find_least_one (int num)
 static inline int __attribute__ ((always_inline))
 _bitset_reset_bit (int value, int nth)
 {
-  asm volatile ("btr %0, %1" : "+r"(value) : "g"(nth));
+  asm volatile ("btr %1, %0" : "+g"(value) : "r"(nth));
   return value;
 }
 

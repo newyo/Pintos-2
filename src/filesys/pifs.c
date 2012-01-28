@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <debug.h>
 #include <round.h>
+#include <limits.h>
 
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
@@ -126,6 +127,13 @@ pifs_open_inodes_less (const struct hash_elem *a,
 bool
 pifs_init (struct pifs_device *pifs, struct block_cache *bc)
 {
+  ASSERT ( ({
+    int value = 0b01000111;
+    int result = bitset_find_and_set_1 ((char *) &value, sizeof (value));
+    (result == 3) && (value == 0b01001111);
+  }) );
+  
+  
   ASSERT (pifs != NULL);
   ASSERT (bc != NULL);
   
@@ -396,14 +404,31 @@ pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
 static pifs_ptr
 pifs_alloc_block (struct pifs_device *pifs)
 {
-  struct pifs_header *header = pifs_header (pifs);
-  int len = (header->block_count+7) / 8;
-  
-  pifs_ptr result = bitset_find_and_set_1 (&header->used_map[0], len);
-  if (result <= 0 || result < header->block_count)
-    return 0; // TODO: iterate over extends
-    
-  pifs->header_block->dirty = true;
+  pifs_ptr cur = 0, result = 0;
+  do
+    {
+      struct block_page *page = block_cache_read (pifs->bc, cur);
+      struct pifs_header *header = (void *) &page->data;
+      if (header->magic != PIFS_MAGIC_HEADER)
+          PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                 "(magic = 0x%08X).", cur, header->magic);
+                 
+      int len = (header->block_count+7) / 8;
+      if (len > PIFS_COUNT_USED_MAP_ENTRIES)
+          PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                 "(apparent len = %u).", cur, len);
+                 
+      off_t bit_result = bitset_find_and_set_1 (&header->used_map[0], len);
+      if (bit_result > 0)
+        {
+          result = bit_result;
+          page->dirty = true;
+        }
+      else
+        cur = header->extends;
+      block_cache_return (pifs->bc, page);
+    }
+  while (result == 0 && cur != 0);
   return result;
 }
 
@@ -436,7 +461,7 @@ pifs_create (struct pifs_device  *pifs,
       return NULL;
     }
   struct pifs_folder *folder = (void *) &page->data;
-  if (folder->magic == PIFS_MAGIC_FOLDER)
+  if (folder->magic != PIFS_MAGIC_FOLDER)
     PANIC ("Block %"PRDSNu" of filesystem is messed up (magic = 0x%08X).",
            parent_folder_ptr, folder->magic);
     
@@ -494,10 +519,10 @@ pifs_create_file (struct pifs_device  *pifs,
   if (!page)
     return NULL;
     
-  // write new empty folder:
+  // write new empty file:
   
   struct pifs_file *file = (void *) &page->data;
-  file->magic = PIFS_MAGIC_FOLDER;
+  file->magic = PIFS_MAGIC_FILE;
   block_cache_return (pifs->bc, page);
     
   // return inode:
@@ -637,7 +662,7 @@ pifs_open (struct pifs_device  *pifs,
     {
       struct hash_elem *e UNUSED;
       e = hash_insert (&pifs->open_inodes, &result->elem);
-      ASSERT (e != NULL);
+      ASSERT (e == NULL);
     }
 
 end:
@@ -691,14 +716,35 @@ pifs_read (struct pifs_inode *inode,
   
   if (length == 0)
     return 0;
+  else if (length > INT_MAX || start > INT_MAX || start+length > INT_MAX ||
+           start+length < start || start+length < length || inode->is_directory)
+    return -1;
   
+  off_t result = -1;
   rwlock_acquire_read (&inode->pifs->pifs_rwlock);
     
-  // TODO
-  (void) start;
+  if (start > inode->length)
+    {
+      result = 0;
+      goto end;
+    }
+  else if (start+length > inode->length)
+    
   
+end:
   rwlock_release_read (&inode->pifs->pifs_rwlock);
-  return 0;
+  return result;
+}
+
+static inline bool
+pifs_grow_file (struct pifs_inode *inode, size_t new_size)
+{
+  ASSERT (inode != NULL);
+  ASSERT (new_size > 0);
+  ASSERT (new_size <= INT_MAX);
+  
+  // TODO
+  return false;
 }
 
 off_t
@@ -713,14 +759,24 @@ pifs_write (struct pifs_inode *inode,
   
   if (length == 0)
     return 0;
+  else if (length > INT_MAX || start > INT_MAX || start+length > INT_MAX ||
+           start+length < start || start+length < length || inode->is_directory)
+    return -1;
   
+  off_t result = -1;
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
     
-  // TODO
-  (void) start;
+  if (inode->length < start+length)
+    {
+      if (!pifs_grow_file (inode, start+length))
+        goto end;
+      inode->length = start+length;
+    }
+  // TODO: write
   
+end:
   rwlock_release_write (&inode->pifs->pifs_rwlock);
-  return 0;
+  return result;
 }
 
 void

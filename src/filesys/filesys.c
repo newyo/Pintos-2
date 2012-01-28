@@ -104,7 +104,6 @@ filesys_create (const char *name, off_t initial_size)
     }
     
   free (space);
-  pifs_delete_file (inode);
   pifs_close (inode);
   return true;
 }
