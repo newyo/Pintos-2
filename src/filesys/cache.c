@@ -38,15 +38,9 @@ block_cache_page_hash (const struct hash_elem *e, void *bc UNUSED)
 static bool
 block_cache_page_less (const struct hash_elem *a,
                        const struct hash_elem *b,
-                       void                   *bc UNUSED)
+                       void                   *bc)
 {
-  ASSERT (a != NULL);
-  ASSERT (b != NULL);
-  struct block_page *aa = hash_entry (a, struct block_page, hash_elem);
-  struct block_page *bb = hash_entry (b, struct block_page, hash_elem);
-  ASSERT (aa->magic == BC_PAGE_MAGIC);
-  ASSERT (bb->magic == BC_PAGE_MAGIC);
-  return aa->nth < bb->nth;
+  return block_cache_page_hash (a, bc) < block_cache_page_hash (b, bc);
 }
 
 bool
