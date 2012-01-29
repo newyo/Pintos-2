@@ -198,7 +198,8 @@ pifs_format (struct pifs_device *pifs)
   
   struct pifs_header *const header = pifs_header (pifs);
   
-  auto void
+  auto void init_header (struct block_page *page);
+  void
   init_header (struct block_page *page)
   {
     ASSERT (page != 0);
@@ -470,7 +471,8 @@ pifs_alloc_multiple (struct pifs_device *pifs,
   size_t offset = 0;
   size_t result = 0;
   
-  auto void
+  auto void cb (block_sector_t sector);
+  void
   cb (block_sector_t sector)
   {
     ASSERT (sector != 0);
@@ -887,7 +889,8 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
       struct block_page *cur_page = NULL;
       struct pifs_folder *cur_folder = NULL;
       
-      auto inline bool
+      auto inline bool open_cur (bool test);
+      bool
       open_cur (bool test)
       {
         ASSERT (cur != 0);
