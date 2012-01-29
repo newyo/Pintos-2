@@ -48,11 +48,19 @@ struct pifs_inode
   struct hash_elem    elem; // struct pifs_device::open_inodes
 };
 
-#define POO_MASK_NO     0b0001
-#define POO_MASK_MUST   0b0010
-#define POO_MASK_FILE   0b0100
-#define POO_MASK_FOLDER 0b1000
-#define POO_MASK        0b1111
+#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4)
+# define POO_MASK_NO     0b0001
+# define POO_MASK_MUST   0b0010
+# define POO_MASK_FILE   0b0100
+# define POO_MASK_FOLDER 0b1000
+# define POO_MASK        0b1111
+#else
+# define POO_MASK_NO     1
+# define POO_MASK_MUST   2
+# define POO_MASK_FILE   4
+# define POO_MASK_FOLDER 8
+# define POO_MASK        15
+#endif
 enum pifs_open_opts
 {
   POO_NO_CREATE          = POO_MASK_NO,
