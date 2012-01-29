@@ -821,7 +821,12 @@ pifs_read (struct pifs_inode *inode,
       goto end;
     }
   else if (start+length > inode->length)
+    length = inode->length-start;
     
+  if (length > 0)
+    {
+      // TODO: read
+    }
   
 end:
   rwlock_release_read (&inode->pifs->pifs_rwlock);
