@@ -53,7 +53,7 @@ void block_cache_destroy (struct block_cache *bc);
 // result::data will contain blocks data
 struct block_page *block_cache_read (struct block_cache *bc,
                                      block_sector_t      nth);
-// result::data is entirely random! Result::dirty == true
+// result::data is entirely random!
 struct block_page *block_cache_write (struct block_cache *bc,
                                       block_sector_t      nth);
 // page is no longer used by current operation.

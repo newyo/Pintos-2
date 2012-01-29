@@ -7,9 +7,12 @@
 #include <debug.h>
 #include <round.h>
 #include <limits.h>
+#include <list.h>
 
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
+
+#define PIFS_DEBUG(...) printf (__VA_ARGS__)
 
 #define MAGIC4(C)                      \
 ({                                     \
@@ -114,6 +117,7 @@ pifs_open_inodes_hash (const struct hash_elem *e, void *pifs)
   struct pifs_inode *ee = hash_entry (e, struct pifs_inode, elem);
   typedef char _CASSERT[0 - !(sizeof (unsigned) == sizeof (ee->sector))];
   ASSERT (ee->pifs == pifs);
+  ASSERT (ee->sector != 0);
   return (unsigned) ee->sector;
 }
 
@@ -313,27 +317,34 @@ pifs_open_traverse (struct pifs_device  *pifs,
       struct pifs_folder *folder = (void *) header;
       if (folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
         PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
+        
+      PIFS_DEBUG ("PIFS: In %u, looking for '%.*s'. Folder size = %u.\n",
+                  cur, path_elem_len, *path_, folder->entries_count);
       
       unsigned i;
       for (i = 0; i < folder->entries_count; ++i)
         {
           const char *name = &folder->entries[i].name[0];
-          if ((memcmp (name, *path_, path_elem_len) != 0) ||
-              (path_elem_len < PIFS_NAME_LENGTH && name[path_elem_len] != 0))
+          PIFS_DEBUG ("  Contains '%.*s'.\n", PIFS_NAME_LENGTH, name);
+          if (!((memcmp (name, *path_, path_elem_len) == 0) &&
+                (path_elem_len < PIFS_NAME_LENGTH ? name[path_elem_len] == 0
+                                                  : true)))
             continue;
             
           // found!
             
           pifs_ptr next_block = folder->entries[i].block;
+          PIFS_DEBUG ("  Found '%.*s' in %u. Next '%s'.\n", PIFS_NAME_LENGTH,
+                      name, next_block, next);
           if (next_block == 0)
             PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
           block_cache_return (pifs->bc, page);
           
+          *path_ = next;
           if (*next == 0)
             return next_block;
             
           // We are not finished yet
-          *path_ = next;
           return pifs_open_traverse (pifs, next_block, path_); // TCO
         }
           
@@ -360,9 +371,6 @@ pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
   if (!result)
     return NULL;
   memset (result, 0, sizeof (*result));
-  result->inum = __sync_add_and_fetch (&pifs->next_inum, 1);
-  if (result->inum == 0)
-    printf ("[PIFS] Inode numbers flew over, expect errors!\n");
   result->pifs = pifs;
   result->sector = cur;
   
@@ -433,6 +441,106 @@ pifs_alloc_block (struct pifs_device *pifs)
   return result;
 }
 
+struct pifs_alloc_multiple_item
+{
+  struct pifs_file_block_ref ref;
+  struct list_elem           elem;
+};
+
+// caller has to init. *list
+static size_t
+pifs_alloc_multiple (struct pifs_device *pifs,
+                     size_t              amount,
+                     struct list        *list)
+{
+  ASSERT (list != NULL);
+  if (amount == 0)
+    return 0;
+    
+  size_t offset = 0;
+  size_t result = 0;
+  
+  auto void
+  cb (block_sector_t sector)
+  {
+    ASSERT (sector != 0);
+    ++result;
+    sector += offset;
+    
+    struct pifs_alloc_multiple_item *ee;
+    
+    // add to prev. last block if possible:
+    
+    if (!list_empty (list))
+      {
+        struct list_elem *e = list_back (list);
+        ee = list_entry (e, struct pifs_alloc_multiple_item, elem);
+        if (ee->ref.start + ee->ref.count == sector)
+          {
+            ++ee->ref.count;
+            return;
+          }
+      }
+      
+    // allocate new reference block:
+      
+    ee = malloc (sizeof (*ee));
+    if (!ee)
+      {
+        --result;
+        return;
+      }
+    memset (ee, 0, sizeof (*ee));
+    ee->ref.start = sector;
+    ee->ref.count = 1;
+    list_push_back (list, &ee->elem);
+  }
+  
+  pifs_ptr cur = 0;
+  do
+    {
+      struct block_page *page = block_cache_read (pifs->bc, cur);
+      struct pifs_header *header = (void *) &page->data;
+      if (header->magic != PIFS_MAGIC_HEADER)
+          PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                 "(magic = 0x%08X).", cur, header->magic);
+                 
+      int len = (header->block_count+7) / 8;
+      if (len > PIFS_COUNT_USED_MAP_ENTRIES)
+          PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                 "(apparent len = %u).", cur, len);
+                 
+      size_t left = bitset_find_and_set (&header->used_map[0], len, amount, cb);
+      
+      ASSERT (left <= amount);
+      cur = header->extends;
+      offset += header->block_count;
+      
+      if (left != amount)
+        {
+          page->dirty = true;
+          amount = left;
+        }
+      block_cache_return (pifs->bc, page);
+    }
+  while (amount > 0 && cur != 0);
+  
+  return result;
+}
+
+static void
+pifs_alloc_multiple_free_list (struct list *list)
+{
+  ASSERT (list != NULL);
+  while (!list_empty (list))
+    {
+      struct list_elem *e = list_pop_front (list);
+      struct pifs_alloc_multiple_item *ee;
+      ee = list_entry (e, struct pifs_alloc_multiple_item, elem);
+      free (ee);
+    }
+}
+
 static inline struct block_page *
 pifs_create (struct pifs_device  *pifs,
              pifs_ptr             parent_folder_ptr,
@@ -446,6 +554,9 @@ pifs_create (struct pifs_device  *pifs,
   ASSERT (*name != 0);
   ASSERT (name_len > 0 && name_len <= PIFS_NAME_LENGTH);
   ASSERT (new_block_ != NULL);
+  
+  PIFS_DEBUG ("PIFS creating '%.*s' in %u.\n", name_len, name,
+              parent_folder_ptr);
   
   // find space for new folder:
     
@@ -470,7 +581,7 @@ pifs_create (struct pifs_device  *pifs,
   
   if (folder->entries_count >= PIFS_COUNT_FOLDER_ENTRIES)
     {
-      // TODO: allocate a new extend
+      // TODO: traverse extends and allocate a new extend if needed
       ASSERT (0);
       block_cache_return (pifs->bc, page);
     }
@@ -493,7 +604,10 @@ pifs_create (struct pifs_device  *pifs,
   key.sector = parent_folder_ptr;
   struct hash_elem *e = hash_find (&pifs->open_inodes, &key.elem);
   if (e != NULL)
-    ++hash_entry (e, struct pifs_inode, elem)->length;
+    {
+      struct pifs_inode *parent_inode = hash_entry (e, struct pifs_inode, elem);
+      ++parent_inode->length;
+    }
     
   // return and clear page for new inode:
   
@@ -506,52 +620,6 @@ pifs_create (struct pifs_device  *pifs,
   
   *new_block_ = new_block;
   return page;
-}
-
-static inline struct pifs_inode *
-pifs_create_file (struct pifs_device  *pifs,
-                  pifs_ptr             parent_folder_ptr,
-                  const char          *name,
-                  size_t               name_len)
-{
-  pifs_ptr new_block;
-  struct block_page *page;
-  page = pifs_create (pifs, parent_folder_ptr, name, name_len, &new_block);
-  if (!page)
-    return NULL;
-    
-  // write new empty file:
-  
-  struct pifs_file *file = (void *) &page->data;
-  file->magic = PIFS_MAGIC_FILE;
-  block_cache_return (pifs->bc, page);
-    
-  // return inode:
-  
-  return pifs_alloc_inode (pifs, new_block);
-}
-
-static inline struct pifs_inode *
-pifs_create_folder (struct pifs_device  *pifs,
-                    pifs_ptr             parent_folder_ptr,
-                    const char          *name,
-                    size_t               name_len)
-{
-  pifs_ptr new_block;
-  struct block_page *page;
-  page = pifs_create (pifs, parent_folder_ptr, name, name_len, &new_block);
-  if (!page)
-    return NULL;
-    
-  // write new empty folder:
-  
-  struct pifs_folder *folder = (void *) &page->data;
-  folder->magic = PIFS_MAGIC_FOLDER;
-  block_cache_return (pifs->bc, page);
-    
-  // return inode:
-  
-  return pifs_alloc_inode (pifs, new_block);
 }
 
 struct pifs_inode *
@@ -574,6 +642,8 @@ pifs_open (struct pifs_device  *pifs,
   pifs_ptr found_sector;
   found_sector = pifs_open_traverse (pifs, pifs_header (pifs)->root_folder,
                                      &path);
+                                     
+  PIFS_DEBUG ("PIFS end path = '%s'\n", path);
   
   struct pifs_inode *result = NULL;
   if (found_sector == 0)
@@ -616,7 +686,7 @@ pifs_open (struct pifs_device  *pifs,
       // If there is only "abc" or "abc/" left, the path is valid for creation.
       // Otherwise path is invalid, as we do not support "mkdir -p".
       
-      ++path; // strip leading slash
+      ASSERT (path[0] != '/');
       
       if (opts & POO_NO_CREATE)
         goto end;
@@ -653,10 +723,18 @@ pifs_open (struct pifs_device  *pifs,
         
       // create file or folder:
       
-      if (must_be_file)
-        result = pifs_create_file (pifs, found_sector, path, elem_len);
-      else
-        result = pifs_create_folder (pifs, found_sector, path, elem_len);
+      pifs_ptr new_block;
+      struct block_page *page;
+      page = pifs_create (pifs, found_sector, path, elem_len, &new_block);
+      if (!page)
+        goto end;
+      
+      struct pifs_inode_header *inode_header = (void *) &page->data;
+      inode_header->magic = must_be_folder ? PIFS_MAGIC_FOLDER
+                                           : PIFS_MAGIC_FILE;
+      block_cache_return (pifs->bc, page);
+      
+      result = pifs_alloc_inode (pifs, new_block);
     }
   
   if (result != 0)
@@ -680,15 +758,18 @@ pifs_close (struct pifs_inode *inode)
     return;
     
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
-  
-  // TODO: Brainstorming: retain inode for some jiffies?
-  //       Seems likely a file will be closed and re-openned within a close
-  //       time frame. An open inode does not consume much RAM space.
-  
-  // TODO: implement
-  // TODO: delete from filesystem if appropriate
-  
+  if (!inode->deleted)
+    {
+      struct hash_elem *e UNUSED;
+      e = hash_delete (&inode->pifs->open_inodes, &inode->elem);
+      ASSERT (e == &inode->elem);
+    }
+  else
+    {
+      // TODO: free all blocks
+    }
   rwlock_release_write (&inode->pifs->pifs_rwlock);
+  free (inode);
 }
 
 const char *
@@ -737,15 +818,60 @@ end:
   return result;
 }
 
-static inline bool
-pifs_grow_file (struct pifs_inode *inode, size_t new_size)
+// may grow by less bytes than requested or even not at all
+static inline void
+pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
 {
   ASSERT (inode != NULL);
-  ASSERT (new_size > 0);
-  ASSERT (new_size <= INT_MAX);
   
-  // TODO
-  return false;
+  if (grow_by == 0)
+    return;
+    
+  PIFS_DEBUG ("PIFS growing %u by %u.\n", inode->sector, grow_by);
+    
+  struct block_page *page = block_cache_read (inode->pifs->bc, inode->sector);
+  if (!page)
+    return; // fail silently
+  struct pifs_file *file = (void *) &page->data;
+  // test our bookkeeping
+  ASSERT (file->magic == PIFS_MAGIC_FILE);
+  ASSERT (file->length == inode->length);
+    
+  // first use all currently allocated space:
+  
+  if (inode->length % BLOCK_SECTOR_SIZE != 0)
+    {
+      
+      size_t simple_grow = BLOCK_SECTOR_SIZE - inode->length%BLOCK_SECTOR_SIZE;
+      if (grow_by < simple_grow)
+        simple_grow = grow_by;
+      grow_by -= simple_grow;
+      inode->length += simple_grow;
+    }
+    
+  // allocate more blocks:
+    
+  if (grow_by > 0)
+    {
+      size_t blocks_to_alloc = DIV_ROUND_UP (grow_by, BLOCK_SECTOR_SIZE);
+      
+      struct list allocated_blocks;
+      list_init (&allocated_blocks);
+      pifs_alloc_multiple (inode->pifs, blocks_to_alloc, &allocated_blocks);
+      
+      // TODO: use them ...
+      
+      pifs_alloc_multiple_free_list (&allocated_blocks);
+    }
+
+  // return changed page:
+  
+  if (file->length != inode->length)
+    {
+      file->length = inode->length;
+      page->dirty = true;
+    }
+  block_cache_return (inode->pifs->bc, page);
 }
 
 off_t
@@ -768,16 +894,28 @@ pifs_write (struct pifs_inode *inode,
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
     
   if (inode->length < start+length)
-    {
-      if (!pifs_grow_file (inode, start+length))
-        goto end;
-      inode->length = start+length;
-    }
+    pifs_grow_file (inode, start+length - inode->length);
+    
   // TODO: write
   
-end:
   rwlock_release_write (&inode->pifs->pifs_rwlock);
   return result;
+}
+
+static void
+pifs_delete_sub (struct pifs_inode *inode)
+{
+  ASSERT (inode != 0);
+  ASSERT (!inode->deleted);
+  
+  inode->deleted = true;
+  
+  struct hash_elem *e UNUSED;
+  e = hash_delete (&inode->pifs->open_inodes, &inode->elem);
+  ASSERT (e == &inode->elem);
+  
+  // TODO: delete from parent_folder
+  // TODO: update open parent_folder inode
 }
 
 void
@@ -788,13 +926,7 @@ pifs_delete_file (struct pifs_inode *inode)
   
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
   if (!inode->deleted)
-    {
-      inode->deleted = true;
-      
-      struct hash_elem *e UNUSED;
-      e = hash_delete (&inode->pifs->open_inodes, &inode->elem);
-      ASSERT (e == &inode->elem);
-    }
+    pifs_delete_sub (inode);
   rwlock_release_write (&inode->pifs->pifs_rwlock);
 }
 
@@ -809,13 +941,7 @@ pifs_delete_folder (struct pifs_inode *inode)
   bool result = (inode->length == 0) &&
                 (inode->sector != pifs_header (inode->pifs)->root_folder);
   if (result && !inode->deleted)
-    {
-      inode->deleted = true;
-      
-      struct hash_elem *e UNUSED;
-      e = hash_delete (&inode->pifs->open_inodes, &inode->elem);
-      ASSERT (e == &inode->elem);
-    }
+    pifs_delete_sub (inode);
   
   rwlock_release_write (&inode->pifs->pifs_rwlock);
   return result;

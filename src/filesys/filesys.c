@@ -70,7 +70,10 @@ filesys_create (const char *name, off_t initial_size)
   struct pifs_inode *inode;
   inode = pifs_open (&fs_pifs, name, POO_FILE_MUST_CREATE);
   if (!inode)
-    return false;
+    {
+      printf ("Could not create file '%s'.\n", name);
+      return false;
+    }
     
   if (initial_size > 0)
     {

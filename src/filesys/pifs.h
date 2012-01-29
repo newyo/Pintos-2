@@ -29,7 +29,6 @@ struct pifs_device
 /* public (readonly): */
   struct block_cache *bc;
 /* private: */
-  int                 next_inum;
   struct hash         open_inodes; // [sector -> struct pifs_inode]
   struct rwlock       pifs_rwlock;
   struct block_page  *header_block;
@@ -39,9 +38,8 @@ struct pifs_inode
 {
 /* public (readonly): */
   bool                is_directory;
-  size_t              length; // file size in bytes (random for folders)
+  size_t              length; // file size in bytes, or items in folder
   size_t              deny_write_cnt;
-  int                 inum;
 /* private: */
   struct pifs_device *pifs;
   block_sector_t      sector;
