@@ -76,6 +76,7 @@ filesys_SRC += filesys/fsutil.c		# Utilities.
 filesys_SRC += filesys/pifs.c
 filesys_SRC += filesys/cache.c
 filesys_SRC += filesys/canonical_path.c
+filesys_SRC += filesys/bitset.c
 
 SOURCES = $(foreach dir,$(KERNEL_SUBDIRS),$($(dir)_SRC))
 OBJECTS = $(patsubst %.c,%.o,$(patsubst %.S,%.o,$(SOURCES)))
