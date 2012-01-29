@@ -32,6 +32,7 @@ typedef uint32_t pifs_magic;
 #define PIFS_MAGIC_HEADER MAGIC4 ("PIFS")
 #define PIFS_MAGIC_FOLDER MAGIC4 ("FLDR")
 #define PIFS_MAGIC_FILE   MAGIC4 ("FILE")
+#define PIFS_MAGIC_NAME   MAGIC4 ("NAME")
 
 typedef uint32_t pifs_ptr;
 typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
@@ -40,6 +41,7 @@ typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
 #define PIFS_COUNT_USED_MAP_ENTRIES 493 /* ~250 kB per block */
 #define PIFS_COUNT_FOLDER_ENTRIES 24
 #define PIFS_COUNT_FILE_BLOCKS 98 /* ~50 kb per block (w/ max. fragmentation) */
+#define PIFS_COUNT_LONG_NAME_CHARS 491
 
 struct pifs_inode_header
 {
@@ -47,16 +49,28 @@ struct pifs_inode_header
   pifs_ptr          extends; // pointer to overflow bucket
   pifs_ptr          parent_folder;
   struct pifs_attrs attrs;
-  pifs_ptr          reserved; // could act as pointer to long filename
-};
+  pifs_ptr          long_name;
+} PACKED;
+
+struct pifs_long_name // not implemented by us, but for completeness
+{
+  pifs_magic        magic;
+  pifs_ptr          extends; // even more characters!!
+  pifs_ptr          belongs_to;
+  struct pifs_attrs unused1; // unused for this inode type
+  pifs_ptr          unused2; // unused for this inode type
+  
+  uint32_t          total_len;
+  char              used_map[PIFS_COUNT_LONG_NAME_CHARS];
+} PACKED;
 
 struct pifs_header
 {
   pifs_magic        magic;
   pifs_ptr          extends; // if there are too many blocks
   pifs_ptr          root_folder;
-  struct pifs_attrs attrs; // unused for this inode type
-  pifs_ptr          reserved; // unused for this inode type
+  struct pifs_attrs unused; // unused for this inode type
+  pifs_ptr          long_name; // name of device (not implemented)
   
   uint16_t          block_count;
   char              used_map[PIFS_COUNT_USED_MAP_ENTRIES];
@@ -72,13 +86,15 @@ struct pifs_folder
 {
   pifs_magic               magic;
   pifs_ptr                 extends; // if there are too many files
-  pifs_ptr                 parent_folder;
-  struct pifs_attrs        attrs;
-  pifs_ptr                 reserved;
+  pifs_ptr                 parent_folder; // 0 for root
+  struct pifs_attrs        attrs; // no implemented
+  pifs_ptr                 long_name; // not implemented
   
   char                     padding[14];
   
   uint8_t                  entries_count;
+  // TODO: One optimization would be sorting the entries in an extend.
+  //       I don't think sorting over all extends would be necessary.
   struct pifs_folder_entry entries[PIFS_COUNT_FOLDER_ENTRIES];
 } PACKED;
 
@@ -93,8 +109,8 @@ struct pifs_file
   pifs_magic                 magic;
   pifs_ptr                   extends; // if there are too many blocks
   pifs_ptr                   parent_folder;
-  struct pifs_attrs          attrs;
-  pifs_ptr                   reserved;
+  struct pifs_attrs          attrs; // not implemented
+  pifs_ptr                   long_name; // not implemented
   
   uint32_t                   length;
   
@@ -102,13 +118,14 @@ struct pifs_file
   struct pifs_file_block_ref blocks[PIFS_COUNT_FILE_BLOCKS];
 } PACKED;
 
+typedef char _CASSERT_PIFS_NAME_SIZE[0 - !(sizeof (struct pifs_long_name) ==
+                                           BLOCK_SECTOR_SIZE)];
 typedef char _CASSERT_PIFS_HEADER_SIZE[0 - !(sizeof (struct pifs_header) ==
                                              BLOCK_SECTOR_SIZE)];
 typedef char _CASSERT_PIFS_FOLDER_SIZE[0 - !(sizeof (struct pifs_folder) ==
                                              BLOCK_SECTOR_SIZE)];
 typedef char _CASSERT_PIFS_FILE_SIZE[0 - !(sizeof (struct pifs_file) ==
                                            BLOCK_SECTOR_SIZE)];
-
 
 static unsigned
 pifs_open_inodes_hash (const struct hash_elem *e, void *pifs)
@@ -128,17 +145,10 @@ pifs_open_inodes_less (const struct hash_elem *a,
 {
   return pifs_open_inodes_hash (a, pifs) < pifs_open_inodes_hash (b, pifs);
 }
-                             
+
 bool
 pifs_init (struct pifs_device *pifs, struct block_cache *bc)
 {
-  ASSERT ( ({
-    int value = 0b01000111;
-    int result = bitset_find_and_set_1 ((char *) &value, sizeof (value));
-    (result == 3) && (value == 0b01001111);
-  }) );
-  
-  
   ASSERT (pifs != NULL);
   ASSERT (bc != NULL);
   
@@ -274,7 +284,7 @@ pifs_sanity_check (struct pifs_device *pifs)
   return header->magic == PIFS_MAGIC_HEADER;
 }
 
-static inline block_sector_t
+static block_sector_t
 pifs_open_traverse (struct pifs_device  *pifs,
                     pifs_ptr             cur, 
                     const char         **path_)
@@ -361,7 +371,7 @@ pifs_open_traverse (struct pifs_device  *pifs,
     }
 }
 
-static inline struct pifs_inode *
+static struct pifs_inode *
 pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
 {
   ASSERT (pifs != NULL);
@@ -541,7 +551,7 @@ pifs_alloc_multiple_free_list (struct list *list)
     }
 }
 
-static inline struct block_page *
+static struct block_page *
 pifs_create (struct pifs_device  *pifs,
              pifs_ptr             parent_folder_ptr,
              const char          *name,
@@ -818,8 +828,23 @@ end:
   return result;
 }
 
+static void
+pifs_unmark_blocks (struct pifs_device *pifs,
+                    struct list_elem   *i,
+                    struct list_elem   *end)
+{
+  ASSERT (pifs != NULL);
+  ASSERT (i != NULL);
+  ASSERT (end != NULL);
+  
+  while (i != end)
+    {
+      // TODO
+    }
+}
+
 // may grow by less bytes than requested or even not at all
-static inline void
+static void
 pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
 {
   ASSERT (inode != NULL);
@@ -853,19 +878,94 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
     
   if (grow_by > 0)
     {
+      pifs_ptr cur = 0;
+      struct block_page *cur_page = NULL;
+      struct pifs_folder *cur_folder = NULL;
+      
+      auto inline bool
+      open_cur (bool test)
+      {
+        ASSERT (cur != 0);
+        cur_page = block_cache_read (inode->pifs->bc, cur);
+        if (!cur_page)
+          return false;
+        cur_folder = (void *) &cur_page->data;
+        if (test)
+          {
+            if (cur_folder->magic != PIFS_MAGIC_HEADER)
+                PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                       "(magic = 0x%08X).", cur, cur_folder->magic);
+            if (cur_folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
+              PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                     "(entries_count = %u).", cur, cur_folder->entries_count);
+          }
+        return true;
+      }
+      
+      // traverse to last extend:
+      
+      cur = inode->sector;
+      for (;;)
+        {
+          if (!open_cur (true))
+            goto end;
+          if (cur_folder->extends == 0)
+            break;
+          cur = cur_folder->extends;
+          block_cache_return (inode->pifs->bc, cur_page);
+      }
+      
+      // allocated blocks to use:
+      
       size_t blocks_to_alloc = DIV_ROUND_UP (grow_by, BLOCK_SECTOR_SIZE);
       
       struct list allocated_blocks;
       list_init (&allocated_blocks);
       pifs_alloc_multiple (inode->pifs, blocks_to_alloc, &allocated_blocks);
       
-      // TODO: use them ...
+      // insert blocks:
       
+      struct list_elem *e;
+      for (e = list_front (&allocated_blocks);
+           e != list_end (&allocated_blocks);
+           e = list_next (e))
+        {
+          ASSERT (cur_folder->magic == PIFS_MAGIC_HEADER);
+          ASSERT (cur_folder->extends == 0);
+          ASSERT (cur_folder->entries_count <= PIFS_COUNT_FOLDER_ENTRIES);
+          
+          // allocate new extend if cur is full:
+          
+          if (cur_folder->entries_count == PIFS_COUNT_FOLDER_ENTRIES)
+            {
+              pifs_ptr new_cur = pifs_alloc_block (inode->pifs);
+              if (new_cur == 0)
+                break;
+              cur_folder->extends = new_cur;
+              cur_page->dirty = true;
+              block_cache_return (inode->pifs->bc, cur_page);
+              
+              cur = new_cur;
+              if (!open_cur (false))
+                break;
+              memset (cur_folder, 0, sizeof (*cur_folder));
+              cur_folder->magic = PIFS_MAGIC_FOLDER;
+            }
+            
+          // add block to extend:
+            
+          // TODO: add block, increase file->length, decrease grow_by
+        }
+        
+      // unmark unused block and free allocation list:
+      
+      pifs_unmark_blocks (inode->pifs, e, list_end (&allocated_blocks));
       pifs_alloc_multiple_free_list (&allocated_blocks);
     }
 
   // return changed page:
   
+end:
   if (file->length != inode->length)
     {
       file->length = inode->length;
