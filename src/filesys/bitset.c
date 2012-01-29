@@ -1,7 +1,7 @@
 #include "bitset.h"
 
 static inline int __attribute__ ((always_inline))
-_bitset_find_least_one (int value)
+_bitset_find_least_one (uint32_t value)
 {
   int result;
   asm volatile ("bsf %1, %0" : "=r"(result) : "g"(value));
@@ -9,7 +9,7 @@ _bitset_find_least_one (int value)
 }
 
 static inline int __attribute__ ((always_inline))
-_bitset_reset_bit (int value, int nth)
+_bitset_reset_bit (uint32_t value, uint32_t nth)
 {
   asm volatile ("btr %1, %0" : "+g"(value) : "r"(nth));
   return value;
