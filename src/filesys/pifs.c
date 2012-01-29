@@ -887,7 +887,7 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
     {
       pifs_ptr cur = 0;
       struct block_page *cur_page = NULL;
-      struct pifs_folder *cur_folder = NULL;
+      struct pifs_file *cur_extend = NULL;
       
       auto inline bool open_cur (bool test);
       bool
@@ -897,15 +897,15 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
         cur_page = block_cache_read (inode->pifs->bc, cur);
         if (!cur_page)
           return false;
-        cur_folder = (void *) &cur_page->data;
+        cur_extend = (void *) &cur_page->data;
         if (test)
           {
-            if (cur_folder->magic != PIFS_MAGIC_HEADER)
+            if (cur_extend->magic != PIFS_MAGIC_FILE)
                 PANIC ("Block %"PRDSNu" of filesystem is messed up "
-                       "(magic = 0x%08X).", cur, cur_folder->magic);
-            if (cur_folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
+                       "(magic = 0x%08X).", cur, cur_extend->magic);
+            if (cur_extend->blocks_count > PIFS_COUNT_FILE_BLOCKS)
               PANIC ("Block %"PRDSNu" of filesystem is messed up "
-                     "(entries_count = %u).", cur, cur_folder->entries_count);
+                     "(blocks_count = %u).", cur, cur_extend->blocks_count);
           }
         return true;
       }
@@ -917,9 +917,9 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
         {
           if (!open_cur (true))
             goto end;
-          if (cur_folder->extends == 0)
+          if (cur_extend->extends == 0)
             break;
-          cur = cur_folder->extends;
+          cur = cur_extend->extends;
           block_cache_return (inode->pifs->bc, cur_page);
       }
       
@@ -936,39 +936,76 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
       struct list_elem *e;
       for (e = list_front (&allocated_blocks);
            e != list_end (&allocated_blocks);
-           e = list_next (e))
+           /* done inside of code */)
         {
-          ASSERT (cur_folder->magic == PIFS_MAGIC_HEADER);
-          ASSERT (cur_folder->extends == 0);
-          ASSERT (cur_folder->entries_count <= PIFS_COUNT_FOLDER_ENTRIES);
+          // advance:
+          
+          struct pifs_file_block_ref ee;
+          ee = list_entry (e, struct pifs_alloc_multiple_item, elem)->ref;
+          e = list_next (e);
+          
+          // invariants ensured by "traverse to last extend" code block:
+          
+          ASSERT (cur_extend->magic == PIFS_MAGIC_FILE);
+          ASSERT (cur_extend->extends == 0);
+          ASSERT (cur_extend->blocks_count <= PIFS_COUNT_FILE_BLOCKS);
           
           // allocate new extend if cur is full:
           
-          if (cur_folder->entries_count == PIFS_COUNT_FOLDER_ENTRIES)
+          if (cur_extend->blocks_count == PIFS_COUNT_FILE_BLOCKS)
             {
               pifs_ptr new_cur = pifs_alloc_block (inode->pifs);
               if (new_cur == 0)
                 break;
-              cur_folder->extends = new_cur;
+              cur_extend->extends = new_cur;
               cur_page->dirty = true;
               block_cache_return (inode->pifs->bc, cur_page);
               
               cur = new_cur;
               if (!open_cur (false))
                 break;
-              memset (cur_folder, 0, sizeof (*cur_folder));
-              cur_folder->magic = PIFS_MAGIC_FOLDER;
+              memset (cur_extend, 0, sizeof (*cur_extend));
+              cur_extend->magic = PIFS_MAGIC_FILE;
             }
             
           // add block to extend:
+          
+          struct pifs_file_block_ref *last_block;
+          last_block = &cur_extend->blocks[cur_extend->blocks_count];
+          if (last_block->start+last_block->count != ee.start)
+            {
+              // add new block
+              ++cur_extend->blocks_count;
+              last_block[1] = ee;
+            }
+          else
+            {
+              // merge with last ref block if possible
+              last_block->count += ee.count;
+            }
             
-          // TODO: add block, increase file->length, decrease grow_by
+          if (grow_by > ee.count * BLOCK_SECTOR_SIZE)
+            {
+              file->length += ee.count * BLOCK_SECTOR_SIZE;
+              grow_by -= ee.count * BLOCK_SECTOR_SIZE;
+            }
+          else
+            {
+              file->length += grow_by;
+              break;
+            }
         }
         
       // unmark unused block and free allocation list:
       
       pifs_unmark_blocks (inode->pifs, e, list_end (&allocated_blocks));
       pifs_alloc_multiple_free_list (&allocated_blocks);
+      
+      if (cur_page)
+        {
+          cur_page->dirty = true;
+          block_cache_return (inode->pifs->bc, page);
+        }
     }
 
   // return changed page:
@@ -1030,7 +1067,7 @@ void
 pifs_delete_file (struct pifs_inode *inode)
 {
   ASSERT (inode != NULL);
-  ASSERT (!inode->is_directory)
+  ASSERT (!inode->is_directory);
   
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
   if (!inode->deleted)

@@ -46,10 +46,12 @@ void debug_backtrace_all (void);
 #undef NOT_REACHED
 
 #ifndef NDEBUG
-# define ASSERT(CONDITION)                                      \
-        if (!({ CONDITION; })) {                                \
-                PANIC ("assertion `%s' failed.", #CONDITION);   \
-        }
+# define ASSERT(CONDITION)                                \
+      ({                                                  \
+        if (__builtin_expect (!({ CONDITION; }), 0))      \
+          PANIC ("assertion `%s' failed.", #CONDITION);   \
+        (void) 0;                                         \
+      })
 # define NOT_REACHED() PANIC ("executed an unreachable statement");
 #else
 # define ASSERT(CONDITION) ((void) 0)
