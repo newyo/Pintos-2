@@ -48,17 +48,17 @@ struct pifs_inode_header
   pifs_magic        magic;
   pifs_ptr          extends; // pointer to overflow bucket
   pifs_ptr          parent_folder;
-  struct pifs_attrs attrs;
-  pifs_ptr          long_name;
+  struct pifs_attrs attrs; // not implemented
+  pifs_ptr          long_name; // not implemented
 } PACKED;
 
 struct pifs_long_name // not implemented by us, but for completeness
 {
   pifs_magic        magic;
-  pifs_ptr          extends; // even more characters!!
-  pifs_ptr          belongs_to;
-  struct pifs_attrs unused1; // unused for this inode type
+  pifs_ptr          unused1; // unused for this inode type
   pifs_ptr          unused2; // unused for this inode type
+  struct pifs_attrs unused3; // unused for this inode type
+  pifs_ptr          unused4; // unused for this inode type
   
   uint32_t          total_len;
   char              used_map[PIFS_COUNT_LONG_NAME_CHARS];
@@ -87,7 +87,7 @@ struct pifs_folder
   pifs_magic               magic;
   pifs_ptr                 extends; // if there are too many files
   pifs_ptr                 parent_folder; // 0 for root
-  struct pifs_attrs        attrs; // no implemented
+  struct pifs_attrs        attrs; // not implemented
   pifs_ptr                 long_name; // not implemented
   
   char                     padding[14];
