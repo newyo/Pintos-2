@@ -118,6 +118,7 @@ block_cache_retreive (struct block_cache *bc,
   ASSERT (bc != NULL);
   ASSERT (intr_get_level () == INTR_ON);
     
+start:
   lock_acquire (&bc->bc_lock);
   
   struct block_page *result;
@@ -145,17 +146,20 @@ block_cache_retreive (struct block_cache *bc,
     }
   else if (lru_is_empty (&bc->pages_disposable))
     {
+      BC_DEBUG ("BC lru_is_empty (%u)\n", nth);
+      
+      lock_release (&bc->bc_lock);
       sema_down (&bc->use_count);
       
-      result = allocator_alloc (&bc->pages_allocator, 1);
-      result->magic = BC_PAGE_MAGIC;
-      memset (&result->lru_elem, 0, sizeof (result->lru_elem));
+      sema_up (&bc->use_count);
+      goto start;
     }
   else
     {
       struct lru_elem *e = lru_pop_least (&bc->pages_disposable);
       result = lru_entry (e, struct block_page, lru_elem);
       ASSERT (result->magic == BC_PAGE_MAGIC);
+      BC_DEBUG ("BC reusing %u as %u\n", result->nth, nth);
       
       block_cache_flush (bc, result);
       
