@@ -130,7 +130,7 @@ block_cache_retreive (struct block_cache *bc,
       if (retreived)
         *retreived = true;
       result = hash_entry (e, struct block_page, hash_elem);
-      BC_DEBUG ("BC found %u (%p)\n", nth, &result->data);
+      // BC_DEBUG ("BC found %u (%p)\n", nth, &result->data);
       goto end;
     }
     
@@ -168,7 +168,7 @@ block_cache_retreive (struct block_cache *bc,
   struct hash_elem *f UNUSED = hash_insert (&bc->hash, &result->hash_elem);
   ASSERT (f == NULL);
   
-  BC_DEBUG ("BC created %u (%p)\n", nth, &result->data);
+  // BC_DEBUG ("BC created %u (%p)\n", nth, &result->data);
   
 end:
   ASSERT (result->magic == BC_PAGE_MAGIC);

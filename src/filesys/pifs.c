@@ -1027,20 +1027,34 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
         
       // add block to extend:
       
-      struct pifs_file_block_ref *last_block;
-      last_block = &cur_extend->blocks[cur_extend->blocks_count];
-      if (last_block->start+last_block->count != ee.start)
+      ASSERT (ee.start != 0);
+      ASSERT (ee.count != 0);
+      
+      if (cur_extend->blocks_count != 0)
         {
-          // add new block
-          ++cur_extend->blocks_count;
-          last_block[1] = ee;
+          struct pifs_file_block_ref *last_block;
+          last_block = &cur_extend->blocks[cur_extend->blocks_count-1];
+          if (last_block->start+last_block->count != ee.start)
+            {
+              // add new block:
+              ++cur_extend->blocks_count;
+              last_block[1] = ee;
+            }
+          else
+            {
+              // merge with last ref block if possible:
+              last_block->count += ee.count;
+            }
         }
       else
-        {
-          // merge with last ref block if possible
-          last_block->count += ee.count;
+        { 
+          // add first block:
+          cur_extend->blocks_count = 1;
+          cur_extend->blocks[0] = ee;
         }
         
+      // increase size:
+      
       if (grow_by > ee.count * BLOCK_SECTOR_SIZE)
         {
           inode->length += ee.count * BLOCK_SECTOR_SIZE;
@@ -1091,15 +1105,123 @@ pifs_write (struct pifs_inode *inode,
            start+length < start || start+length < length || inode->is_directory)
     return -1;
   
-  off_t result = -1;
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
+  
+  // grow file if needed:
     
   if (inode->length < start+length)
     pifs_grow_file (inode, start+length - inode->length);
-    
   printf ("PIFS size of %u: %u.\n", inode->sector, inode->length);
-    
-  // TODO: write
+  
+  // write data:
+  
+  off_t result = 0;
+  pifs_ptr cur_extend = inode->sector;
+  size_t nth_block = 0, nth_block_offs = 0;
+  
+  seek:while (cur_extend != 0 && length > 0)
+    {
+      // seek to block:
+     
+      struct block_page *extend_page = block_cache_read (inode->pifs->bc,
+                                                         cur_extend);
+      struct pifs_file *extend = (void *) &extend_page->data;
+      if (extend->magic != PIFS_MAGIC_FILE)
+          PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                 "(magic = 0x%08X).", cur_extend, extend->magic);
+      if (extend->blocks_count > PIFS_COUNT_FILE_BLOCKS)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+               "(blocks_count = %u).", cur_extend, extend->blocks_count);
+      if (extend->blocks_count == 0)
+        {
+          block_cache_return (inode->pifs->bc, extend_page);
+          break;
+        }
+      
+      while (start >= BLOCK_SECTOR_SIZE)
+        {
+          ASSERT (nth_block < extend->blocks_count);
+          struct pifs_file_block_ref *ref = &extend->blocks[nth_block];
+          if (ref->start == 0 || ref->count == 0)
+            PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                   "(ref[%u].start == %u, count == %u).",
+                   cur_extend, nth_block, ref->start, ref->count);
+          ASSERT (nth_block_offs  < ref->count);
+          
+          // advance to next ref if needed:
+          
+          // TODO: advance by multiple block of ref->count at once
+          ++nth_block_offs;
+          if (nth_block_offs == ref->count)
+            {
+              nth_block_offs = 0;
+              ++nth_block;
+            }
+          
+          // advance to next extend if reached end of current one:
+          
+          if (nth_block == extend->blocks_count)
+            {
+              cur_extend = extend->extends;
+              block_cache_return (inode->pifs->bc, extend_page);
+              nth_block = 0;
+              goto seek;
+            }
+            
+          // advance:
+          
+          start -= BLOCK_SECTOR_SIZE;
+        }
+        
+      printf ("  Block = %u + %u\n", nth_block, nth_block_offs);
+        
+      if (cur_extend == 0)
+        break;
+      struct pifs_file_block_ref ref = extend->blocks[nth_block];
+      size_t blocks_count = extend->blocks_count;
+      block_cache_return (inode->pifs->bc, extend_page);
+      if (nth_block >= blocks_count || ref.start == 0 ||
+          nth_block_offs >= ref.count || start >= BLOCK_SECTOR_SIZE)
+        break;
+      
+      // write a block:
+      
+      PIFS_DEBUG ("  Writing to %u + %u(/%u).\n", ref.start, nth_block_offs,
+                  ref.count);
+      
+      if (start == 0 && length >= BLOCK_SECTOR_SIZE)
+        {
+          // write a full block:
+          
+          struct block_page *dest;
+          dest = block_cache_write (inode->pifs->bc, ref.start+nth_block_offs);
+          memcpy (dest->data, src, BLOCK_SECTOR_SIZE);
+          dest->dirty = true;
+          block_cache_return (inode->pifs->bc, dest);
+          
+          result += BLOCK_SECTOR_SIZE;
+          start += BLOCK_SECTOR_SIZE; // we need to seek
+          length -= BLOCK_SECTOR_SIZE;
+        }
+      else
+        {
+          // partially overwrite a block:
+          
+          size_t len = BLOCK_SECTOR_SIZE - start;
+          if (len > length)
+            len = length;
+          
+          struct block_page *dest;
+          dest = block_cache_read (inode->pifs->bc, ref.start+nth_block_offs);
+          memcpy (&dest->data[start], src, len);
+          dest->dirty = true;
+          block_cache_return (inode->pifs->bc, dest);
+          
+          result += BLOCK_SECTOR_SIZE;
+          start += len; // we need to seek
+          length -= len;
+        }
+    }
   
   rwlock_release_write (&inode->pifs->pifs_rwlock);
   return result;
