@@ -499,9 +499,9 @@ pifs_alloc_multiple (struct pifs_device *pifs,
   void
   cb (block_sector_t sector)
   {
-    ASSERT (sector != 0);
     ++result;
     sector += offset;
+    ASSERT (sector != 0);
     
     PIFS_DEBUG ("  Allocated sector %u.\n", sector);
     

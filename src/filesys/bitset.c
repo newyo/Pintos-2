@@ -32,16 +32,18 @@ bitset_find_and_set (char *bitset,
               int offs = _bitset_find_least_one (rdatum);
               rdatum = _bitset_reset_bit (rdatum, offs);
               cb (pos + offs);
+              --amount;
             }
-          while (rdatum != 0 && --amount > 0);
+          while (rdatum != 0 && amount > 0);
           *(uint32_t *) bitset = ~rdatum;
         }
+      pos += 32;
       bitset += 4;
       size -= 4;
     }
-  while (amount > 0 && size-- > 0)
+  while (amount > 0 && size > 0)
     {
-      char rdatum = ~*bitset++;
+      char rdatum = ~*bitset;
       if (rdatum != 0)
         {
           do
@@ -49,10 +51,14 @@ bitset_find_and_set (char *bitset,
               int offs = _bitset_find_least_one (rdatum);
               rdatum = _bitset_reset_bit (rdatum, offs);
               cb (pos + offs);
+              --amount;
             }
-          while (rdatum != 0 && --amount > 0);
+          while (rdatum != 0 && amount > 0);
           *bitset = (char) ~rdatum;
         }
+      pos += 8;
+      ++bitset;
+      --size;
     }
   return amount;
 }
@@ -72,12 +78,13 @@ bitset_find_and_set_1 (char *bitset, size_t size)
           
           return pos + offs;
         }
+      pos += 32;
       bitset += 4;
       size -= 4;
     }
-  while (size-- > 0)
+  while (size > 0)
     {
-      char rdatum = ~*bitset++;
+      char rdatum = ~*bitset;
       if (rdatum != 0)
         {
           int offs = _bitset_find_least_one (rdatum);
@@ -86,6 +93,9 @@ bitset_find_and_set_1 (char *bitset, size_t size)
           
           return pos + offs;
         }
+      pos += 8;
+      ++bitset;
+      --size;
     }
   return -1;
 }
