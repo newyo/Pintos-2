@@ -425,7 +425,10 @@ rwlock_try_acquire_read (struct rwlock *rwlock)
   if (!lock_try_acquire (&rwlock->edit_lock))
     return false;
   if (rwlock->writers_count > 0)
-    return false;
+    {
+      lock_release (&rwlock->edit_lock);
+      return false;
+    }
   ++rwlock->readers_count;
   lock_release (&rwlock->edit_lock);
   
@@ -440,7 +443,10 @@ rwlock_try_acquire_write (struct rwlock *rwlock)
   if (!lock_try_acquire (&rwlock->edit_lock))
     return false;
   if (rwlock->readers_count > 0 || rwlock->writers_count > 0)
-    return false;
+    {
+      lock_release (&rwlock->edit_lock);
+      return false;
+    }
   ++rwlock->writers_count;
   lock_release (&rwlock->edit_lock);
   
