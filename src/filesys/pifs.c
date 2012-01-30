@@ -151,6 +151,7 @@ pifs_init (struct pifs_device *pifs, struct block_cache *bc)
 {
   ASSERT (pifs != NULL);
   ASSERT (bc != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   
   memset (pifs, 0, sizeof (*pifs));
   pifs->bc = bc;
@@ -168,6 +169,7 @@ void
 pifs_destroy (struct pifs_device *pifs)
 {
   ASSERT (pifs != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   
   // TODO
 }
@@ -183,6 +185,7 @@ pifs_format (struct pifs_device *pifs)
 {
   ASSERT (pifs != NULL);
   ASSERT (pifs->bc != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   
   block_sector_t blocks = block_size (pifs->bc->device);
   if (blocks % 8 != 0)
@@ -281,6 +284,7 @@ bool
 pifs_sanity_check (struct pifs_device *pifs)
 {
   ASSERT (pifs != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   const struct pifs_header *header = (void *) &pifs->header_block->data;
   return header->magic == PIFS_MAGIC_HEADER;
 }
@@ -668,6 +672,7 @@ pifs_open_rel (struct pifs_device  *pifs,
 {
   ASSERT (pifs != NULL);
   ASSERT (path != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   
   ASSERT ((opts & ~POO_MASK) == 0);
   ASSERT (!((opts & POO_MASK_FILE) && (opts & POO_MASK_FOLDER)));
@@ -819,6 +824,7 @@ pifs_open2 (struct pifs_device  *pifs,
 void
 pifs_close (struct pifs_inode *inode)
 {
+  ASSERT (intr_get_level () == INTR_ON);
   if (inode == NULL)
     return;
     
@@ -841,6 +847,7 @@ const char *
 pifs_readdir (struct pifs_inode *inode, size_t index)
 {
   ASSERT (inode !=  NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   
   rwlock_acquire_read (&inode->pifs->pifs_rwlock);
   
@@ -1098,6 +1105,7 @@ pifs_write (struct pifs_inode *inode,
   const char *src = src_;
   ASSERT (inode != NULL);
   ASSERT (src != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
   
   if (length == 0)
     return 0;
@@ -1248,6 +1256,7 @@ pifs_delete_file (struct pifs_inode *inode)
 {
   ASSERT (inode != NULL);
   ASSERT (!inode->is_directory);
+  ASSERT (intr_get_level () == INTR_ON);
   
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
   if (!inode->deleted)
@@ -1260,6 +1269,7 @@ pifs_delete_folder (struct pifs_inode *inode)
 {
   ASSERT (inode != NULL);
   ASSERT (inode->is_directory);
+  ASSERT (intr_get_level () == INTR_ON);
   
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
   
