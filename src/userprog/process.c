@@ -32,7 +32,7 @@ typedef char _CASSERT_SIZEOF_PROCESS_START_AUX_EQ_PGSIZE[
     0-!(sizeof (struct process_start_aux) == PGSIZE)];
 
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool load (const char *file_name, void (**eip) (void), void **esp);
 
 unsigned
 fd_hash (const struct hash_elem *e, void *t UNUSED)
@@ -160,6 +160,8 @@ start_process (void *const aux_)
   struct process_start_aux *aux = aux_;
   ASSERT (aux != NULL);
   
+  struct thread *t = thread_current ();
+  
   /* Initialize interrupt frame */
   struct intr_frame if_;
   memset (&if_, 0, sizeof (if_));
@@ -188,6 +190,14 @@ start_process (void *const aux_)
     else
       arguments = "";
   } while (0);
+  
+  /* open executable file */
+  t->executable = filesys_open (exe);
+  if (!t->executable)
+    {
+      printf ("load: %s: open failed\n", exe);
+      goto failure;
+    }
 
   /* load exe, allocating stack */
   if (!load (exe, &if_.eip, &if_.esp))
@@ -431,23 +441,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
-  if (t->pagedir == NULL) 
+  if (t->pagedir == NULL)
     goto done;
   process_activate ();
   vm_init_thread (t);
 
-  /* Open executable file. */
-  struct file *file = filesys_open (file_name);
-  if (file == NULL) 
-    {
-      printf ("load: %s: open failed\n", file_name);
-      goto done; 
-    }
-  t->executable = file; // file will be closed by process_exit
-
   /* Read and verify executable header. */
   struct Elf32_Ehdr ehdr;
-  if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
+  if (file_read (t->executable, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
       || ehdr.e_type != 2
       || ehdr.e_machine != 3
@@ -466,11 +467,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
     {
       struct Elf32_Phdr phdr;
 
-      if (file_ofs < 0 || file_ofs > file_length (file))
+      if (file_ofs < 0 || file_ofs > file_length (t->executable))
         goto done;
-      file_seek (file, file_ofs);
+      file_seek (t->executable, file_ofs);
 
-      if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
+      if (file_read (t->executable, &phdr, sizeof phdr) != sizeof phdr)
         goto done;
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
@@ -487,7 +488,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
         case PT_SHLIB:
           goto done;
         case PT_LOAD:
-          if (validate_segment (&phdr, file)) 
+          if (validate_segment (&phdr, t->executable)) 
             {
               bool writable = (phdr.p_flags & PF_W) != 0;
               uint32_t file_page = phdr.p_offset & ~PGMASK;
@@ -509,7 +510,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
+              if (!load_segment (t->executable, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }

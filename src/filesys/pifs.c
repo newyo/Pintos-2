@@ -292,9 +292,10 @@ pifs_open_traverse (struct pifs_device  *pifs,
 {
   ASSERT (pifs != NULL);
   ASSERT (path_ != NULL && *path_ != NULL);
-  ASSERT (**path_ == '/');
   
-  ++*path_; // strip leading slash
+  if (**path_ == '/')
+    ++*path_; // strip leading slash
+    
   if (**path_ == 0)
     {
       // we hit end, a folder was looked up
@@ -307,6 +308,15 @@ pifs_open_traverse (struct pifs_device  *pifs,
     {
       // path element is invalid, as it is longer than PIFS_NAME_LENGTH
       return 0;
+    }
+  
+  if (path_elem_len == 0 || (path_elem_len == 1 && **path_ == '.'))
+    {
+      // stay in current folder if '//' or '/./' was found
+      *path_ = next;
+      if (*next == 0)
+        return cur;
+      return pifs_open_traverse (pifs, cur, path_);
     }
     
   struct block_page *page = block_cache_read (pifs->bc, cur);
@@ -322,6 +332,18 @@ pifs_open_traverse (struct pifs_device  *pifs,
       PANIC ("Block %"PRDSNu" (%p) of filesystem is messed up "
              "(magic = 0x%08X).", cur, header, header->magic);
     }
+  
+  if (path_elem_len == 2 && memcmp (*path_, "..", 2) == 2)
+    {
+      // go to upper folder
+      block_cache_return (pifs->bc, page);
+      if (header->parent_folder != 0)
+        cur = header->parent_folder;
+      *path_ = next;
+      if (*next == 0)
+        return cur;
+      return pifs_open_traverse (pifs, cur, path_);
+    }
     
   for (;;)
     {
@@ -336,7 +358,6 @@ pifs_open_traverse (struct pifs_device  *pifs,
       for (i = 0; i < folder->entries_count; ++i)
         {
           const char *name = &folder->entries[i].name[0];
-          PIFS_DEBUG ("  Contains '%.*s'.\n", PIFS_NAME_LENGTH, name);
           if (!((memcmp (name, *path_, path_elem_len) == 0) &&
                 (path_elem_len < PIFS_NAME_LENGTH ? name[path_elem_len] == 0
                                                   : true)))
@@ -362,7 +383,10 @@ pifs_open_traverse (struct pifs_device  *pifs,
       pifs_ptr extends = folder->extends;
       block_cache_return (pifs->bc, page);
       if (extends == 0)
-        return cur;
+        {
+          PIFS_DEBUG ("  Nothing found for '%s' in %u.\n", *path_, cur);
+          return cur;
+        }
         
       page = block_cache_read (pifs->bc, extends);
       header = (void *) &page->data;
@@ -634,14 +658,14 @@ pifs_create (struct pifs_device  *pifs,
   return page;
 }
 
-struct pifs_inode *
-pifs_open (struct pifs_device  *pifs,
-           const char          *path,
-           enum pifs_open_opts  opts)
+static struct pifs_inode *
+pifs_open_rel (struct pifs_device  *pifs,
+               const char          *path,
+               enum pifs_open_opts  opts,
+               pifs_ptr             root_sector)
 {
   ASSERT (pifs != NULL);
   ASSERT (path != NULL);
-  ASSERT (path[0] == '/');
   
   ASSERT ((opts & ~POO_MASK) == 0);
   ASSERT (!((opts & POO_MASK_FILE) && (opts & POO_MASK_FOLDER)));
@@ -652,14 +676,14 @@ pifs_open (struct pifs_device  *pifs,
   rwlock_acquire_write (&pifs->pifs_rwlock);
   
   pifs_ptr found_sector;
-  found_sector = pifs_open_traverse (pifs, pifs_header (pifs)->root_folder,
-                                     &path);
-                                     
-  PIFS_DEBUG ("PIFS end path = '%s'\n", path);
+  found_sector = pifs_open_traverse (pifs, root_sector, &path);
+  PIFS_DEBUG ("PIFS end path = '%s' (%u)\n", path, found_sector);
   
   struct pifs_inode *result = NULL;
   if (found_sector == 0)
-    goto end; // path was invalid
+    { // path was invalid
+      goto end;
+    }
   else if (path[0] == 0 || path[1] == 0)
     { // we found a file or folder
     
@@ -669,7 +693,7 @@ pifs_open (struct pifs_device  *pifs,
         goto end;
         
       bool must_be_file   = (opts & POO_MASK_FILE);
-      bool must_be_folder = (opts & POO_MASK_FOLDER) || (path[1] == 0);
+      bool must_be_folder = (opts & POO_MASK_FOLDER) || (path[0] != 0);
       if (must_be_file && must_be_folder)
         goto end;
         
@@ -761,6 +785,33 @@ end:
     ++result->open_count;
   rwlock_release_write (&pifs->pifs_rwlock);
   return result;
+}
+
+struct pifs_inode *
+pifs_open (struct pifs_device  *pifs,
+           const char          *path,
+           enum pifs_open_opts  opts)
+{
+  pifs_ptr root = pifs_header (pifs)->root_folder;
+  return pifs_open_rel (pifs, path, opts, root);
+}
+
+struct pifs_inode *
+pifs_open2 (struct pifs_device  *pifs,
+            const char          *path,
+            enum pifs_open_opts  opts,
+            struct pifs_inode   *folder)
+{
+  ASSERT (path != NULL);
+  
+  if (folder == NULL)
+    return pifs_open (pifs, path, opts);
+  else if (!folder->is_directory)
+    return NULL;
+  else if (path[0] != '/')
+    return pifs_open_rel (pifs, path, opts, folder->sector);
+  else
+    return pifs_open (pifs, path, opts);
 }
 
 void
@@ -1040,6 +1091,8 @@ pifs_write (struct pifs_inode *inode,
     
   if (inode->length < start+length)
     pifs_grow_file (inode, start+length - inode->length);
+    
+  printf ("PIFS size of %u: %u.\n", inode->sector, inode->length);
     
   // TODO: write
   

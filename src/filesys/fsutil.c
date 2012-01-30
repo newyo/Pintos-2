@@ -2,7 +2,6 @@
 #include "file.h"
 #include "filesys.h"
 #include "pifs.h"
-#include "canonical_path.h"
 
 #include <debug.h>
 #include <stdio.h>
@@ -19,7 +18,6 @@
 void
 fsutil_ls (char **argv UNUSED) 
 {
-  
   printf ("Files in the root directory:\n");
   
   struct pifs_inode *dir = pifs_open (&fs_pifs, "/", POO_FILE_NO_CREATE);
@@ -90,6 +88,10 @@ fsutil_extract (char **argv UNUSED)
   /* Allocate buffers. */
   void *header = malloc (BLOCK_SECTOR_SIZE);
   void *data = malloc (BLOCK_SECTOR_SIZE);
+  
+  struct file *root = filesys_open ("/");
+  if (!root)
+    PANIC ("Could not open root.");
 
   block_sector_t sector = 0;
   for (;;)
@@ -111,23 +113,21 @@ fsutil_extract (char **argv UNUSED)
           break;
         }
       
-      char *name = canonical_path_get ("/", file_name);
       if (type == USTAR_DIRECTORY)
         {
           // ignore result
-          pifs_create_folder_path (&fs_pifs, name);
+          filesys_create_folder (file_name);
         }
       else if (_IN (type, USTAR_AREGULAR, USTAR_REGULAR))
         {
           struct file *dst;
 
-          printf ("Putting '%s' ('%s') into the file system...\n",
-                  file_name, name);
+          printf ("Putting '%s' into the file system...\n", file_name);
 
           /* Create destination file. */
-          if (!filesys_create (name, 0))
+          if (!filesys_create (file_name, 0))
             PANIC ("%s: create failed", file_name);
-          dst = filesys_open (name);
+          dst = filesys_open (file_name);
           if (dst == NULL)
             PANIC ("%s: open failed", file_name);
 
@@ -147,7 +147,6 @@ fsutil_extract (char **argv UNUSED)
           /* Finish up. */
           file_close (dst);
         }
-      free (name);
     }
 
   /* Erase the ustar header from the start of the block device,

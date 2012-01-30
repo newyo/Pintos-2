@@ -423,6 +423,12 @@ thread_exit (void)
   
   intr_disable ();
   list_remove (&t->allelem);
+  
+  if (t->cwd)
+    {
+      pifs_close (t->cwd);
+      t->cwd = NULL;
+    }
 
   // when the parent dies, all children must be disposed
   while (!list_empty (&t->children))
@@ -440,10 +446,7 @@ thread_exit (void)
     
   if (t->pagedir)
     process_exit ();
-  else
-    {
-      ASSERT (list_empty (&t->lock_list));
-    }
+  ASSERT (list_empty (&t->lock_list));
   
   if (t->parent == NULL)
     t->status = THREAD_DYING;
@@ -915,6 +918,15 @@ init_thread (struct thread *t, const char *name, int priority)
       t->priority = current_thread->priority;
       t->nice = current_thread->nice;
     }
+    
+#ifdef FILESYS
+  struct pifs_inode *cwd = running_thread ()->cwd;
+  if (cwd != NULL)
+    {
+      ++cwd->open_count;
+      t->cwd = cwd;
+    }
+#endif
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

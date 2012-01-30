@@ -7,6 +7,9 @@
 #include <hash.h>
 #include "synch.h"
 #include "fixed-point.h"
+#ifdef FILESYS
+# include "filesys/pifs.h"
+#endif
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -124,7 +127,7 @@ struct thread
 
 #ifdef FILESYS
     /* Owned by filesys */
-    char *cwd; /* current working directory */
+    struct pifs_inode *cwd; /* current working directory */
 #endif
 
     /* Owned by thread.c. */

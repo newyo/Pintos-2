@@ -21,7 +21,8 @@
 #define BC_MAGIC      MAGIC4 ("BlkC")
 #define BC_PAGE_MAGIC MAGIC4 ("Page")
 
-#define BC_DEBUG(...) printf (__VA_ARGS__)
+//#define BC_DEBUG(...) printf (__VA_ARGS__)
+#define BC_DEBUG(...)
 
 // TODO: implement interval-wise flushing (clock?)
 

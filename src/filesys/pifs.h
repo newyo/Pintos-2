@@ -3,9 +3,6 @@
 
 // pifs = Pintos Filesystem :)
 
-// All functions expect the paths to be in absolute form.
-// Non-absolute paths will cause a PANIC!
-
 #include <stdbool.h>
 #include <packed.h>
 #include <hash.h>
@@ -82,6 +79,10 @@ bool pifs_sanity_check (struct pifs_device *pifs);
 struct pifs_inode *pifs_open (struct pifs_device  *pifs,
                               const char          *path,
                               enum pifs_open_opts  opts);
+struct pifs_inode *pifs_open2 (struct pifs_device  *pifs,
+                               const char          *path,
+                               enum pifs_open_opts  opts,
+                               struct pifs_inode   *folder);
 void pifs_close (struct pifs_inode *inode);
 
 // Returns nth filename in directory.
@@ -100,93 +101,5 @@ off_t pifs_write (struct pifs_inode *inode,
 
 void pifs_delete_file (struct pifs_inode *inode);
 bool pifs_delete_folder (struct pifs_inode *inode);
-
-// Convenience methods:
-
-static inline bool
-pifs_create_file_path (struct pifs_device *pifs, const char *path)
-{
-  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_MUST_CREATE);
-  if (!inode)
-    return false;
-  pifs_close (inode);
-  return true;
-}
-
-static inline bool
-pifs_create_folder_path (struct pifs_device *pifs, const char *path)
-{
-  struct pifs_inode *inode = pifs_open (pifs, path, POO_FOLDER_MUST_CREATE);
-  if (!inode)
-    return false;
-  pifs_close (inode);
-  return true;
-}
-
-static inline bool
-pifs_delete_file_path (struct pifs_device *pifs, const char *path)
-{
-  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_NO_CREATE);
-  if (!inode)
-    return false;
-  pifs_delete_file (inode);
-  pifs_close (inode);
-  return true;
-}
-
-static inline bool
-pifs_delete_folder_path (struct pifs_device *pifs, const char *path)
-{
-  struct pifs_inode *inode = pifs_open (pifs, path, POO_FOLDER_NO_CREATE);
-  if (!inode)
-    return false;
-  bool result = pifs_delete_folder (inode);
-  pifs_close (inode);
-  return result;
-}
-
-static inline bool
-pifs_length_path (struct pifs_device *pifs, const char *path, size_t *result)
-{
-  ASSERT (result != NULL);
-  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_NO_CREATE);
-  if (!inode)
-    return false;
-  *result = inode->length;
-  pifs_close (inode);
-  return true;
-}
-
-static inline bool
-pifs_exists_path (struct pifs_device *pifs, const char *path)
-{
-  struct pifs_inode *inode = pifs_open (pifs, path, POO_NO_CREATE);
-  if (!inode)
-    return false;
-  pifs_close (inode);
-  return true;
-}
-
-static inline bool
-pifs_is_file_path (struct pifs_device *pifs, const char *path, bool *result)
-{
-  ASSERT (result != NULL);
-  struct pifs_inode *inode = pifs_open (pifs, path, POO_FILE_NO_CREATE);
-  if (!inode)
-    return false;
-  pifs_close (inode);
-  return true;
-}
-
-static inline bool
-pifs_is_dir_path (struct pifs_device *pifs, const char *path, bool *result)
-{
-  ASSERT (result != NULL);
-  struct pifs_inode *inode = pifs_open (pifs, path, POO_FOLDER_NO_CREATE);
-  if (!inode)
-    return false;
-  pifs_close (inode);
-  return true;
-}
 
 #endif

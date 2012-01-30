@@ -3,6 +3,8 @@
 
 #include "threads/thread.h"
 
+struct file;
+
 #define PROCESS_STACK_SIZE (8*1024*1024)
 
 tid_t process_execute (const char *file_name);
@@ -17,7 +19,6 @@ struct fd
   struct hash_elem elem;
   struct file *file;
 };
-
 
 bool fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t);
 unsigned fd_hash (const struct hash_elem *e, void *t);

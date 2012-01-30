@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "threads/thread.h"
 #include "threads/malloc.h"
 
 #define FS_CACHE_SIZE 64
@@ -18,6 +19,12 @@ static bool fs_initialized;
 static struct block       *fs_device;
 static struct block_cache  fs_cache;
 struct pifs_device         fs_pifs;
+
+static inline struct pifs_inode *
+cwd (void)
+{
+  return thread_current ()->cwd;
+}
 
 /* Initializes the file system module.
    If FORMAT is true, reformats the file system. */
@@ -68,12 +75,9 @@ bool
 filesys_create (const char *name, off_t initial_size) 
 {
   struct pifs_inode *inode;
-  inode = pifs_open (&fs_pifs, name, POO_FILE_MUST_CREATE);
+  inode = pifs_open2 (&fs_pifs, name, POO_FILE_MUST_CREATE, cwd ());
   if (!inode)
-    {
-      printf ("Could not create file '%s'.\n", name);
-      return false;
-    }
+    return false;
     
   if (initial_size > 0)
     {
@@ -119,7 +123,8 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
-  struct pifs_inode *inode = pifs_open (&fs_pifs, name, POO_NO_CREATE);
+  struct pifs_inode *inode;
+  inode = pifs_open2 (&fs_pifs, name, POO_FILE_NO_CREATE, cwd ());
   if (!inode)
     return NULL;
   return file_open (inode);
@@ -132,5 +137,22 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  return pifs_delete_file_path (&fs_pifs, name);
+  struct pifs_inode *inode;
+  inode = pifs_open2 (&fs_pifs, name, POO_FILE_NO_CREATE, cwd ());
+  if (!inode)
+    return false;
+  pifs_delete_file (inode);
+  pifs_close (inode);
+  return true;
+}
+
+bool
+filesys_create_folder (const char *name)
+{
+  struct pifs_inode *inode;
+  inode = pifs_open2 (&fs_pifs, name, POO_FOLDER_MUST_CREATE, cwd ());
+  if (!inode)
+    return false;
+  pifs_close (inode);
+  return true;
 }
