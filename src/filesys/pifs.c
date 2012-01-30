@@ -12,7 +12,8 @@
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
 
-#define PIFS_DEBUG(...) printf (__VA_ARGS__)
+//#define PIFS_DEBUG(...) printf (__VA_ARGS__)
+#define PIFS_DEBUG(...)
 
 #define MAGIC4(C)                      \
 ({                                     \
@@ -72,7 +73,7 @@ struct pifs_header
   struct pifs_attrs unused; // unused for this inode type
   pifs_ptr          long_name; // name of device (not implemented)
   
-  uint16_t          block_count;
+  uint16_t          blocks_count;
   char              used_map[PIFS_COUNT_USED_MAP_ENTRIES];
 } PACKED;
 
@@ -211,12 +212,12 @@ pifs_format (struct pifs_device *pifs)
     memset (h, 0, sizeof (*h));
     h->magic = PIFS_MAGIC_HEADER;
     if (blocks >= PIFS_COUNT_USED_MAP_ENTRIES)
-      h->block_count = PIFS_COUNT_USED_MAP_ENTRIES;
+      h->blocks_count = PIFS_COUNT_USED_MAP_ENTRIES;
     else
-      h->block_count = blocks;
+      h->blocks_count = blocks;
   }
   
-  printf ("PIFS is formatting free-maps.\n");
+  PIFS_DEBUG ("PIFS is formatting free-maps.\n");
   
   init_header (pifs->header_block);
   bitset_mark (header->used_map, 0);
@@ -262,7 +263,7 @@ pifs_format (struct pifs_device *pifs)
   
   // write root directory:
   
-  printf ("PIFS is formatting root directory (%u).\n", nth_block);
+  PIFS_DEBUG ("PIFS is formatting root directory (%u).\n", nth_block);
    
   bitset_mark (header->used_map, nth_block);
   header->root_folder = nth_block;
@@ -286,7 +287,9 @@ pifs_sanity_check (struct pifs_device *pifs)
   ASSERT (pifs != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   const struct pifs_header *header = (void *) &pifs->header_block->data;
-  return header->magic == PIFS_MAGIC_HEADER;
+  return (header->magic == PIFS_MAGIC_HEADER) &&
+         (header->blocks_count > 1) &&
+         (header->used_map[0] & 1);
 }
 
 static block_sector_t
@@ -461,7 +464,7 @@ pifs_alloc_block (struct pifs_device *pifs)
           PANIC ("Block %"PRDSNu" of filesystem is messed up "
                  "(magic = 0x%08X).", cur, header->magic);
                  
-      int len = (header->block_count+7) / 8;
+      int len = (header->blocks_count+7) / 8;
       if (len > PIFS_COUNT_USED_MAP_ENTRIES)
           PANIC ("Block %"PRDSNu" of filesystem is messed up "
                  "(apparent len = %u).", cur, len);
@@ -547,7 +550,7 @@ pifs_alloc_multiple (struct pifs_device *pifs,
           PANIC ("Block %"PRDSNu" of filesystem is messed up "
                  "(magic = 0x%08X).", cur, header->magic);
                  
-      int len = (header->block_count+7) / 8;
+      int len = (header->blocks_count+7) / 8;
       if (len > PIFS_COUNT_USED_MAP_ENTRIES)
           PANIC ("Block %"PRDSNu" of filesystem is messed up "
                  "(apparent len = %u).", cur, len);
@@ -556,7 +559,7 @@ pifs_alloc_multiple (struct pifs_device *pifs,
       
       ASSERT (left <= amount);
       cur = header->extends;
-      offset += header->block_count;
+      offset += header->blocks_count;
       
       if (left != amount)
         {
@@ -1120,7 +1123,7 @@ pifs_write (struct pifs_inode *inode,
     
   if (inode->length < start+length)
     pifs_grow_file (inode, start+length - inode->length);
-  printf ("PIFS size of %u: %u.\n", inode->sector, inode->length);
+  PIFS_DEBUG ("PIFS size of %u: %u.\n", inode->sector, inode->length);
   
   // write data:
   
@@ -1182,7 +1185,7 @@ pifs_write (struct pifs_inode *inode,
           start -= BLOCK_SECTOR_SIZE;
         }
         
-      printf ("  Block = %u + %u\n", nth_block, nth_block_offs);
+      PIFS_DEBUG ("  Block = %u + %u\n", nth_block, nth_block_offs);
         
       if (cur_extend == 0)
         break;
