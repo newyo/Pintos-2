@@ -503,6 +503,8 @@ pifs_alloc_multiple (struct pifs_device *pifs,
     ++result;
     sector += offset;
     
+    PIFS_DEBUG ("  Allocated sector %u.\n", sector);
+    
     struct pifs_alloc_multiple_item *ee;
     
     // add to prev. last block if possible:
@@ -924,139 +926,142 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
   
   if (inode->length % BLOCK_SECTOR_SIZE != 0)
     {
-      
       size_t simple_grow = BLOCK_SECTOR_SIZE - inode->length%BLOCK_SECTOR_SIZE;
+      PIFS_DEBUG ("  Simple growth by %u.\n", simple_grow);
       if (grow_by < simple_grow)
         simple_grow = grow_by;
       grow_by -= simple_grow;
       inode->length += simple_grow;
     }
     
+  if (grow_by == 0)
+    goto end;
+    
   // allocate more blocks:
     
-  if (grow_by > 0)
-    {
-      pifs_ptr cur = 0;
-      struct block_page *cur_page = NULL;
-      struct pifs_file *cur_extend = NULL;
-      
-      auto inline bool open_cur (bool test);
-      bool
-      open_cur (bool test)
+  pifs_ptr cur = 0;
+  struct block_page *cur_page = NULL;
+  struct pifs_file *cur_extend = NULL;
+  
+  auto inline bool open_cur (bool test);
+  bool
+  open_cur (bool test)
+  {
+    ASSERT (cur != 0);
+    cur_page = block_cache_read (inode->pifs->bc, cur);
+    if (!cur_page)
+      return false;
+    cur_extend = (void *) &cur_page->data;
+    if (test)
       {
-        ASSERT (cur != 0);
-        cur_page = block_cache_read (inode->pifs->bc, cur);
-        if (!cur_page)
-          return false;
-        cur_extend = (void *) &cur_page->data;
-        if (test)
-          {
-            if (cur_extend->magic != PIFS_MAGIC_FILE)
-                PANIC ("Block %"PRDSNu" of filesystem is messed up "
-                       "(magic = 0x%08X).", cur, cur_extend->magic);
-            if (cur_extend->blocks_count > PIFS_COUNT_FILE_BLOCKS)
-              PANIC ("Block %"PRDSNu" of filesystem is messed up "
-                     "(blocks_count = %u).", cur, cur_extend->blocks_count);
-          }
-        return true;
+        if (cur_extend->magic != PIFS_MAGIC_FILE)
+            PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                   "(magic = 0x%08X).", cur, cur_extend->magic);
+        if (cur_extend->blocks_count > PIFS_COUNT_FILE_BLOCKS)
+          PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                 "(blocks_count = %u).", cur, cur_extend->blocks_count);
       }
+    return true;
+  }
+  
+  // traverse to last extend:
+  
+  cur = inode->sector;
+  for (;;)
+    {
+      if (!open_cur (true))
+        goto end;
+      if (cur_extend->extends == 0)
+        break;
+      cur = cur_extend->extends;
+      block_cache_return (inode->pifs->bc, cur_page);
+  }
+  
+  // allocated blocks to use:
+  
+  size_t blocks_to_alloc = DIV_ROUND_UP (grow_by, BLOCK_SECTOR_SIZE);
+  
+  struct list allocated_blocks;
+  list_init (&allocated_blocks);
+  size_t alloc_count UNUSED = pifs_alloc_multiple (inode->pifs,
+                                                   blocks_to_alloc,
+                                                   &allocated_blocks);
+  PIFS_DEBUG ("  Allocated %u block(s).\n", alloc_count);
+  
+  // insert blocks:
+  
+  struct list_elem *e;
+  for (e = list_front (&allocated_blocks);
+       e != list_end (&allocated_blocks);
+       /* done inside of code */)
+    {
+      // advance:
       
-      // traverse to last extend:
+      struct pifs_file_block_ref ee;
+      ee = list_entry (e, struct pifs_alloc_multiple_item, elem)->ref;
+      e = list_next (e);
       
-      cur = inode->sector;
-      for (;;)
+      // invariants ensured by "traverse to last extend" code block:
+      
+      ASSERT (cur_extend->magic == PIFS_MAGIC_FILE);
+      ASSERT (cur_extend->extends == 0);
+      ASSERT (cur_extend->blocks_count <= PIFS_COUNT_FILE_BLOCKS);
+      
+      // allocate new extend if cur is full:
+      
+      if (cur_extend->blocks_count == PIFS_COUNT_FILE_BLOCKS)
         {
-          if (!open_cur (true))
-            goto end;
-          if (cur_extend->extends == 0)
+          pifs_ptr new_cur = pifs_alloc_block (inode->pifs);
+          if (new_cur == 0)
             break;
-          cur = cur_extend->extends;
+          cur_extend->extends = new_cur;
+          cur_page->dirty = true;
           block_cache_return (inode->pifs->bc, cur_page);
-      }
-      
-      // allocated blocks to use:
-      
-      size_t blocks_to_alloc = DIV_ROUND_UP (grow_by, BLOCK_SECTOR_SIZE);
-      
-      struct list allocated_blocks;
-      list_init (&allocated_blocks);
-      pifs_alloc_multiple (inode->pifs, blocks_to_alloc, &allocated_blocks);
-      
-      // insert blocks:
-      
-      struct list_elem *e;
-      for (e = list_front (&allocated_blocks);
-           e != list_end (&allocated_blocks);
-           /* done inside of code */)
-        {
-          // advance:
           
-          struct pifs_file_block_ref ee;
-          ee = list_entry (e, struct pifs_alloc_multiple_item, elem)->ref;
-          e = list_next (e);
-          
-          // invariants ensured by "traverse to last extend" code block:
-          
-          ASSERT (cur_extend->magic == PIFS_MAGIC_FILE);
-          ASSERT (cur_extend->extends == 0);
-          ASSERT (cur_extend->blocks_count <= PIFS_COUNT_FILE_BLOCKS);
-          
-          // allocate new extend if cur is full:
-          
-          if (cur_extend->blocks_count == PIFS_COUNT_FILE_BLOCKS)
-            {
-              pifs_ptr new_cur = pifs_alloc_block (inode->pifs);
-              if (new_cur == 0)
-                break;
-              cur_extend->extends = new_cur;
-              cur_page->dirty = true;
-              block_cache_return (inode->pifs->bc, cur_page);
-              
-              cur = new_cur;
-              if (!open_cur (false))
-                break;
-              memset (cur_extend, 0, sizeof (*cur_extend));
-              cur_extend->magic = PIFS_MAGIC_FILE;
-            }
-            
-          // add block to extend:
-          
-          struct pifs_file_block_ref *last_block;
-          last_block = &cur_extend->blocks[cur_extend->blocks_count];
-          if (last_block->start+last_block->count != ee.start)
-            {
-              // add new block
-              ++cur_extend->blocks_count;
-              last_block[1] = ee;
-            }
-          else
-            {
-              // merge with last ref block if possible
-              last_block->count += ee.count;
-            }
-            
-          if (grow_by > ee.count * BLOCK_SECTOR_SIZE)
-            {
-              file->length += ee.count * BLOCK_SECTOR_SIZE;
-              grow_by -= ee.count * BLOCK_SECTOR_SIZE;
-            }
-          else
-            {
-              file->length += grow_by;
-              break;
-            }
+          cur = new_cur;
+          if (!open_cur (false))
+            break;
+          memset (cur_extend, 0, sizeof (*cur_extend));
+          cur_extend->magic = PIFS_MAGIC_FILE;
         }
         
-      // unmark unused block and free allocation list:
+      // add block to extend:
       
-      pifs_unmark_blocks (inode->pifs, e, list_end (&allocated_blocks));
-      pifs_alloc_multiple_free_list (&allocated_blocks);
-      
-      if (cur_page)
+      struct pifs_file_block_ref *last_block;
+      last_block = &cur_extend->blocks[cur_extend->blocks_count];
+      if (last_block->start+last_block->count != ee.start)
         {
-          cur_page->dirty = true;
-          block_cache_return (inode->pifs->bc, page);
+          // add new block
+          ++cur_extend->blocks_count;
+          last_block[1] = ee;
         }
+      else
+        {
+          // merge with last ref block if possible
+          last_block->count += ee.count;
+        }
+        
+      if (grow_by > ee.count * BLOCK_SECTOR_SIZE)
+        {
+          inode->length += ee.count * BLOCK_SECTOR_SIZE;
+          grow_by -= ee.count * BLOCK_SECTOR_SIZE;
+        }
+      else
+        {
+          inode->length += grow_by;
+          break;
+        }
+    }
+    
+  // unmark unused block and free allocation list:
+  
+  pifs_unmark_blocks (inode->pifs, e, list_end (&allocated_blocks));
+  pifs_alloc_multiple_free_list (&allocated_blocks);
+  
+  if (cur_page)
+    {
+      cur_page->dirty = true;
+      block_cache_return (inode->pifs->bc, page);
     }
 
   // return changed page:
