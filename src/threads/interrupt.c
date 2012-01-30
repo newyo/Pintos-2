@@ -1,9 +1,7 @@
 #include "threads/interrupt.h"
-#include <debug.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "threads/flags.h"
 #include "threads/intr-stubs.h"
 #include "threads/io.h"
 #include "threads/thread.h"
@@ -59,60 +57,7 @@ static inline uint64_t make_idtr_operand (uint16_t limit, void *base);
 /* Interrupt handlers. */
 void intr_handler (struct intr_frame *args);
 static void unexpected_interrupt (const struct intr_frame *);
-
-/* Returns the current interrupt status. */
-enum intr_level
-intr_get_level (void) 
-{
-  uint32_t flags;
 
-  /* Push the flags register on the processor stack, then pop the
-     value off the stack into `flags'.  See [IA32-v2b] "PUSHF"
-     and "POP" and [IA32-v3a] 5.8.1 "Masking Maskable Hardware
-     Interrupts". */
-  asm volatile ("pushfl; popl %0" : "=g" (flags));
-
-  return flags & FLAG_IF ? INTR_ON : INTR_OFF;
-}
-
-/* Enables or disables interrupts as specified by LEVEL and
-   returns the previous interrupt status. */
-enum intr_level
-intr_set_level (enum intr_level level) 
-{
-  return level == INTR_ON ? intr_enable () : intr_disable ();
-}
-
-/* Enables interrupts and returns the previous interrupt status. */
-enum intr_level
-intr_enable (void) 
-{
-  enum intr_level old_level = intr_get_level ();
-  ASSERT (!intr_context ());
-
-  /* Enable interrupts by setting the interrupt flag.
-
-     See [IA32-v2b] "STI" and [IA32-v3a] 5.8.1 "Masking Maskable
-     Hardware Interrupts". */
-  asm volatile ("sti");
-
-  return old_level;
-}
-
-/* Disables interrupts and returns the previous interrupt status. */
-enum intr_level
-intr_disable (void) 
-{
-  enum intr_level old_level = intr_get_level ();
-
-  /* Disable interrupts by clearing the interrupt flag.
-     See [IA32-v2b] "CLI" and [IA32-v3a] 5.8.1 "Masking Maskable
-     Hardware Interrupts". */
-  asm volatile ("cli" : : : "memory");
-
-  return old_level;
-}
-
 /* Initializes the interrupt system. */
 void
 intr_init (void)

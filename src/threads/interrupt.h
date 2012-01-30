@@ -1,8 +1,13 @@
 #ifndef THREADS_INTERRUPT_H
 #define THREADS_INTERRUPT_H
 
+#include "threads/flags.h"
+
 #include <stdbool.h>
 #include <stdint.h>
+#include <debug.h>
+
+#define INTR_FUN static inline enum intr_level __attribute__ ((always_inline))
 
 /* Interrupts on or off? */
 enum intr_level 
@@ -11,11 +16,61 @@ enum intr_level
     INTR_ON               /* Interrupts enabled. */
   };
 
-enum intr_level intr_get_level (void);
-enum intr_level intr_set_level (enum intr_level);
-enum intr_level intr_enable (void);
-enum intr_level intr_disable (void);
-
+bool __attribute__ ((pure)) intr_context (void);
+
+/* Returns the current interrupt status. */
+INTR_FUN __attribute__ ((pure)) intr_get_level (void)
+{
+  uint32_t flags;
+
+  /* Push the flags register on the processor stack, then pop the
+     value off the stack into `flags'.  See [IA32-v2b] "PUSHF"
+     and "POP" and [IA32-v3a] 5.8.1 "Masking Maskable Hardware
+     Interrupts". */
+  asm volatile ("pushfl; popl %0" : "=g" (flags));
+
+  return flags & FLAG_IF ? INTR_ON : INTR_OFF;
+}
+
+/* Enables interrupts and returns the previous interrupt status. */
+INTR_FUN intr_enable (void)
+{
+  enum intr_level old_level = intr_get_level ();
+
+  /* Enable interrupts by setting the interrupt flag.
+
+     See [IA32-v2b] "STI" and [IA32-v3a] 5.8.1 "Masking Maskable
+     Hardware Interrupts". */
+  if (old_level != INTR_ON)
+    {
+      ASSERT (!intr_context ());
+      asm volatile ("sti");
+    }
+
+  return old_level;
+}
+
+/* Disables interrupts and returns the previous interrupt status. */
+INTR_FUN intr_disable (void)
+{
+  enum intr_level old_level = intr_get_level ();
+
+  /* Disable interrupts by clearing the interrupt flag.
+     See [IA32-v2b] "CLI" and [IA32-v3a] 5.8.1 "Masking Maskable
+     Hardware Interrupts". */
+  if (old_level != INTR_OFF)
+    asm volatile ("cli");
+
+  return old_level;
+}
+
+/* Enables or disables interrupts as specified by LEVEL and
+   returns the previous interrupt status. */
+INTR_FUN intr_set_level (enum intr_level level)
+{
+  return level == INTR_ON ? intr_enable () : intr_disable ();
+}
+
 /* Interrupt stack frame. */
 struct intr_frame
   {
@@ -61,7 +116,6 @@ void intr_init (void);
 void intr_register_ext (uint8_t vec, intr_handler_func *, const char *name);
 void intr_register_int (uint8_t vec, int dpl, enum intr_level,
                         intr_handler_func *, const char *name);
-bool intr_context (void);
 void intr_yield_on_return (void);
 
 void intr_dump_frame (const struct intr_frame *);
