@@ -43,6 +43,7 @@ typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
 #define PIFS_COUNT_FOLDER_ENTRIES 24
 #define PIFS_COUNT_FILE_BLOCKS 98 /* ~50 kb per block (w/ max. fragmentation) */
 #define PIFS_COUNT_LONG_NAME_CHARS 491
+#define PIFS_COUNT_FILE_REF_COUNT_MAX 255
 
 struct pifs_inode_header
 {
@@ -520,7 +521,8 @@ pifs_alloc_multiple (struct pifs_device *pifs,
       {
         struct list_elem *e = list_back (list);
         ee = list_entry (e, struct pifs_alloc_multiple_item, elem);
-        if (ee->ref.start + ee->ref.count == sector)
+        if (ee->ref.start + ee->ref.count == sector &&
+            ee->ref.count < PIFS_COUNT_FILE_BLOCKS)
           {
             ++ee->ref.count;
             return;
@@ -1007,9 +1009,14 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
     {
       // advance:
       
+      ASSERT (grow_by != 0);
+      
       struct pifs_file_block_ref ee;
       ee = list_entry (e, struct pifs_alloc_multiple_item, elem)->ref;
       e = list_next (e);
+      
+      ASSERT (ee.start != 0);
+      ASSERT (ee.count != 0);
       
       // invariants ensured by "traverse to last extend" code block:
       
@@ -1017,65 +1024,85 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
       ASSERT (cur_extend->extends == 0);
       ASSERT (cur_extend->blocks_count <= PIFS_COUNT_FILE_BLOCKS);
       
-      // allocate new extend if cur is full:
+      // insert block by block:
       
-      if (cur_extend->blocks_count == PIFS_COUNT_FILE_BLOCKS)
+      // TODO: refactor, the indent level is too high
+      while (ee.count > 0)
         {
-          pifs_ptr new_cur = pifs_alloc_block (inode->pifs);
-          if (new_cur == 0)
-            break;
-          cur_extend->extends = new_cur;
-          cur_page->dirty = true;
-          block_cache_return (inode->pifs->bc, cur_page);
-          
-          cur = new_cur;
-          if (!open_cur (false))
-            break;
-          memset (cur_extend, 0, sizeof (*cur_extend));
-          cur_extend->magic = PIFS_MAGIC_FILE;
-        }
-        
-      // add block to extend:
-      
-      ASSERT (ee.start != 0);
-      ASSERT (ee.count != 0);
-      
-      if (cur_extend->blocks_count != 0)
-        {
-          struct pifs_file_block_ref *last_block;
-          last_block = &cur_extend->blocks[cur_extend->blocks_count-1];
-          if (last_block->count == 8 * sizeof (last_block->count) - 1 ||
-              last_block->start+last_block->count != ee.start)
+          if (cur_extend->blocks_count != 0)
             {
-              // add new block:
-              ++cur_extend->blocks_count;
-              last_block[1] = ee;
+              // merge with last ref block if possible:
+              
+              struct pifs_file_block_ref *last_ref;
+              last_ref = &cur_extend->blocks[cur_extend->blocks_count-1];
+              
+              if (last_ref->count == 0)
+                PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                       "(blocks[%u].count == 0).",
+                       cur, cur_extend->blocks_count-1);
+              
+              if (last_ref->count < PIFS_COUNT_FILE_REF_COUNT_MAX &&
+                  last_ref->start+last_ref->count == ee.start)
+                {
+                  size_t amount = last_ref->count;
+                  if (amount + last_ref->count > PIFS_COUNT_FILE_REF_COUNT_MAX)
+                    amount = PIFS_COUNT_FILE_REF_COUNT_MAX - last_ref->count;
+                    
+                  last_ref->count += amount;
+                  ee.start += amount;
+                  ee.count += amount;
+            
+                  // increase size:
+                  
+                  if (grow_by > amount * BLOCK_SECTOR_SIZE)
+                    {
+                      grow_by -= amount * BLOCK_SECTOR_SIZE;
+                      inode->length += amount * BLOCK_SECTOR_SIZE;
+                    }
+                  else
+                    {
+                      inode->length += grow_by;
+                      grow_by = 0;
+                    }
+                  continue;
+                }
+              
+              // allocate new extend if cur is full:
+              
+              if (cur_extend->blocks_count == PIFS_COUNT_FILE_REF_COUNT_MAX)
+                {
+                  pifs_ptr new_cur = pifs_alloc_block (inode->pifs);
+                  if (new_cur == 0)
+                    break;
+                  cur_extend->extends = new_cur;
+                  cur_page->dirty = true;
+                  block_cache_return (inode->pifs->bc, cur_page);
+                  
+                  cur = new_cur;
+                  if (!open_cur (false))
+                    break;
+                  memset (cur_extend, 0, sizeof (*cur_extend));
+                  cur_extend->magic = PIFS_MAGIC_FILE;
+                }
+            } // if (cur_extend->blocks_count != 0)
+            
+          // add ref block:
+      
+          cur_extend->blocks[cur_extend->blocks_count] = ee;
+          ++cur_extend->blocks_count;
+          
+          if (grow_by > ee.count * BLOCK_SECTOR_SIZE)
+            {
+              grow_by -= ee.count * BLOCK_SECTOR_SIZE;
+              inode->length += ee.count * BLOCK_SECTOR_SIZE;
             }
           else
             {
-              // merge with last ref block if possible:
-              last_block->count += ee.count;
+              inode->length += grow_by;
+              grow_by = 0;
             }
-        }
-      else
-        { 
-          // add first block:
-          cur_extend->blocks_count = 1;
-          cur_extend->blocks[0] = ee;
-        }
-        
-      // increase size:
-      
-      if (grow_by > ee.count * BLOCK_SECTOR_SIZE)
-        {
-          inode->length += ee.count * BLOCK_SECTOR_SIZE;
-          grow_by -= ee.count * BLOCK_SECTOR_SIZE;
-        }
-      else
-        {
-          inode->length += grow_by;
           break;
-        }
+        } // while (ee.count > 0)
     }
     
   // unmark unused block and free allocation list:
@@ -1086,12 +1113,15 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
   if (cur_page)
     {
       cur_page->dirty = true;
-      block_cache_return (inode->pifs->bc, page);
+      block_cache_return (inode->pifs->bc, cur_page);
     }
 
   // return changed page:
   
 end:
+  ASSERT (file->length <= inode->length);
+  PIFS_DEBUG ("  Growth: %u -> %u.\n", file->length, inode->length);
+
   if (file->length != inode->length)
     {
       file->length = inode->length;
@@ -1110,6 +1140,8 @@ pifs_write (struct pifs_inode *inode,
   ASSERT (inode != NULL);
   ASSERT (src != NULL);
   ASSERT (intr_get_level () == INTR_ON);
+  
+  printf ("    ----    ----    ----    ----    ----    ----\n");
   
   if (length == 0)
     return 0;

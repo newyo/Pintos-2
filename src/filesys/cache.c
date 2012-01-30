@@ -21,8 +21,8 @@
 #define BC_MAGIC      MAGIC4 ("BlkC")
 #define BC_PAGE_MAGIC MAGIC4 ("Page")
 
-//#define BC_DEBUG(...) printf (__VA_ARGS__)
-#define BC_DEBUG(...)
+#define BC_DEBUG(...) printf (__VA_ARGS__)
+//#define BC_DEBUG(...)
 
 // TODO: implement interval-wise flushing (clock?)
 
@@ -184,11 +184,10 @@ block_cache_read (struct block_cache *bc, block_sector_t nth)
   ASSERT (bc->magic == BC_MAGIC);
   ASSERT (intr_get_level () == INTR_ON);
   
-  BC_DEBUG ("BC read %d\n", nth);
-  
   bool retreived;
   struct block_page *result = block_cache_retreive (bc, nth, &retreived);
   ASSERT (result != NULL);
+  BC_DEBUG ("BC read %d [%u]\n", nth, result->lease_counter);
   if (!retreived)
     {
       block_read (bc->device, nth, &result->data);
@@ -205,10 +204,9 @@ block_cache_write (struct block_cache *bc, block_sector_t nth)
   ASSERT (bc->magic == BC_MAGIC);
   ASSERT (intr_get_level () == INTR_ON);
   
-  BC_DEBUG ("BC write %d\n", nth);
-  
   struct block_page *result = block_cache_retreive (bc, nth, NULL);
   ASSERT (result != NULL);
+  BC_DEBUG ("BC write %d [%u]\n", nth, result->lease_counter);
   result->dirty = true;
   lock_release (&bc->bc_lock);
   return result;
@@ -222,14 +220,17 @@ block_cache_return (struct block_cache *bc, struct block_page *page)
   ASSERT (page != NULL);
   ASSERT (page->magic == BC_PAGE_MAGIC);
   
-  ASSERT (!lru_is_interior (&page->lru_elem));
-  ASSERT (page->lease_counter > 0);
+  BC_DEBUG ("BC return %d (%s) [%u].\n", page->nth, page->dirty ? "DIRTY" : "clean", page->lease_counter);
   
-  BC_DEBUG ("BC return %d (%s).\n", page->nth, page->dirty ? "dirty" : "clean");
+  ASSERT (page->lease_counter > 0);
+  ASSERT (!lru_is_interior (&page->lru_elem));
   
   lock_acquire (&bc->bc_lock);
   if (--page->lease_counter == 0)
-    lru_use (&bc->pages_disposable, &page->lru_elem);
+    {
+      block_cache_flush (bc, page); // TODO: remove line
+      lru_use (&bc->pages_disposable, &page->lru_elem);
+    }
   lock_release (&bc->bc_lock);
 }
 
