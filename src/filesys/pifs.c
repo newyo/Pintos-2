@@ -1041,7 +1041,8 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
         {
           struct pifs_file_block_ref *last_block;
           last_block = &cur_extend->blocks[cur_extend->blocks_count-1];
-          if (last_block->start+last_block->count != ee.start)
+          if (last_block->count == 8 * sizeof (last_block->count) - 1 ||
+              last_block->start+last_block->count != ee.start)
             {
               // add new block:
               ++cur_extend->blocks_count;
