@@ -495,10 +495,9 @@ bool
 lock_try_acquire (struct lock *lock)
 {
   enum intr_level old_level;
-  if (!lock_try_acquire2 (lock, &old_level))
-    return false;
+  bool result = lock_try_acquire2 (lock, &old_level);
   intr_set_level (old_level);
-  return true;
+  return result;
 }
 
 void
@@ -513,8 +512,7 @@ bool
 sema_try_down (struct semaphore *sema)
 {
   enum intr_level old_level;
-  if (!sema_try_down2 (sema, &old_level))
-    return false;
+  bool result = sema_try_down2 (sema, &old_level);
   intr_set_level (old_level);
-  return true;
+  return result;
 }
