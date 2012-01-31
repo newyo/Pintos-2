@@ -887,43 +887,6 @@ pifs_readdir (struct pifs_inode *inode, size_t index)
   return NULL;
 }
 
-off_t
-pifs_read (struct pifs_inode *inode,
-           size_t             start,
-           size_t             length,
-           void              *dest_)
-{
-  char *dest = dest_;
-  ASSERT (inode != NULL);
-  ASSERT (dest != NULL);
-  
-  if (length == 0)
-    return 0;
-  else if (length > INT_MAX || start > INT_MAX || start+length > INT_MAX ||
-           start+length < start || start+length < length || inode->is_directory)
-    return -1;
-  
-  off_t result = -1;
-  rwlock_acquire_read (&inode->pifs->pifs_rwlock);
-    
-  if (start > inode->length)
-    {
-      result = 0;
-      goto end;
-    }
-  else if (start+length > inode->length)
-    length = inode->length-start;
-    
-  if (length > 0)
-    {
-      // TODO: read
-    }
-  
-end:
-  rwlock_release_read (&inode->pifs->pifs_rwlock);
-  return result;
-}
-
 static void
 pifs_unmark_blocks (struct pifs_device *pifs,
                     struct list_elem   *i,
@@ -1225,8 +1188,6 @@ pifs_iterater_file (struct pifs_inode     *inode,
           start -= BLOCK_SECTOR_SIZE;
         }
         
-      PIFS_DEBUG ("  Block = %u + %u\n", nth_block, nth_block_offs);
-        
       if (cur_extend == 0)
         break;
       struct pifs_file_block_ref ref = extend->blocks[nth_block];
@@ -1289,13 +1250,29 @@ pifs_write_cb (struct pifs_inode  *inode,
   block_cache_return (inode->pifs->bc, dest);
 }
 
+static void
+pifs_read_cb (struct pifs_inode  *inode,
+               size_t              start,
+               size_t              len,
+               pifs_ptr            nth,
+               char               *dest)
+{
+  // read a block:
+  
+  PIFS_DEBUG ("  Reading from %u [%u,%u[.\n", nth, start, start+len);
+  
+  struct block_page *src = block_cache_read (inode->pifs->bc, nth);
+  memcpy (dest, &src->data[start], len);
+  block_cache_return (inode->pifs->bc, src);
+}
+
 off_t
 pifs_write (struct pifs_inode *inode,
             size_t             start,
             size_t             length,
             const void        *src_)
 {
-  const char *src = src_;
+  char *src = (void *) src_;
   ASSERT (inode != NULL);
   ASSERT (src != NULL);
   ASSERT (intr_get_level () == INTR_ON);
@@ -1316,13 +1293,39 @@ pifs_write (struct pifs_inode *inode,
   
   // write data:
   
-  off_t result = pifs_iterater_file (inode, start, length, pifs_write_cb,
-                                     (char *) src);
+  off_t result = pifs_iterater_file (inode, start, length, pifs_write_cb, src);
   
   rwlock_release_write (&inode->pifs->pifs_rwlock);
   
   return result;
-};
+}
+
+off_t
+pifs_read (struct pifs_inode *inode,
+           size_t             start,
+           size_t             length,
+           void              *dest_)
+{
+  char *dest = dest_;
+  ASSERT (inode != NULL);
+  ASSERT (dest != NULL);
+  
+  if (length == 0)
+    return 0;
+  else if (length > INT_MAX || start > INT_MAX || start+length > INT_MAX ||
+           start+length < start || start+length < length || inode->is_directory)
+    return -1;
+  
+  rwlock_acquire_read (&inode->pifs->pifs_rwlock);
+  
+  // read data:
+  
+  off_t result = pifs_iterater_file (inode, start, length, pifs_read_cb, dest);
+  
+  rwlock_release_read (&inode->pifs->pifs_rwlock);
+  
+  return result;
+}
 
 static void
 pifs_delete_sub (struct pifs_inode *inode)
