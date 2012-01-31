@@ -12,8 +12,8 @@
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
 
-//#define PIFS_DEBUG(...) printf (__VA_ARGS__)
-#define PIFS_DEBUG(...)
+#define PIFS_DEBUG(...) printf (__VA_ARGS__)
+//#define PIFS_DEBUG(...)
 
 #define MAGIC4(C)                      \
 ({                                     \
@@ -1154,33 +1154,19 @@ end:
   block_cache_return (inode->pifs->bc, page);
 }
 
-off_t
-pifs_write (struct pifs_inode *inode,
-            size_t             start,
-            size_t             length,
-            const void        *src_)
+typedef void (*pifs_iterater_file_cb) (struct pifs_inode *inode,
+                                       size_t             start,
+                                       size_t             length,
+                                       pifs_ptr           nth,
+                                       char              *data);
+
+static off_t
+pifs_iterater_file (struct pifs_inode     *inode,
+                    size_t                 start,
+                    size_t                 length,
+                    pifs_iterater_file_cb  cb,
+                    char                  *data)
 {
-  const char *src = src_;
-  ASSERT (inode != NULL);
-  ASSERT (src != NULL);
-  ASSERT (intr_get_level () == INTR_ON);
-  
-  if (length == 0)
-    return 0;
-  else if (length > INT_MAX || start > INT_MAX || start+length > INT_MAX ||
-           start+length < start || start+length < length || inode->is_directory)
-    return -1;
-  
-  rwlock_acquire_write (&inode->pifs->pifs_rwlock);
-  
-  // grow file if needed:
-    
-  if (inode->length < start+length)
-    pifs_grow_file (inode, start+length - inode->length);
-  PIFS_DEBUG ("PIFS size of %u: %u.\n", inode->sector, inode->length);
-  
-  // write data:
-  
   off_t result = 0;
   pifs_ptr cur_extend = inode->sector;
   size_t nth_block = 0, nth_block_offs = 0;
@@ -1249,49 +1235,94 @@ pifs_write (struct pifs_inode *inode,
       if (nth_block >= blocks_count || ref.start == 0 ||
           nth_block_offs >= ref.count || start >= BLOCK_SECTOR_SIZE)
         break;
+        
+      // callback and advance:
       
-      // write a block:
-      
-      PIFS_DEBUG ("  Writing to %u + %u(/%u).\n", ref.start, nth_block_offs,
-                  ref.count);
-      
+      size_t len;
       if (start == 0 && length >= BLOCK_SECTOR_SIZE)
-        {
-          // write a full block:
-          
-          struct block_page *dest;
-          dest = block_cache_write (inode->pifs->bc, ref.start+nth_block_offs);
-          memcpy (dest->data, src, BLOCK_SECTOR_SIZE);
-          dest->dirty = true;
-          block_cache_return (inode->pifs->bc, dest);
-          
-          result += BLOCK_SECTOR_SIZE;
-          start += BLOCK_SECTOR_SIZE; // we need to seek
-          length -= BLOCK_SECTOR_SIZE;
-        }
+        len = BLOCK_SECTOR_SIZE;
       else
         {
-          // partially overwrite a block:
-          
-          size_t len = BLOCK_SECTOR_SIZE - start;
+          len = BLOCK_SECTOR_SIZE - start;
           if (len > length)
             len = length;
-          
-          struct block_page *dest;
-          dest = block_cache_read (inode->pifs->bc, ref.start+nth_block_offs);
-          memcpy (&dest->data[start], src, len);
-          dest->dirty = true;
-          block_cache_return (inode->pifs->bc, dest);
-          
-          result += len;
-          start += len; // we need to seek
-          length -= len;
         }
+        
+      cb (inode, start, len, ref.start+nth_block_offs, data);
+      
+      result += len;
+      start += len; // we need to seek
+      length -= len;
+      data += len;
     }
   
-  rwlock_release_write (&inode->pifs->pifs_rwlock);
   return result;
 }
+
+static void
+pifs_write_cb (struct pifs_inode  *inode,
+               size_t              start,
+               size_t              len,
+               pifs_ptr            nth,
+               char               *src)
+{
+  // write a block:
+  
+  struct block_page *dest;
+  if (start == 0 && len == BLOCK_SECTOR_SIZE)
+    {
+      // write a full block:
+      
+      PIFS_DEBUG ("  Writing full block to %u.\n", nth);
+      dest = block_cache_write (inode->pifs->bc, nth);
+    }
+  else
+    {
+      // partially overwrite a block:
+      
+      PIFS_DEBUG ("  Writing partially to %u [%u,%u[.\n", nth, start,
+                  start+len);
+      dest = block_cache_read (inode->pifs->bc, nth);
+    }
+  memcpy (&dest->data[start], src, len);
+  dest->dirty = true;
+  block_cache_return (inode->pifs->bc, dest);
+}
+
+off_t
+pifs_write (struct pifs_inode *inode,
+            size_t             start,
+            size_t             length,
+            const void        *src_)
+{
+  const char *src = src_;
+  ASSERT (inode != NULL);
+  ASSERT (src != NULL);
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  if (length == 0)
+    return 0;
+  else if (length > INT_MAX || start > INT_MAX || start+length > INT_MAX ||
+           start+length < start || start+length < length || inode->is_directory)
+    return -1;
+  
+  rwlock_acquire_write (&inode->pifs->pifs_rwlock);
+  
+  // grow file if needed:
+    
+  if (inode->length < start+length)
+    pifs_grow_file (inode, start+length - inode->length);
+  PIFS_DEBUG ("PIFS size of %u: %u.\n", inode->sector, inode->length);
+  
+  // write data:
+  
+  off_t result = pifs_iterater_file (inode, start, length, pifs_write_cb,
+                                     (char *) src);
+  
+  rwlock_release_write (&inode->pifs->pifs_rwlock);
+  
+  return result;
+};
 
 static void
 pifs_delete_sub (struct pifs_inode *inode)
