@@ -12,8 +12,8 @@
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
 
-#define PIFS_DEBUG(...) printf (__VA_ARGS__)
-//#define PIFS_DEBUG(...)
+//#define PIFS_DEBUG(...) printf (__VA_ARGS__)
+#define PIFS_DEBUG(...)
 
 #define MAGIC4(C)                      \
 ({                                     \
@@ -1165,8 +1165,6 @@ pifs_write (struct pifs_inode *inode,
   ASSERT (src != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
-  printf ("    ----    ----    ----    ----    ----    ----\n");
-  
   if (length == 0)
     return 0;
   else if (length > INT_MAX || start > INT_MAX || start+length > INT_MAX ||
@@ -1285,7 +1283,7 @@ pifs_write (struct pifs_inode *inode,
           dest->dirty = true;
           block_cache_return (inode->pifs->bc, dest);
           
-          result += BLOCK_SECTOR_SIZE;
+          result += len;
           start += len; // we need to seek
           length -= len;
         }
