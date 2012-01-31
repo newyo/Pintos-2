@@ -7,13 +7,15 @@
 #include <debug.h>
 #include <round.h>
 #include <limits.h>
-#include <list.h>
 
+#include "threads/thread.h"
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
 
-#define PIFS_DEBUG(...) printf (__VA_ARGS__)
-//#define PIFS_DEBUG(...)
+#define PIFS_NAME_LENGTH 16
+
+//#define PIFS_DEBUG(...) printf (__VA_ARGS__)
+#define PIFS_DEBUG(...)
 
 #define MAGIC4(C)                      \
 ({                                     \
@@ -41,7 +43,8 @@ typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
 
 #define PIFS_COUNT_USED_MAP_ENTRIES 493 /* ~250 kB per block */
 #define PIFS_COUNT_FOLDER_ENTRIES 24
-#define PIFS_COUNT_FILE_BLOCKS 98 /* ~50 kb per block (w/ max. fragmentation) */
+#define PIFS_COUNT_FILE_BLOCKS 98 /* ~50 kB per block (w/ max. fragmentation) */
+                                  /* ~12 MB per block (w/ min. fragmentation) */
 #define PIFS_COUNT_LONG_NAME_CHARS 491
 #define PIFS_COUNT_FILE_REF_COUNT_MAX 255
 
@@ -95,8 +98,8 @@ struct pifs_folder
   char                     padding[14];
   
   uint8_t                  entries_count;
-  // TODO: One optimization would be sorting the entries in an extend.
-  //       I don't think sorting over all extends would be necessary.
+  // TODO: An optimization would be sorting the entries in an extend.
+  //       I don't think sorting over all extends would be much of a speed-up.
   struct pifs_folder_entry entries[PIFS_COUNT_FOLDER_ENTRIES];
 } PACKED;
 
@@ -129,6 +132,67 @@ typedef char _CASSERT_PIFS_FOLDER_SIZE[0 - !(sizeof (struct pifs_folder) ==
 typedef char _CASSERT_PIFS_FILE_SIZE[0 - !(sizeof (struct pifs_file) ==
                                            BLOCK_SECTOR_SIZE)];
 
+struct pifs_deletor_item
+{
+  struct pifs_inode *inode;
+  struct list_elem   elem;
+};
+
+static void
+pifs_deletor_fun (void *pifs_)
+{ 
+  struct pifs_device *pifs = pifs_;
+  ASSERT (intr_get_level () == INTR_ON);
+  
+  for(;;)
+    {
+      // retrieve an item from deletor_list:
+      
+      sema_down (&pifs->deletor_sema);
+      intr_disable (); // file close must not use locks
+      struct list_elem *e = list_pop_front (&pifs->deletor_list);
+      intr_enable ();
+      
+      struct pifs_deletor_item *ee;
+      ee = list_entry (e, struct pifs_deletor_item, elem);
+      struct pifs_inode *inode = ee->inode;
+      free (ee);
+        
+      // proceed:
+        
+      ASSERT (inode != NULL);
+      ASSERT (inode->pifs == pifs);
+      rwlock_acquire_write (&pifs->pifs_rwlock);
+      
+      if (inode->open_count > 0)
+        {
+          // someone opened the file after its last inode was closed
+          continue;
+        }
+      
+      if (!inode->deleted)
+        {
+          // not accessable anymore:
+          
+          struct hash_elem *hash_e UNUSED;
+          hash_e = hash_delete (&pifs->open_inodes, &inode->elem);
+          ASSERT (hash_e == &inode->elem);
+        }
+      else
+        {
+          // Inode is already removed from hash.
+          // Inode is already removed from parent folder.
+          
+          // mark allocated blocks as free:
+          
+          // TODO
+        }
+      free (inode);
+      
+      rwlock_release_write (&pifs->pifs_rwlock);
+    }
+}
+
 static unsigned
 pifs_open_inodes_hash (const struct hash_elem *e, void *pifs)
 {
@@ -160,6 +224,10 @@ pifs_init (struct pifs_device *pifs, struct block_cache *bc)
   hash_init (&pifs->open_inodes, &pifs_open_inodes_hash, &pifs_open_inodes_less,
              pifs);
   rwlock_init (&pifs->pifs_rwlock);
+  sema_init (&pifs->deletor_sema, 0);
+  list_init (&pifs->deletor_list);
+  
+  thread_create ("[PIFS-DELETOR]", PRI_MAX, &pifs_deletor_fun, pifs);
   
   pifs->header_block = block_cache_read (pifs->bc, 0);
   ASSERT (pifs->header_block != NULL);
@@ -853,29 +921,37 @@ pifs_open2 (struct pifs_device  *pifs,
 void
 pifs_close (struct pifs_inode *inode)
 {
-  ASSERT (intr_get_level () == INTR_ON);
   if (inode == NULL)
     return;
     
-  rwlock_acquire_write (&inode->pifs->pifs_rwlock);
-  if (!inode->deleted)
+  // Rational: We must not use locks in here as thread_exit may happen in a
+  //           interrupt handler.
+  
+  enum intr_level old_level = intr_disable ();
+  
+  ASSERT (inode->open_count > 0);
+  
+  --inode->open_count;
+  if (inode->open_count == 0)
     {
-      struct hash_elem *e UNUSED;
-      e = hash_delete (&inode->pifs->open_inodes, &inode->elem);
-      ASSERT (e == &inode->elem);
+      struct pifs_deletor_item *item = malloc (sizeof (*item));
+      if (item == NULL)
+        PANIC ("PIFS: Out of memory.");
+      memset (item, 0, sizeof (*item));
+      item->inode = inode;
+      
+      list_push_back (&inode->pifs->deletor_list, &item->elem);
+      sema_up (&inode->pifs->deletor_sema);
     }
-  else
-    {
-      // TODO: free all blocks
-    }
-  rwlock_release_write (&inode->pifs->pifs_rwlock);
-  free (inode);
+  
+  intr_set_level (old_level);
 }
 
 const char *
-pifs_readdir (struct pifs_inode *inode, size_t index)
+pifs_readdir (struct pifs_inode *inode, size_t index, off_t *len)
 {
-  ASSERT (inode !=  NULL);
+  ASSERT (inode != NULL);
+  ASSERT (len != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
   rwlock_acquire_read (&inode->pifs->pifs_rwlock);
@@ -1309,6 +1385,8 @@ pifs_read (struct pifs_inode *inode,
   char *dest = dest_;
   ASSERT (inode != NULL);
   ASSERT (dest != NULL);
+  
+  PIFS_DEBUG ("PIFS read %u [%u,%u[\n", inode->sector, start, start+length);
   
   if (length == 0)
     return 0;

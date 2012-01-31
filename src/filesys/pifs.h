@@ -6,11 +6,10 @@
 #include <stdbool.h>
 #include <packed.h>
 #include <hash.h>
+#include <list.h>
 #include "threads/synch.h"
 #include "off_t.h"
 #include "cache.h"
-
-#define PIFS_NAME_LENGTH 16
 
 struct pifs_attrs // Even though we won't implement attributes ...
 {
@@ -29,6 +28,9 @@ struct pifs_device
   struct hash         open_inodes; // [sector -> struct pifs_inode]
   struct rwlock       pifs_rwlock;
   struct block_page  *header_block;
+  
+  struct semaphore    deletor_sema;
+  struct list         deletor_list;
 };
 
 struct pifs_inode
@@ -76,6 +78,7 @@ void pifs_destroy (struct pifs_device *pifs);
 bool pifs_format (struct pifs_device *pifs);
 bool pifs_sanity_check (struct pifs_device *pifs);
 
+// folder may be NULL
 struct pifs_inode *pifs_open (struct pifs_device  *pifs,
                               const char          *path,
                               enum pifs_open_opts  opts);
@@ -85,10 +88,13 @@ struct pifs_inode *pifs_open2 (struct pifs_device  *pifs,
                                struct pifs_inode   *folder);
 void pifs_close (struct pifs_inode *inode);
 
-// Returns nth filename in directory.
-// May not be null terminated. Max. PIFS_NAME_LENGTH characters are valid.
-// Cost: ceil((index+1) / 24).
-const char *pifs_readdir (struct pifs_inode *inode, size_t index);
+/**
+ * Returns nth filename in directory.   Cost: ceil((index+1) / 24).
+ * 
+ * \param inode [in, null, folder]
+ * \param len [out] When *len >= null, result is not null terminated.
+ */
+const char *pifs_readdir (struct pifs_inode *inode, size_t index, off_t *len);
 
 off_t pifs_read (struct pifs_inode *inode,
                  size_t             start,

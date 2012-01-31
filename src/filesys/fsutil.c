@@ -26,8 +26,9 @@ fsutil_ls (char **argv UNUSED)
     
   const char *name;
   size_t nth = 0;
-  while ( (name = pifs_readdir (dir, nth++)) )
-    printf ("%.*s\n", PIFS_NAME_LENGTH, name);
+  off_t len;
+  while ( (name = pifs_readdir (dir, nth++, &len)) )
+    printf ("%.*s\n", len, name);
     
   pifs_close (dir);
   printf ("End of listing.\n");
