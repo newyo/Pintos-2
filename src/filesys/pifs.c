@@ -1068,13 +1068,13 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
               if (last_ref->count < PIFS_COUNT_FILE_REF_COUNT_MAX &&
                   last_ref->start+last_ref->count == ee.start)
                 {
-                  size_t amount = last_ref->count;
+                  size_t amount = ee.count;
                   if (amount + last_ref->count > PIFS_COUNT_FILE_REF_COUNT_MAX)
                     amount = PIFS_COUNT_FILE_REF_COUNT_MAX - last_ref->count;
                     
                   last_ref->count += amount;
                   ee.start += amount;
-                  ee.count += amount;
+                  ee.count -= amount;
             
                   // increase size:
                   
