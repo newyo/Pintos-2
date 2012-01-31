@@ -16,10 +16,11 @@ _bitset_reset_bit (uint32_t value, uint32_t nth)
 }
 
 size_t
-bitset_find_and_set (char *bitset,
-                     size_t size,
-                     size_t amount,
-                     void (*cb) (size_t))
+bitset_find_and_set (char   *bitset,
+                     size_t  size,
+                     size_t  amount,
+                     void  (*cb) (size_t, void *),
+                     void   *aux)
 {
   uint32_t pos = 0;
   while (amount > 0 && size >= 4)
@@ -31,7 +32,7 @@ bitset_find_and_set (char *bitset,
             {
               int offs = _bitset_find_least_one (rdatum);
               rdatum = _bitset_reset_bit (rdatum, offs);
-              cb (pos + offs);
+              cb (pos + offs, aux);
               --amount;
             }
           while (rdatum != 0 && amount > 0);
@@ -50,7 +51,7 @@ bitset_find_and_set (char *bitset,
             {
               int offs = _bitset_find_least_one (rdatum);
               rdatum = _bitset_reset_bit (rdatum, offs);
-              cb (pos + offs);
+              cb (pos + offs, aux);
               --amount;
             }
           while (rdatum != 0 && amount > 0);

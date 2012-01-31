@@ -39,7 +39,8 @@ bitset_set (char *bitset, size_t nth, bool value)
 size_t bitset_find_and_set (char   *bitset,
                             size_t  size,
                             size_t  amount,
-                            void (*cb) (size_t));
+                            void   (*cb) (size_t, void *),
+                            void    *aux);
 off_t bitset_find_and_set_1 (char *bitset, size_t size);
 
 #endif

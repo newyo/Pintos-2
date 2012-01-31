@@ -232,7 +232,7 @@ block_cache_return (struct block_cache *bc, struct block_page *page)
   lock_acquire (&bc->bc_lock);
   if (--page->lease_counter == 0)
     {
-      block_cache_flush (bc, page); // TODO: remove line
+      // block_cache_flush (bc, page);
       lru_use (&bc->pages_disposable, &page->lru_elem);
     }
   lock_release (&bc->bc_lock);

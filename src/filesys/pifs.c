@@ -12,8 +12,8 @@
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
 
-//#define PIFS_DEBUG(...) printf (__VA_ARGS__)
-#define PIFS_DEBUG(...)
+#define PIFS_DEBUG(...) printf (__VA_ARGS__)
+//#define PIFS_DEBUG(...)
 
 #define MAGIC4(C)                      \
 ({                                     \
@@ -456,7 +456,7 @@ pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
 static pifs_ptr
 pifs_alloc_block (struct pifs_device *pifs)
 {
-  pifs_ptr cur = 0, result = 0;
+  pifs_ptr cur = 0, result = 0, offset = 0;
   do
     {
       struct block_page *page = block_cache_read (pifs->bc, cur);
@@ -464,8 +464,11 @@ pifs_alloc_block (struct pifs_device *pifs)
       if (header->magic != PIFS_MAGIC_HEADER)
           PANIC ("Block %"PRDSNu" of filesystem is messed up "
                  "(magic = 0x%08X).", cur, header->magic);
+      if (header->magic % 8 != 0)
+          PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                 "(blocks_count = 0x%08X).", cur, header->blocks_count);
                  
-      int len = (header->blocks_count+7) / 8;
+      int len = header->blocks_count / 8;
       if (len > PIFS_COUNT_USED_MAP_ENTRIES)
           PANIC ("Block %"PRDSNu" of filesystem is messed up "
                  "(apparent len = %u).", cur, len);
@@ -473,11 +476,14 @@ pifs_alloc_block (struct pifs_device *pifs)
       off_t bit_result = bitset_find_and_set_1 (&header->used_map[0], len);
       if (bit_result > 0)
         {
-          result = bit_result;
+          result = bit_result + offset;
           page->dirty = true;
         }
       else
-        cur = header->extends;
+        {
+          offset += PIFS_COUNT_USED_MAP_ENTRIES;
+          cur = header->extends;
+        }
       block_cache_return (pifs->bc, page);
     }
   while (result == 0 && cur != 0);
@@ -490,6 +496,57 @@ struct pifs_alloc_multiple_item
   struct list_elem           elem;
 };
 
+struct pifs_alloc_multiple_aux
+{
+  struct list *list;
+  size_t       offset;
+  size_t       result;
+};
+
+static void
+pifs_alloc_multiple_cb (block_sector_t sector, void *aux_)
+{
+  struct pifs_alloc_multiple_aux *aux = aux_;
+  
+  ++aux->result;
+  sector += aux->offset;
+  ASSERT (sector != 0);
+  
+  /*
+  static size_t next = 11;
+  ASSERT (next ++ == sector);
+  */
+  
+  struct pifs_alloc_multiple_item *ee;
+  
+  // add to prev. last block if possible:
+  
+  if (!list_empty (aux->list))
+    {
+      struct list_elem *e = list_back (aux->list);
+      ee = list_entry (e, struct pifs_alloc_multiple_item, elem);
+      if (ee->ref.start + ee->ref.count == sector &&
+          ee->ref.count < PIFS_COUNT_FILE_BLOCKS)
+        {
+          ++ee->ref.count;
+          return;
+        }
+    }
+    
+  // allocate new reference block:
+    
+  ee = malloc (sizeof (*ee));
+  if (!ee)
+    {
+      --aux->result;
+      return;
+    }
+  memset (ee, 0, sizeof (*ee));
+  ee->ref.start = sector;
+  ee->ref.count = 1;
+  list_push_back (aux->list, &ee->elem);
+}
+
 // caller has to init. *list
 static size_t
 pifs_alloc_multiple (struct pifs_device *pifs,
@@ -500,48 +557,11 @@ pifs_alloc_multiple (struct pifs_device *pifs,
   if (amount == 0)
     return 0;
     
-  size_t offset = 0;
-  size_t result = 0;
-  
-  auto void cb (block_sector_t sector);
-  void
-  cb (block_sector_t sector)
-  {
-    ++result;
-    sector += offset;
-    ASSERT (sector != 0);
-    
-    PIFS_DEBUG ("  Allocated sector %u.\n", sector);
-    
-    struct pifs_alloc_multiple_item *ee;
-    
-    // add to prev. last block if possible:
-    
-    if (!list_empty (list))
-      {
-        struct list_elem *e = list_back (list);
-        ee = list_entry (e, struct pifs_alloc_multiple_item, elem);
-        if (ee->ref.start + ee->ref.count == sector &&
-            ee->ref.count < PIFS_COUNT_FILE_BLOCKS)
-          {
-            ++ee->ref.count;
-            return;
-          }
-      }
-      
-    // allocate new reference block:
-      
-    ee = malloc (sizeof (*ee));
-    if (!ee)
-      {
-        --result;
-        return;
-      }
-    memset (ee, 0, sizeof (*ee));
-    ee->ref.start = sector;
-    ee->ref.count = 1;
-    list_push_back (list, &ee->elem);
-  }
+  struct pifs_alloc_multiple_aux aux = {
+    .list   = list,
+    .offset = 0,
+    .result = 0,
+  };
   
   pifs_ptr cur = 0;
   do
@@ -551,17 +571,21 @@ pifs_alloc_multiple (struct pifs_device *pifs,
       if (header->magic != PIFS_MAGIC_HEADER)
           PANIC ("Block %"PRDSNu" of filesystem is messed up "
                  "(magic = 0x%08X).", cur, header->magic);
+      if (header->magic % 8 != 0)
+          PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                 "(blocks_count = 0x%08X).", cur, header->blocks_count);
                  
-      int len = (header->blocks_count+7) / 8;
+      int len = header->blocks_count / 8;
       if (len > PIFS_COUNT_USED_MAP_ENTRIES)
           PANIC ("Block %"PRDSNu" of filesystem is messed up "
                  "(apparent len = %u).", cur, len);
                  
-      size_t left = bitset_find_and_set (&header->used_map[0], len, amount, cb);
+      size_t left = bitset_find_and_set (&header->used_map[0], len, amount,
+                                         pifs_alloc_multiple_cb, &aux);
       
       ASSERT (left <= amount);
       cur = header->extends;
-      offset += header->blocks_count;
+      aux.offset += header->blocks_count;
       
       if (left != amount)
         {
@@ -572,7 +596,7 @@ pifs_alloc_multiple (struct pifs_device *pifs,
     }
   while (amount > 0 && cur != 0);
   
-  return result;
+  return aux.result;
 }
 
 static void

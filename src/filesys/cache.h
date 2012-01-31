@@ -35,13 +35,13 @@ struct block_page
 /* public: */
   block_data       data;
   bool             dirty;
-/* private: */  
+/* private: */
+  uint32_t         magic; // I put the magic here so it may get overwritten
+  
   size_t           lease_counter;
   block_sector_t   nth;
   struct lru_elem  lru_elem;
   struct hash_elem hash_elem;
-  
-  uint32_t         magic;
 };
 
 bool block_cache_init (struct block_cache *bc,
