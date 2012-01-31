@@ -518,6 +518,13 @@ pifs_alloc_inode (struct pifs_device  *pifs, pifs_ptr cur)
     PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
   block_cache_return (pifs->bc, page);
   
+  if (result != NULL)
+    {
+      struct hash_elem *e UNUSED;
+      e = hash_insert (&pifs->open_inodes, &result->elem);
+      ASSERT (e == NULL);
+    }
+  
   return result;
 }
 
@@ -811,9 +818,11 @@ pifs_open_rel (struct pifs_device  *pifs,
       if (e != NULL)
         {
           result = hash_entry (e, struct pifs_inode, elem);
-          if (!((must_be_file   &&  result->is_directory) ||
-                (must_be_folder && !result->is_directory)))
-            goto end;
+          if (((must_be_file   &&  result->is_directory) ||
+               (must_be_folder && !result->is_directory)))
+            result = NULL; // it is indeed open, but not the kind of inode the
+                           // user was looking for
+          goto end;
         }
         
       // alloc an inode:
@@ -875,13 +884,6 @@ pifs_open_rel (struct pifs_device  *pifs,
       block_cache_return (pifs->bc, page);
       
       result = pifs_alloc_inode (pifs, new_block);
-    }
-  
-  if (result != 0)
-    {
-      struct hash_elem *e UNUSED;
-      e = hash_insert (&pifs->open_inodes, &result->elem);
-      ASSERT (e == NULL);
     }
 
 end:
