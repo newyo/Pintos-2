@@ -1156,7 +1156,7 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
           cur_extend->blocks[cur_extend->blocks_count] = ee;
           ++cur_extend->blocks_count;
           
-          if (grow_by > ee.count * BLOCK_SECTOR_SIZE)
+          if (grow_by > ee.count * (size_t) BLOCK_SECTOR_SIZE)
             {
               grow_by -= ee.count * BLOCK_SECTOR_SIZE;
               inode->length += ee.count * BLOCK_SECTOR_SIZE;
