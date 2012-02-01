@@ -138,7 +138,7 @@ struct pifs_deletor_item
   struct list_elem   elem;
 };
 
-static void
+static void NO_RETURN
 pifs_deletor_fun (void *pifs_)
 { 
   struct pifs_device *pifs = pifs_;
