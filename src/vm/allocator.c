@@ -33,7 +33,7 @@ void
 allocator_destroy (struct allocator *a)
 {
   ASSERT (a != NULL);
-  ASSERT (bitmap_none (a->used_map, 0, bitmap_size (a->used_map)));
+  ASSERT (bitmap_none (a->used_map, 0, true));
   size_t pages = (bitmap_size (a->used_map)*a->item_size + PGSIZE-1) / PGSIZE;
   palloc_free_multiple (a->items, pages);
   bitmap_destroy (a->used_map);

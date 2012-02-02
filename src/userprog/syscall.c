@@ -448,20 +448,44 @@ syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
   // TODO: kill?
 }
 
-static void TODO_NO_RETURN
+static void
 syscall_handler_SYS_CHDIR (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // bool chdir (const char *dir);
+  ENSURE_USER_ARGS (1);
   
-  kill_segv (g);
+  char *rel = (char *) arg1;
+  if (user_strlen (g, rel) < 0)
+    kill_segv (g);
+    
+  struct pifs_inode *new_cwd = pifs_open (&fs_pifs, rel, POO_FOLDER_NO_CREATE);
+  vm_ensure_group_destroy (g);
+  
+  if_->eax = new_cwd != NULL;
+  if (new_cwd != NULL)
+    {
+      struct thread *t = thread_current ();
+      pifs_close (t->cwd);
+      t->cwd = new_cwd;
+    }
 }
 
-static void TODO_NO_RETURN
+static void
 syscall_handler_SYS_MKDIR (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // bool mkdir (const char *dir);
+  ENSURE_USER_ARGS (1);
   
-  kill_segv (g);
+  char *rel = (char *) arg1;
+  if (user_strlen (g, rel) < 0)
+    kill_segv (g);
+    
+  struct pifs_inode *result = pifs_open (&fs_pifs, rel, POO_FOLDER_MUST_CREATE);
+  vm_ensure_group_destroy (g);
+  
+  if_->eax = result != NULL;
+  if (result)
+    pifs_close (result);
 }
 
 static void TODO_NO_RETURN
@@ -472,12 +496,22 @@ syscall_handler_SYS_READDIR (_SYSCALL_HANDLER_ARGS)
   kill_segv (g);
 }
 
-static void TODO_NO_RETURN
+static void
 syscall_handler_SYS_ISDIR (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // bool isdir (int fd);
+  ENSURE_USER_ARGS (1);
   
-  kill_segv (g);
+  char *rel = (char *) arg1;
+  if (user_strlen (g, rel) < 0)
+    kill_segv (g);
+    
+  struct pifs_inode *result = pifs_open (&fs_pifs, rel, POO_FOLDER_NO_CREATE);
+  vm_ensure_group_destroy (g);
+  
+  if_->eax = result != NULL;
+  if (result)
+    pifs_close (result);
 }
 
 static void TODO_NO_RETURN
