@@ -41,7 +41,6 @@ lru_use (struct lru *l, struct lru_elem *e)
 {
   assert_filling (l);
   ASSERT (e != NULL);
-  
   if (e->lru_list == NULL)
     {
       e->lru_list = l;
@@ -54,7 +53,6 @@ lru_use (struct lru *l, struct lru_elem *e)
       ASSERT (e->lru_list == l);
       list_remove (&e->elem);
     }
-    
   list_push_front (&l->lru_list, &e->elem);
   assert_filling (l);
 }

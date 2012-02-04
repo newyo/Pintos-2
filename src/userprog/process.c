@@ -316,28 +316,24 @@ process_exit (void)
   
   ASSERT (cur->pagedir != NULL);
   
+  // The Pintos tests want us to display the exit code once exited
+  const char *c = strchrnul (cur->name, ' ');
+  printf ("%.*s: exit(%d)\n", (int) (c-cur->name), cur->name, cur->exit_code);
+  
+  // Close current executable
   if (cur->executable)
     {
       file_close (cur->executable);
       cur->executable = NULL;
     }
-  
-  // The Pintos tests want us to display the exit code once exited
-  const char *c = strchrnul (cur->name, ' ');
-  printf ("%.*s: exit(%d)\n", (int) (c-cur->name), cur->name, cur->exit_code);
-  
-  while (!list_empty (&cur->lock_list))
-    {
-      struct lock *l;
-      l = list_entry (list_front (&cur->lock_list), struct lock, holder_elem);
-      ASSERT (is_user_vaddr (l));
-      lock_release (l);
-    }
     
+  // Close all open files
   hash_destroy (&cur->fds, fd_free);
 
+  // Disable VM
   vm_clean (cur);
 
+  // Destroy pagedir
   uint32_t *pd = cur->pagedir;
   cur->pagedir = NULL;
   pagedir_activate (NULL);
