@@ -437,6 +437,7 @@ pifs_open_traverse (struct pifs_device  *pifs,
       for (i = 0; i < folder->entries_count; ++i)
         {
           const char *name = &folder->entries[i].name[0];
+          PIFS_DEBUG ("    %u contains '%.*s'.\n", cur, PIFS_NAME_LENGTH, name);
           if (!((memcmp (name, *path_, path_elem_len) == 0) &&
                 (path_elem_len < PIFS_NAME_LENGTH ? name[path_elem_len] == 0
                                                   : true)))
@@ -804,7 +805,7 @@ pifs_open_rel (struct pifs_device  *pifs,
     { // path was invalid
       goto end;
     }
-  else if (path[0] == 0 || path[1] == 0)
+  else if (path[0] == 0 || (path[0] == '/' && path[1] == 0))
     { // we found a file or folder
     
       // test if user's requirements were met:
@@ -844,7 +845,8 @@ pifs_open_rel (struct pifs_device  *pifs,
       // If there is only "abc" or "abc/" left, the path is valid for creation.
       // Otherwise path is invalid, as we do not support "mkdir -p".
       
-      ASSERT (path[0] != '/');
+      if (path[0] == '/')
+        ++path;
       
       if (opts & POO_NO_CREATE)
         goto end;
