@@ -142,15 +142,9 @@ filesys_remove (const char *name)
   if (!inode)
     return false;
     
-  bool result;
-  if (inode->is_directory)
-    result = pifs_delete_folder (inode);
-  else
-    {
-      pifs_delete_file (inode);
-      result = true;
-    }
-    
+  bool result = (inode->is_directory ? &pifs_delete_folder
+                                     : &pifs_delete_file) (inode);
+  
   pifs_close (inode);
   return result;
 }

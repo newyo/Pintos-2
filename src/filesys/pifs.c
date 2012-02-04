@@ -1418,23 +1418,55 @@ pifs_read (struct pifs_inode *inode,
   return result;
 }
 
-static void
+static bool
 pifs_delete_sub (struct pifs_inode *inode)
 {
   ASSERT (inode != 0);
   ASSERT (!inode->deleted);
   
+  // Retreive parent folder sector number:
+  
+  struct block_page *page = block_cache_read (inode->pifs->bc, inode->sector);
+  if (page == NULL)
+    return false;
+  struct pifs_inode_header *header = (void *) &page->data[0];
+  if (header->magic != PIFS_MAGIC_FILE && header->magic != PIFS_MAGIC_FOLDER)
+      PANIC ("Block %"PRDSNu" of filesystem is messed up "
+             "(magic = 0x%08X).", inode->sector, header->magic);
+  pifs_ptr parent_folder_sector = header->parent_folder;
+  block_cache_return (inode->pifs->bc, page);
+  if (parent_folder_sector == 0)
+    return false; // inode is the root folder
+  
+  // Delete from parent_folder:
+  
+  // TODO
+  
+  // Update an open parent_folder inode:
+  
+  struct pifs_inode key;
+  memset (&key, 0, sizeof (key));
+  key.pifs = inode->pifs;
+  key.sector = parent_folder_sector;
+  struct hash_elem *e = hash_find (&inode->pifs->open_inodes, &key.elem);
+  if (e)
+    {
+      struct pifs_inode *ee = hash_entry (e, struct pifs_inode, elem);
+      ASSERT (ee->length > 0);
+      --ee->length;
+    }
+  
+  // Delete from pifs's hash:
+  
+  struct hash_elem *e2 UNUSED;
+  e2 = hash_delete (&inode->pifs->open_inodes, &inode->elem);
+  ASSERT (e2 == &inode->elem);
+  
   inode->deleted = true;
-  
-  struct hash_elem *e UNUSED;
-  e = hash_delete (&inode->pifs->open_inodes, &inode->elem);
-  ASSERT (e == &inode->elem);
-  
-  // TODO: delete from parent_folder
-  // TODO: update open parent_folder inode
+  return true;
 }
 
-void
+bool
 pifs_delete_file (struct pifs_inode *inode)
 {
   ASSERT (inode != NULL);
@@ -1442,9 +1474,13 @@ pifs_delete_file (struct pifs_inode *inode)
   ASSERT (intr_get_level () == INTR_ON);
   
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
-  if (!inode->deleted)
-    pifs_delete_sub (inode);
+  
+  bool result = !inode->deleted;
+  if (result)
+    result = pifs_delete_sub (inode);
+    
   rwlock_release_write (&inode->pifs->pifs_rwlock);
+  return result;
 }
 
 bool
@@ -1456,10 +1492,9 @@ pifs_delete_folder (struct pifs_inode *inode)
   
   rwlock_acquire_write (&inode->pifs->pifs_rwlock);
   
-  bool result = (inode->length == 0) &&
-                (inode->sector != pifs_header (inode->pifs)->root_folder);
-  if (result && !inode->deleted)
-    pifs_delete_sub (inode);
+  bool result = !inode->deleted && (inode->length == 0);
+  if (result)
+    result = pifs_delete_sub (inode);
   
   rwlock_release_write (&inode->pifs->pifs_rwlock);
   return result;

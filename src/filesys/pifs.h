@@ -105,7 +105,7 @@ off_t pifs_write (struct pifs_inode *inode,
                   size_t             length,
                   const void        *src);
 
-void pifs_delete_file (struct pifs_inode *inode);
+bool pifs_delete_file (struct pifs_inode *inode);
 bool pifs_delete_folder (struct pifs_inode *inode);
 
 #endif
