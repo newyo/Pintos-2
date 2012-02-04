@@ -320,11 +320,16 @@ process_exit (void)
   const char *c = strchrnul (cur->name, ' ');
   printf ("%.*s: exit(%d)\n", (int) (c-cur->name), cur->name, cur->exit_code);
   
-  // Close current executable
+  // Close current executable and working directory
   if (cur->executable)
     {
       file_close (cur->executable);
       cur->executable = NULL;
+    }
+  if (cur->cwd)
+    {
+      pifs_close (cur->cwd);
+      cur->cwd = NULL;
     }
     
   // Close all open files

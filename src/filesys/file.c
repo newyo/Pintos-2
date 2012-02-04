@@ -3,13 +3,7 @@
 #include <debug.h>
 #include "threads/malloc.h"
 
-/* An open file. */
-struct file 
-  {
-    struct pifs_inode *inode;   /* File's inode. */
-    off_t pos;                  /* Current position. */
-    bool deny_write;            /* Has file_deny_write() been called? */
-  };
+#define FILE_MAGIC (('F' << 24) + ('I' << 16) + ('L' << 8) + 'E')
 
 /* Opens a file for the given INODE, of which it takes ownership,
    and returns the new file.  Returns a null pointer if an
@@ -20,6 +14,7 @@ file_open (struct pifs_inode *inode)
   struct file *file = calloc (1, sizeof *file);
   if (inode != NULL && file != NULL)
     {
+      file->magic = FILE_MAGIC;
       file->inode = inode;
       file->pos = 0;
       file->deny_write = false;
@@ -38,7 +33,10 @@ file_open (struct pifs_inode *inode)
 struct file *
 file_reopen (struct file *file) 
 {
-  ++file->inode->open_count;
+  ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
+  __sync_add_and_fetch (&file->inode->open_count, 1);
   return file_open (file->inode);
 }
 
@@ -48,6 +46,8 @@ file_close (struct file *file)
 {
   if (file != NULL)
     {
+      ASSERT (file->magic == FILE_MAGIC);
+      
       file_allow_write (file);
       pifs_close (file->inode);
       free (file); 
@@ -58,6 +58,9 @@ file_close (struct file *file)
 struct pifs_inode *
 file_get_inode (struct file *file) 
 {
+  ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   return file->inode;
 }
 
@@ -69,6 +72,9 @@ file_get_inode (struct file *file)
 off_t
 file_read (struct file *file, void *buffer, off_t size) 
 {
+  ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   off_t bytes_read = pifs_read (file->inode, file->pos, size, buffer);
   if (bytes_read > 0)
     file->pos += bytes_read;
@@ -83,6 +89,9 @@ file_read (struct file *file, void *buffer, off_t size)
 off_t
 file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs) 
 {
+  ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   return pifs_read (file->inode, file_ofs, size, buffer);
 }
 
@@ -96,6 +105,9 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
 off_t
 file_write (struct file *file, const void *buffer, off_t size) 
 {
+  ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   off_t bytes_written = pifs_write (file->inode, file->pos, size, buffer);
   if (bytes_written > 0)
     file->pos += bytes_written;
@@ -113,6 +125,9 @@ off_t
 file_write_at (struct file *file, const void *buffer, off_t size,
                off_t file_ofs) 
 {
+  ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   return pifs_write (file->inode, file_ofs, size, buffer);
 }
 
@@ -122,6 +137,8 @@ void
 file_deny_write (struct file *file) 
 {
   ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   if (!file->deny_write) 
     {
       file->deny_write = true;
@@ -136,6 +153,8 @@ void
 file_allow_write (struct file *file) 
 {
   ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   if (file->deny_write) 
     {
       file->deny_write = false;
@@ -149,6 +168,8 @@ off_t
 file_length (struct file *file) 
 {
   ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   return file->inode->length;
 }
 
@@ -158,6 +179,8 @@ void
 file_seek (struct file *file, off_t new_pos)
 {
   ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   ASSERT (new_pos >= 0);
   file->pos = new_pos;
 }
@@ -168,5 +191,7 @@ off_t
 file_tell (struct file *file) 
 {
   ASSERT (file != NULL);
+  ASSERT (file->magic == FILE_MAGIC);
+  
   return file->pos;
 }

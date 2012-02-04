@@ -17,6 +17,9 @@
 #include "devices/input.h"
 #include "vm/vm.h"
 
+// #define SYSCALL_DEBUG(...) printf (__VA_ARGS__)
+#define SYSCALL_DEBUG(...)
+
 #define TODO_NO_RETURN NO_RETURN
 
 static void syscall_handler (struct intr_frame *);
@@ -215,6 +218,9 @@ syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
   signed len = user_strlen (g, filename);
   if (len < 0)
     kill_segv (g);
+    
+  SYSCALL_DEBUG ("open (\"%s\")\n", filename);
+  
   struct fd *fd = calloc (1, sizeof (*fd));
   if (!fd)
     {
@@ -223,6 +229,7 @@ syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
       return;
     }
   
+  // TODO: implement a proper function to find a free fd
   for (fd->fd = 3; fd->fd < INT_MAX; ++fd->fd)
     if (hash_find (&g->thread->fds, &fd->elem) == NULL)
       break;
@@ -438,14 +445,8 @@ syscall_handler_SYS_MUNMAP (_SYSCALL_HANDLER_ARGS)
   vm_ensure_group_destroy (g);
   
   if (id == MAP_FAILED)
-    {
-      // TODO: kill?
-      return;
-    }
-  
-  bool dispose_result = vm_mmap_dispose (g->thread, id);
-  (void) dispose_result;
-  // TODO: kill?
+    return;
+  vm_mmap_dispose (g->thread, id);
 }
 
 static void
@@ -454,9 +455,11 @@ syscall_handler_SYS_CHDIR (_SYSCALL_HANDLER_ARGS)
   // bool chdir (const char *dir);
   ENSURE_USER_ARGS (1);
   
-  char *rel = (char *) arg1;
+  char *rel = *(char **) arg1;
   if (user_strlen (g, rel) < 0)
     kill_segv (g);
+    
+  SYSCALL_DEBUG ("chdir (\"%s\")\n", rel);
     
   struct pifs_inode *new_cwd = pifs_open (&fs_pifs, rel, POO_FOLDER_NO_CREATE);
   vm_ensure_group_destroy (g);
@@ -476,9 +479,11 @@ syscall_handler_SYS_MKDIR (_SYSCALL_HANDLER_ARGS)
   // bool mkdir (const char *dir);
   ENSURE_USER_ARGS (1);
   
-  char *rel = (char *) arg1;
+  char *rel = *(char **) arg1;
   if (user_strlen (g, rel) < 0)
     kill_segv (g);
+    
+  SYSCALL_DEBUG ("mkdir (\"%s\")\n", rel);
     
   struct pifs_inode *result = pifs_open (&fs_pifs, rel, POO_FOLDER_MUST_CREATE);
   vm_ensure_group_destroy (g);
@@ -563,6 +568,6 @@ syscall_handler (struct intr_frame *if_)
     _HANDLE (SYS_INUMBER);
     default:
       printf ("Invalid system call!\n");
-      thread_exit ();
+      kill_segv (&g);
   }
 }

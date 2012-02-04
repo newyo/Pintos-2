@@ -124,7 +124,7 @@ struct file *
 filesys_open (const char *name)
 {
   struct pifs_inode *inode;
-  inode = pifs_open2 (&fs_pifs, name, POO_FILE_NO_CREATE, cwd ());
+  inode = pifs_open2 (&fs_pifs, name, POO_NO_CREATE, cwd ());
   if (!inode)
     return NULL;
   return file_open (inode);

@@ -8,6 +8,25 @@
 #include "threads/synch.h"
 #include "threads/interrupt.h"
 
+#define MAGIC4(C)                      \
+({                                     \
+  __extension__ const char _c[] = (C); \
+  __extension__ uint32_t _r = 0;       \
+  _r |= _c[3];                         \
+  _r <<= 8;                            \
+  _r |= _c[2];                         \
+  _r <<= 8;                            \
+  _r |= _c[1];                         \
+  _r <<= 8;                            \
+  _r |= _c[0];                         \
+  _r;                                  \
+})
+
+#define REGION_MAGIC MAGIC4 ("MM_R")
+#define ALIAS_MAGIC  MAGIC4 ("MM_A")
+#define KPAGE_MAGIC  MAGIC4 ("MM_K")
+#define UPAGE_MAGIC  MAGIC4 ("MM_U")
+
 struct mmap_writer_task
 {
   struct mmap_alias *alias;
@@ -37,6 +56,7 @@ mmap_write_kpage (struct mmap_kpage *page)
   
   struct mmap_region *r = page->region;
   ASSERT (r != NULL);
+  ASSERT (r->magic == REGION_MAGIC);
   
   size_t start = PGSIZE * page->page_num;
   off_t len = r->length >= start+PGSIZE ? PGSIZE : r->length - start;
@@ -57,7 +77,7 @@ mmap_writer_read (struct mmap_kpage *page)
   
   struct mmap_region *r = page->region;
   ASSERT (r != NULL);
-  
+  ASSERT (r->magic == REGION_MAGIC);
   
   bool result;
   size_t start = PGSIZE * page->page_num;
@@ -98,6 +118,7 @@ mmap_writer_func (void *aux UNUSED)
       task = list_entry (e, struct mmap_writer_task, tasks_elem);
       struct mmap_alias *alias = task->alias;
       ASSERT (alias != NULL);
+      ASSERT (alias->magic == ALIAS_MAGIC);
       free (task);
       ASSERT (hash_empty (&alias->upages));
       intr_enable ();
@@ -114,6 +135,7 @@ mmap_region_hash (const struct hash_elem *e, void *aux UNUSED)
   ASSERT (e != NULL);
   
   struct mmap_region *ee = hash_entry (e, struct mmap_region, regions_elem);
+  ASSERT (ee->magic == REGION_MAGIC);
   ASSERT (ee->file != NULL);
   
   struct pifs_inode *result = file_get_inode (ee->file);
@@ -169,6 +191,7 @@ mmap_aliases_hash (const struct hash_elem *e, void *t UNUSED)
   ASSERT (e != NULL);
   
   struct mmap_alias *ee = hash_entry (e, struct mmap_alias, aliases_elem);
+  ASSERT (ee->magic == ALIAS_MAGIC);
   return (unsigned) ee->id;
 }
 
@@ -207,6 +230,7 @@ void
 mmap_alias_dispose (struct thread *owner, struct mmap_alias *alias)
 {
   ASSERT (alias != NULL);
+  ASSERT (alias->magic == ALIAS_MAGIC);
   ASSERT (alias->region != NULL);
   ASSERT (hash_empty (&alias->upages) || owner != NULL);
   ASSERT (intr_get_level () == INTR_ON);
@@ -274,6 +298,7 @@ mmap_clean_sub_aliases (struct hash_elem *e, void *t)
   ASSERT (intr_get_level () == INTR_OFF);
   
   struct mmap_alias *alias = hash_entry (e, struct mmap_alias, aliases_elem);
+  ASSERT (alias->magic == ALIAS_MAGIC);
   hash_destroy (&alias->upages, &mmap_clean_sub_upages);
   
   struct mmap_writer_task *task = calloc (1, sizeof (*task));
@@ -358,13 +383,16 @@ mmap_retreive_alias  (struct thread *owner, mapid_t id)
   struct hash_elem *e = hash_find (&owner->mmap_aliases, &key.aliases_elem);
   if (!e)
     return NULL;
-  return hash_entry (e, struct mmap_alias, aliases_elem);
+  struct mmap_alias *ee = hash_entry (e, struct mmap_alias, aliases_elem);
+  ASSERT (ee->magic == ALIAS_MAGIC);
+  return ee;
 }
 
 size_t
 mmap_alias_pages_count (struct mmap_alias *alias)
 {
   ASSERT (alias != NULL);
+  ASSERT (alias->magic == ALIAS_MAGIC);
   ASSERT (intr_get_level () == INTR_OFF);
   
   return (alias->region->length + PGSIZE-1) / PGSIZE;
@@ -379,12 +407,16 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
   
   struct mmap_region key;
   memset (&key, 0, sizeof (key));
+  key.magic = REGION_MAGIC;
   key.file = file;
   
   struct hash_elem *e_region = hash_find (&mmap_regions, &key.regions_elem);
   struct mmap_region *region;
   if (e_region)
-    region = hash_entry (e_region, struct mmap_region, regions_elem);
+    {
+      region = hash_entry (e_region, struct mmap_region, regions_elem);
+      ASSERT (region->magic == REGION_MAGIC);
+    }
   else
     {
       region = calloc (1, sizeof (*region));
@@ -392,6 +424,7 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
         {
           return MAP_FAILED;
         }
+      region->magic = REGION_MAGIC;
       region->file = file_reopen (file);
       if (region->file == NULL)
         {
@@ -415,6 +448,7 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
   static mapid_t id = 0;
   alias->id = ++id;
   alias->region = region;
+  alias->magic = ALIAS_MAGIC;
   hash_init (&alias->upages, &mmap_alias_upage_hash, &mmap_alias_upage_less,
              alias);
   
@@ -433,6 +467,7 @@ mmap_alias_map_upage (struct mmap_alias *alias,
                       size_t             nth_page)
 {
   ASSERT (alias != NULL);
+  ASSERT (alias->magic == ALIAS_MAGIC);
   ASSERT (vm_page != NULL);
   ASSERT (intr_get_level () == INTR_OFF);
   

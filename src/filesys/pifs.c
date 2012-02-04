@@ -369,6 +369,9 @@ pifs_open_traverse (struct pifs_device  *pifs,
   ASSERT (pifs != NULL);
   ASSERT (path_ != NULL && *path_ != NULL);
   
+  PIFS_DEBUG ("pifs_open_traverse (%p, %u, &\"%s\")\n",
+              pifs, cur, *path_);
+  
   if (**path_ == '/')
     ++*path_; // strip leading slash
     
@@ -725,7 +728,7 @@ pifs_create (struct pifs_device  *pifs,
     
   // extend parent folder if needed:
   
-  if (folder->entries_count >= PIFS_COUNT_FOLDER_ENTRIES)
+  while (folder->entries_count >= PIFS_COUNT_FOLDER_ENTRIES)
     {
       // TODO: traverse extends and allocate a new extend if needed
       ASSERT (0);
@@ -778,11 +781,17 @@ pifs_open_rel (struct pifs_device  *pifs,
   ASSERT (path != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
+  PIFS_DEBUG ("pifs_open_rel (%p, \"%s\", 0x%x, %u)\n",
+              pifs, path, opts, root_sector);
+  
   ASSERT ((opts & ~POO_MASK) == 0);
   ASSERT (!((opts & POO_MASK_FILE) && (opts & POO_MASK_FOLDER)));
   ASSERT (!((opts & POO_MASK_NO)   && (opts & POO_MASK_MUST)));
   ASSERT ((opts & POO_NO_CREATE) || ((opts & POO_MASK_FILE) ||
                                      (opts & POO_MASK_FOLDER)));
+
+  if (!*path)
+    return NULL;
   
   rwlock_acquire_write (&pifs->pifs_rwlock);
   

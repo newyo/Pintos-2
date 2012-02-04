@@ -16,6 +16,8 @@ struct mmap_region
   struct hash       kpages;
   
   struct hash_elem  regions_elem;
+  
+  uint32_t          magic;
 };
 
 struct mmap_alias
@@ -26,6 +28,8 @@ struct mmap_alias
   
   struct hash_elem    aliases_elem;
   struct list_elem    region_elem;
+  
+  uint32_t            magic;
 };
 
 struct mmap_kpage

@@ -2,8 +2,19 @@
 #define FILESYS_FILE_H
 
 #include "filesys/off_t.h"
+#include <stdbool.h>
 
 struct pifs_inode;
+
+/* An open file. */
+struct file 
+  {
+    uint32_t           magic;
+    
+    struct pifs_inode *inode;      /* File's inode. */
+    off_t              pos;        /* Current position. */
+    bool               deny_write; /* Has file_deny_write() been called? */
+  };
 
 /* Opening and closing files. */
 struct file *file_open (struct pifs_inode *);
