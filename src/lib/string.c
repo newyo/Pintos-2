@@ -382,3 +382,18 @@ strchrnul (const char *s, char c)
     ++s;
   return s;
 }
+
+int strncmp (const char *a, const char *b, size_t n)
+{
+  while (n > 0)
+    {
+      if (*a != *b)
+        return *a > *b ? +1 : -1;
+      if (!*a)
+        return 0;
+      ++a;
+      ++b;
+      --n;
+    }
+  return 0;
+}

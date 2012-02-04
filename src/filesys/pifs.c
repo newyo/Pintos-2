@@ -1440,7 +1440,37 @@ pifs_delete_sub (struct pifs_inode *inode)
   
   // Delete from parent_folder:
   
-  // TODO
+  pifs_ptr s = parent_folder_sector;
+  do
+    {
+      struct block_page *folder_page = block_cache_read (inode->pifs->bc, s);
+      struct pifs_folder *folder = (void *) &folder_page->data[0];
+      if (folder->magic != PIFS_MAGIC_FOLDER)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up (magic = 0x%08X).",
+               s, folder->magic);
+      if (folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+               "(entries_count = %u)", s, folder->entries_count);
+      
+      s = folder->extends;
+      
+      size_t i;
+      for (i = 0; i < folder->entries_count; ++i)
+        if (folder->entries[i].block == inode->sector)
+          {
+            --folder->entries_count;
+            memmove (&folder->entries[i], &folder->entries[i+1],
+                     sizeof (struct pifs_folder_entry) *
+                     (folder->entries_count - i));
+            folder_page->dirty = true;
+            
+            s = 0;
+            break;
+          }
+      
+      block_cache_return (inode->pifs->bc, folder_page);
+    }
+  while (s != 0);
   
   // Update an open parent_folder inode:
   

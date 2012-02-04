@@ -19,6 +19,8 @@ char *strstr (const char *, const char *);
 void *memset (void *, int, size_t);
 size_t strlen (const char *);
 
+int strncmp (const char *, const char *, size_t n);
+
 /* Extensions. */
 size_t strlcpy (char *, const char *, size_t);
 size_t strlcat (char *, const char *, size_t);
