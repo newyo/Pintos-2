@@ -187,10 +187,11 @@ syscall_handler_SYS_CREATE (_SYSCALL_HANDLER_ARGS)
   ENSURE_USER_ARGS (2);
   
   char *filename = *(char **) arg1;
+  unsigned initial_size = *(unsigned *) arg2;
   signed len = user_strlen (g, filename);
   if (len < 0)
     kill_segv (g);
-  if_->eax = SYNC (filesys_create (filename, *(unsigned *) arg2));
+  if_->eax = SYNC (filesys_create (filename, initial_size));
   vm_ensure_group_destroy (g);
 }
 
@@ -519,12 +520,17 @@ syscall_handler_SYS_ISDIR (_SYSCALL_HANDLER_ARGS)
     pifs_close (result);
 }
 
-static void TODO_NO_RETURN
+static void
 syscall_handler_SYS_INUMBER (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // int inumber (int fd);
+  ENSURE_USER_ARGS (1);
   
-  kill_segv (g);
+  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  if (!fd_data)
+    kill_segv (g);
+  vm_ensure_group_destroy (g);
+  if_->eax = (uintptr_t) SYNC (file_get_inode (fd_data->file));
 }
 
 static void

@@ -79,7 +79,7 @@ filesys_create (const char *name, off_t initial_size)
   if (!inode)
     return false;
     
-  if (initial_size > 0)
+  if (initial_size <= 0)
     {
       pifs_close (inode);
       return true;
@@ -138,12 +138,21 @@ bool
 filesys_remove (const char *name) 
 {
   struct pifs_inode *inode;
-  inode = pifs_open2 (&fs_pifs, name, POO_FILE_NO_CREATE, cwd ());
+  inode = pifs_open2 (&fs_pifs, name, POO_NO_CREATE, cwd ());
   if (!inode)
     return false;
-  pifs_delete_file (inode);
+    
+  bool result;
+  if (inode->is_directory)
+    result = pifs_delete_folder (inode);
+  else
+    {
+      pifs_delete_file (inode);
+      result = true;
+    }
+    
   pifs_close (inode);
-  return true;
+  return result;
 }
 
 bool
