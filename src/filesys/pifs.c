@@ -1079,7 +1079,7 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
   // insert blocks:
   
   struct list_elem *e;
-  for (e = list_front (&allocated_blocks);
+  for (e = list_begin (&allocated_blocks);
        e != list_end (&allocated_blocks);
        /* done inside of code */)
     {
