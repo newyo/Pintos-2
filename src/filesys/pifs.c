@@ -14,6 +14,8 @@
 
 #define PIFS_NAME_LENGTH 16
 
+#define PIFS_DEBUG_DESTROY_HEADER
+
 //#define PIFS_DEBUG(...) printf (__VA_ARGS__)
 #define PIFS_DEBUG(...)
 
@@ -65,7 +67,7 @@ struct pifs_long_name // not implemented by us, but for completeness
   struct pifs_attrs unused3; // unused for this inode type
   pifs_ptr          unused4; // unused for this inode type
   
-  uint32_t          total_len;
+  uint32_t          len;
   char              used_map[PIFS_COUNT_LONG_NAME_CHARS];
 } PACKED;
 
@@ -132,13 +134,69 @@ typedef char _CASSERT_PIFS_FOLDER_SIZE[0 - !(sizeof (struct pifs_folder) ==
 typedef char _CASSERT_PIFS_FILE_SIZE[0 - !(sizeof (struct pifs_file) ==
                                            BLOCK_SECTOR_SIZE)];
 
+#define _MIN(X,Y)                        \
+  ({                                     \
+    __extension__ __typeof (X) _x = (X); \
+    __extension__ __typeof (X) _y = (Y); \
+    _x <= _y ? _x : _y;                  \
+  })
+
+#define _MAX(X,Y)                        \
+  ({                                     \
+    __extension__ __typeof (X) _x = (X); \
+    __extension__ __typeof (X) _y = (Y); \
+    _x >= _y ? _x : _y;                  \
+  })
+
+static void
+pifs_dealloc_blocks (struct pifs_device *pifs, pifs_ptr start, size_t count)
+{
+  ASSERT (pifs != NULL);
+  ASSERT (start != 0);
+  PIFS_DEBUG ("PIFS de-allocating [%u,%u[\n", start, start+count);
+  
+  if (count == 0)
+    return;
+    
+  size_t pos;
+  pifs_ptr cur;
+  for (pos = 0, cur = 0; pos < start + count; /* done in code */)
+    {
+      struct block_page *page = block_cache_read (pifs->bc, cur);
+      ASSERT (page != NULL); // assertion is valid when write-locked!
+      struct pifs_header *header = (void *) &page->data[0];
+      if (header->magic != PIFS_MAGIC_HEADER)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+               "(magic = 0x%08X).", cur, header->magic);
+               
+      pifs_ptr intersection_start = _MAX (pos, start);
+      pifs_ptr intersection_end = _MIN (pos+header->blocks_count, start+count);
+      if (intersection_start < intersection_end)
+        {
+          PIFS_DEBUG ("    de-allocating [%u,%u[ in %u [%u,%u[)\n",
+                      intersection_start, intersection_end, cur,
+                      pos, pos+header->blocks_count);
+          bitset_reset_range (&header->used_map[0], intersection_start-pos,
+                                                    intersection_end-pos);
+          page->dirty = true;
+        }
+      
+      pos += header->blocks_count;
+      cur = header->extends;
+      
+      block_cache_return (pifs->bc, page);
+      if (cur == 0)
+        break;
+    }
+}
+
 struct pifs_deletor_item
 {
   struct pifs_inode *inode;
   struct list_elem   elem;
 };
 
-static void NO_RETURN
+static void
 pifs_deletor_fun (void *pifs_)
 { 
   struct pifs_device *pifs = pifs_;
@@ -157,38 +215,95 @@ pifs_deletor_fun (void *pifs_)
       ee = list_entry (e, struct pifs_deletor_item, elem);
       struct pifs_inode *inode = ee->inode;
       free (ee);
+      if (!inode)
+        return;
         
       // proceed:
         
       ASSERT (inode != NULL);
       ASSERT (inode->pifs == pifs);
+      
       rwlock_acquire_write (&pifs->pifs_rwlock);
-      
-      if (inode->open_count > 0)
+      if (inode->open_count == 0)
         {
-          // someone opened the file after its last inode was closed
-          continue;
-        }
-      
-      if (!inode->deleted)
-        {
-          // not accessable anymore:
+          // No-one re-opened the file after its last inode was closed
           
-          struct hash_elem *hash_e UNUSED;
-          hash_e = hash_delete (&pifs->open_inodes, &inode->elem);
-          ASSERT (hash_e == &inode->elem);
+          if (!inode->deleted)
+            {
+              // not accessable anymore:
+              
+              struct hash_elem *hash_e UNUSED;
+              hash_e = hash_delete (&pifs->open_inodes, &inode->elem);
+              ASSERT (hash_e == &inode->elem);
+            }
+          else
+            {
+              // Inode is already removed from hash.
+              // Inode is already removed from parent folder.
+              
+              // mark allocated blocks as free:
+              
+              pifs_ptr s = inode->sector;
+              do
+                {
+                  struct block_page *page = block_cache_read (pifs->bc, s);
+                  ASSERT (page != NULL);
+                  // assertion is valid when write-locked!
+                  
+                  struct pifs_inode_header *header = (void *) &page->data[0];
+                  if (header->magic == PIFS_MAGIC_FILE)
+                    {
+                      // de-allocate blocks of a file:
+                      
+                      if (inode->is_directory)
+                        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                               "(expected folder, found file).", s);
+                      
+                      struct pifs_file *file = (void *) header;
+                      if (file->blocks_count > PIFS_COUNT_FILE_BLOCKS)
+                        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                               "(blocks_count = %u).", s, file->blocks_count);
+                      
+                      size_t i;
+                      for (i = 0; i < file->blocks_count; ++i)
+                        pifs_dealloc_blocks (pifs, file->blocks[i].start,
+                                                   file->blocks[i].count);
+                    }
+                  else if (header->magic == PIFS_MAGIC_FOLDER)
+                    {
+                      // de-allocate blocks of a folder:
+                      
+                      if (!inode->is_directory)
+                        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                               "(expected file, found folder).", s);
+                      
+                      struct pifs_folder *folder = (void *) header;
+                      // invariant: deleted folder is empty
+                      if (folder->entries_count > 0)
+                        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                               "(entries_count = %u).", s,
+                               folder->entries_count);
+                      
+                      // there is nothing to do for a folder ...
+                    }
+                  else
+                    PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                           "(magic = 0x%08X).", s, header->magic);
+                  s = header->extends;
+                  
+                  if (header->long_name != 0)
+                    pifs_dealloc_blocks (pifs, header->long_name, 1);
+                  
+#                 ifdef PIFS_DEBUG_DESTROY_HEADER
+                  header->magic ^= -1u;
+                  page->dirty = true;
+#                 endif
+                  block_cache_return (pifs->bc, page);
+                }
+              while (s != 0);
+            }
+          free (inode);
         }
-      else
-        {
-          // Inode is already removed from hash.
-          // Inode is already removed from parent folder.
-          
-          // mark allocated blocks as free:
-          
-          // TODO
-        }
-      free (inode);
-      
       rwlock_release_write (&pifs->pifs_rwlock);
     }
 }
@@ -227,7 +342,9 @@ pifs_init (struct pifs_device *pifs, struct block_cache *bc)
   sema_init (&pifs->deletor_sema, 0);
   list_init (&pifs->deletor_list);
   
-  thread_create ("[PIFS-DELETOR]", PRI_MAX, &pifs_deletor_fun, pifs);
+  pifs->deletor_thread = thread_create ("[PIFS-DELETOR]", PRI_MAX,
+                                        &pifs_deletor_fun, pifs);
+  ASSERT (pifs->deletor_thread != TID_ERROR);
   
   pifs->header_block = block_cache_read (pifs->bc, 0);
   ASSERT (pifs->header_block != NULL);

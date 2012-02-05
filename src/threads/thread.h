@@ -7,8 +7,9 @@
 #include <hash.h>
 #include "synch.h"
 #include "fixed-point.h"
+
 #ifdef FILESYS
-# include "filesys/pifs.h"
+struct pifs_inode;
 #endif
 
 /* States in a thread's life cycle. */
@@ -188,5 +189,9 @@ void thread_dispel_zombie (struct thread *t);
 bool thread_is_file_currently_executed (struct file *f);
 
 bool thread_activate_pool_statistics (bool yes);
+
+#ifdef FILESYS
+# include "filesys/pifs.h"
+#endif
 
 #endif /* threads/thread.h */

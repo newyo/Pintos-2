@@ -8,6 +8,7 @@
 #include <hash.h>
 #include <list.h>
 #include "threads/synch.h"
+#include "threads/thread.h"
 #include "off_t.h"
 #include "cache.h"
 
@@ -31,6 +32,7 @@ struct pifs_device
   
   struct semaphore    deletor_sema;
   struct list         deletor_list;
+  tid_t               deletor_thread;
 };
 
 struct pifs_inode

@@ -33,7 +33,7 @@ bitset_reset (char *bitset, size_t nth)
 static inline void
 bitset_set (char *bitset, size_t nth, bool value)
 {
-  (value ? bitset_mark : bitset_reset) (bitset, nth);
+  (value ? &bitset_mark : &bitset_reset) (bitset, nth);
 }
 
 size_t bitset_find_and_set (char   *bitset,
@@ -42,5 +42,29 @@ size_t bitset_find_and_set (char   *bitset,
                             void   (*cb) (size_t, void *),
                             void    *aux);
 off_t bitset_find_and_set_1 (char *bitset, size_t size);
+
+static inline void
+bitset_mark_range (char *bitset, size_t start, size_t amount)
+{
+  // TODO: optimize
+  size_t i;
+  for (i = start; i < start+amount; ++i)
+    bitset_mark (bitset, i);
+}
+
+static inline void
+bitset_reset_range (char *bitset, size_t start, size_t amount)
+{
+  // TODO: optimize
+  size_t i;
+  for (i = start; i < start+amount; ++i)
+    bitset_reset (bitset, i);
+}
+
+static inline void
+bitset_set_range (char *bitset, size_t start, size_t amount, bool value)
+{
+  (value ? &bitset_mark_range : &bitset_reset_range) (bitset, start, amount);
+}
 
 #endif
