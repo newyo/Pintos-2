@@ -494,12 +494,41 @@ syscall_handler_SYS_MKDIR (_SYSCALL_HANDLER_ARGS)
     pifs_close (result);
 }
 
-static void TODO_NO_RETURN
+#define READDIR_MAX_LEN 14
+static void
 syscall_handler_SYS_READDIR (_SYSCALL_HANDLER_ARGS)
 {
-  //TODO
+  // bool readdir (int fd, char name[READDIR_MAX_LEN + 1]);
+  ENSURE_USER_ARGS (2);
   
-  kill_segv (g);
+  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  if (!fd_data)
+    kill_segv (g);
+  char *name = *(char **) arg2;
+  if (!ensure_user_memory (g, name, READDIR_MAX_LEN + 1, true))
+    kill_segv (g);
+    
+  if_->eax = false;
+  lock_acquire (&filesys_lock);
+    
+  struct pifs_inode *inode = file_get_inode (fd_data->file);
+  if (!inode->is_directory || (inode->length <= fd_data->nth_readdir))
+    goto end;
+    
+  off_t len = 0;
+  const char *read = pifs_readdir (inode, fd_data->nth_readdir++, &len);
+  if (!read)
+    goto end;
+  if (len < 0)
+    len = strlen (read);
+  if (len > READDIR_MAX_LEN)
+    goto end;
+  memcpy (name, read, len+1);
+  if_->eax = true;
+  
+end:
+  lock_release (&filesys_lock);
+  vm_ensure_group_destroy (g);
 }
 
 static void
@@ -530,7 +559,7 @@ syscall_handler_SYS_INUMBER (_SYSCALL_HANDLER_ARGS)
   if (!fd_data)
     kill_segv (g);
   vm_ensure_group_destroy (g);
-  if_->eax = (uintptr_t) SYNC (file_get_inode (fd_data->file));
+  if_->eax = SYNC (file_get_inode (fd_data->file)->sector);
 }
 
 static void

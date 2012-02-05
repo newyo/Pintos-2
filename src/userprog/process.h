@@ -15,9 +15,10 @@ void process_activate (void);
 // interface for syscall.c and thread.h
 struct fd
 {
-  unsigned fd;
-  struct hash_elem elem;
-  struct file *file;
+  unsigned          fd;
+  struct hash_elem  elem;
+  struct file      *file;
+  size_t            nth_readdir;
 };
 
 bool fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t);
