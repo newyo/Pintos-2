@@ -960,9 +960,6 @@ pifs_open_rel (struct pifs_device  *pifs,
   ASSERT ((opts & POO_NO_CREATE) || ((opts & POO_MASK_FILE) ||
                                      (opts & POO_MASK_FOLDER)));
 
-  if (!*path)
-    return NULL;
-  
   rwlock_acquire_write (&pifs->pifs_rwlock);
   
   pifs_ptr found_sector;
@@ -1078,6 +1075,8 @@ pifs_open (struct pifs_device  *pifs,
            const char          *path,
            enum pifs_open_opts  opts)
 {
+  PIFS_DEBUG ("pifs_open (%p, \"%s\", 0x%x)\n", pifs, path, opts);
+    
   pifs_ptr root = pifs_header (pifs)->root_folder;
   return pifs_open_rel (pifs, path, opts, root);
 }
@@ -1089,15 +1088,18 @@ pifs_open2 (struct pifs_device  *pifs,
             struct pifs_inode   *folder)
 {
   ASSERT (path != NULL);
+  PIFS_DEBUG ("pifs_open2 (%p, \"%s\", 0x%x, %p)\n", pifs, path, opts, folder);
   
-  if (folder == NULL)
+  if (!*path)
+    return NULL;
+  else if (path[0] == '/')
+    return pifs_open (pifs, path+1, opts);
+  else if (folder == NULL)
     return pifs_open (pifs, path, opts);
   else if (!folder->is_directory)
     return NULL;
-  else if (path[0] != '/')
-    return pifs_open_rel (pifs, path, opts, folder->sector);
   else
-    return pifs_open (pifs, path, opts);
+    return pifs_open_rel (pifs, path, opts, folder->sector);
 }
 
 void

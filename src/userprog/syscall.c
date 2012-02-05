@@ -537,16 +537,12 @@ syscall_handler_SYS_ISDIR (_SYSCALL_HANDLER_ARGS)
   // bool isdir (int fd);
   ENSURE_USER_ARGS (1);
   
-  char *rel = (char *) arg1;
-  if (user_strlen (g, rel) < 0)
+  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  if (!fd_data)
     kill_segv (g);
     
-  struct pifs_inode *result = pifs_open (&fs_pifs, rel, POO_FOLDER_NO_CREATE);
   vm_ensure_group_destroy (g);
-  
-  if_->eax = result != NULL;
-  if (result)
-    pifs_close (result);
+  if_->eax = fd_data->file->inode->is_directory;
 }
 
 static void
