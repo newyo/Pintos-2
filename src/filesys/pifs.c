@@ -541,20 +541,22 @@ pifs_open_traverse (struct pifs_device  *pifs,
       return pifs_open_traverse (pifs, cur, path_);
     }
     
+  pifs_ptr extends = cur;
   for (;;)
     {
       struct pifs_folder *folder = (void *) header;
       if (folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
         PANIC ("Block %"PRDSNu" of filesystem is messed up.", cur);
         
-      PIFS_DEBUG ("PIFS: In %u, looking for '%.*s'. Folder size = %u.\n",
-                  cur, path_elem_len, *path_, folder->entries_count);
+      PIFS_DEBUG ("PIFS: In %u (%u), looking for '%.*s'. Folder size = %u.\n",
+                  cur, extends, path_elem_len, *path_, folder->entries_count);
       
       unsigned i;
       for (i = 0; i < folder->entries_count; ++i)
         {
           const char *name = &folder->entries[i].name[0];
-          PIFS_DEBUG ("    %u contains '%.*s'.\n", cur, PIFS_NAME_LENGTH, name);
+          PIFS_DEBUG ("    %u (%u) contains '%.*s'.\n", cur, extends,
+                      PIFS_NAME_LENGTH, name);
           if (!((memcmp (name, *path_, path_elem_len) == 0) &&
                 (path_elem_len < PIFS_NAME_LENGTH ? name[path_elem_len] == 0
                                                   : true)))
@@ -577,7 +579,7 @@ pifs_open_traverse (struct pifs_device  *pifs,
           return pifs_open_traverse (pifs, next_block, path_); // TCO
         }
           
-      pifs_ptr extends = folder->extends;
+      extends = folder->extends;
       block_cache_return (pifs->bc, page);
       if (extends == 0)
         {
@@ -836,7 +838,7 @@ pifs_create (struct pifs_device  *pifs,
   struct block_page *page = block_cache_read (pifs->bc, parent_folder_ptr);
   if (page == NULL)
     {
-      bitset_reset (&pifs_header (pifs)->used_map[0], new_block);
+      pifs_dealloc_blocks (pifs, new_block, 1);
       return NULL;
     }
   struct pifs_folder *folder = (void *) &page->data;
@@ -846,14 +848,64 @@ pifs_create (struct pifs_device  *pifs,
     
   // extend parent folder if needed:
   
+  pifs_ptr cur = parent_folder_ptr;
   while (folder->entries_count >= PIFS_COUNT_FOLDER_ENTRIES)
     {
-      // TODO: traverse extends and allocate a new extend if needed
-      ASSERT (0);
-      block_cache_return (pifs->bc, page);
+      ASSERT (cur == page->nth);
+      
+      if (folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+               "(entries_count = %u).", cur, folder->entries_count);
+             
+      // traverse extends and allocate a new extend if needed:
+      
+      PIFS_DEBUG ("    folder extend is full: %u -> %u\n", page->nth,
+                  folder->extends);
+                  
+      if (page->nth == folder->extends)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+               "(cur == folder->extends).", page->nth);
+      
+      cur = folder->extends;
+      if (cur != 0)
+        {
+          block_cache_return (pifs->bc, page);
+          page = block_cache_read (pifs->bc, cur);
+          ASSERT (page != NULL); // assertion is valid when write-locked
+          
+          folder = (void *) &page->data[0];
+          if (folder->magic != PIFS_MAGIC_FOLDER)
+            PANIC ("Block %"PRDSNu" of filesystem is messed up"
+                   "(magic = 0x%08X).", cur, folder->magic);
+        }
+      else
+        {
+          cur = pifs_alloc_block (pifs);
+          PIFS_DEBUG ("      allocated %u\n", cur);
+          if (cur == 0)
+            {
+              block_cache_return (pifs->bc, page);
+              pifs_dealloc_blocks (pifs, new_block, 1);
+              return NULL;
+            }
+          folder->extends = cur;
+          page->dirty = true;
+          block_cache_return (pifs->bc, page);
+          
+          page = block_cache_write (pifs->bc, cur);
+          ASSERT (page != NULL); // assertion is valid when write-locked
+          
+          folder = (void *) &page->data[0];
+          memset (folder, 0, sizeof (*folder));
+          folder->magic = PIFS_MAGIC_FOLDER;
+        }
     }
     
   // update parent folder's children list (or its extend):
+  
+  if (page->nth == folder->extends)
+    PANIC ("Block %"PRDSNu" of filesystem is messed up "
+           "(cur == folder->extends).", page->nth);
   
   memcpy (folder->entries[folder->entries_count].name, name, name_len);
   if (name_len < PIFS_NAME_LENGTH)
@@ -1178,6 +1230,9 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
         goto end;
       if (cur_extend->extends == 0)
         break;
+      if (cur == cur_extend->extends)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+               "(cur = cur->extends).", cur);
       cur = cur_extend->extends;
       block_cache_return (inode->pifs->bc, cur_page);
   }
@@ -1219,7 +1274,6 @@ pifs_grow_file (struct pifs_inode *inode, size_t grow_by)
       
       // insert block by block:
       
-      // TODO: refactor, the indent level is too high
       while (ee.count > 0)
         {
           if (cur_extend->blocks_count != 0)
