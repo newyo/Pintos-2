@@ -527,8 +527,8 @@ pifs_open_traverse (struct pifs_device  *pifs,
   PIFS_DEBUG ("pifs_open_traverse (%p, %u, &\"%s\")\n",
               pifs, cur, *path_);
   
-  if (**path_ == '/')
-    ++*path_; // strip leading slash
+  while (**path_ == '/')
+    ++*path_; // strip leading slashes
     
   if (**path_ == 0)
     {
@@ -543,8 +543,9 @@ pifs_open_traverse (struct pifs_device  *pifs,
       // path element is invalid, as it is longer than PIFS_NAME_LENGTH
       return 0;
     }
+  ASSERT (path_elem_len > 0);
   
-  if (path_elem_len == 0 || (path_elem_len == 1 && **path_ == '.'))
+  if (path_elem_len == 1 && **path_ == '.')
     {
       // stay in current folder if '//' or '/./' was found
       *path_ = next;
@@ -559,7 +560,7 @@ pifs_open_traverse (struct pifs_device  *pifs,
     {
       if (header->magic == PIFS_MAGIC_FILE)
         {
-          // we are hit a file, but the path indicated it was a folder
+          // we hit a file, but the path indicated it was a folder
           block_cache_return (pifs->bc, page);
           return 0;
         }

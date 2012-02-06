@@ -17,7 +17,7 @@
 #include "devices/input.h"
 #include "vm/vm.h"
 
-// #define SYSCALL_DEBUG(...) printf (__VA_ARGS__)
+//#define SYSCALL_DEBUG(...) printf (__VA_ARGS__)
 #define SYSCALL_DEBUG(...)
 
 #define TODO_NO_RETURN NO_RETURN
@@ -456,21 +456,23 @@ syscall_handler_SYS_CHDIR (_SYSCALL_HANDLER_ARGS)
   // bool chdir (const char *dir);
   ENSURE_USER_ARGS (1);
   
-  char *rel = *(char **) arg1;
-  if (user_strlen (g, rel) < 0)
+  char *dir = *(char **) arg1;
+  if (user_strlen (g, dir) < 0)
     kill_segv (g);
     
-  SYSCALL_DEBUG ("chdir (\"%s\")\n", rel);
+  SYSCALL_DEBUG ("chdir (\"%s\")\n", dir);
     
-  struct pifs_inode *new_cwd = pifs_open (&fs_pifs, rel, POO_FOLDER_NO_CREATE);
+  struct file *new_cwd_file = filesys_open (dir);
   vm_ensure_group_destroy (g);
   
-  if_->eax = new_cwd != NULL;
-  if (new_cwd != NULL)
+  if_->eax = new_cwd_file != NULL;
+  if (if_->eax)
     {
       struct thread *t = thread_current ();
       pifs_close (t->cwd);
-      t->cwd = new_cwd;
+      t->cwd = new_cwd_file->inode;
+      __sync_fetch_and_add(&t->cwd->open_count, 1);
+      file_close (new_cwd_file);
     }
 }
 
@@ -480,18 +482,15 @@ syscall_handler_SYS_MKDIR (_SYSCALL_HANDLER_ARGS)
   // bool mkdir (const char *dir);
   ENSURE_USER_ARGS (1);
   
-  char *rel = *(char **) arg1;
-  if (user_strlen (g, rel) < 0)
+  char *filename = *(char **) arg1;
+  signed len = user_strlen (g, filename);
+  if (len < 0)
     kill_segv (g);
     
-  SYSCALL_DEBUG ("mkdir (\"%s\")\n", rel);
-    
-  struct pifs_inode *result = pifs_open (&fs_pifs, rel, POO_FOLDER_MUST_CREATE);
-  vm_ensure_group_destroy (g);
+  SYSCALL_DEBUG ("mkdir (\"%s\")\n", filename);
   
-  if_->eax = result != NULL;
-  if (result)
-    pifs_close (result);
+  if_->eax = SYNC (filesys_create_folder (filename));
+  vm_ensure_group_destroy (g);
 }
 
 #define READDIR_MAX_LEN 14
