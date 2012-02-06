@@ -1169,20 +1169,77 @@ pifs_close (struct pifs_inode *inode)
   intr_set_level (old_level);
 }
 
-const char *
-pifs_readdir (struct pifs_inode *inode, size_t index, off_t *len)
+bool
+pifs_readdir (struct pifs_inode *inode, size_t index, off_t *len, char *dest)
 {
   ASSERT (inode != NULL);
   ASSERT (len != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
+  if (!inode->is_directory)
+    return false;
+  
   rwlock_acquire_read (&inode->pifs->pifs_rwlock);
   
-  // TODO
-  (void) index;
+  bool result = false;
+  pifs_ptr cur = inode->sector;
+  for (;;)
+    {
+      struct block_page *page = block_cache_read (inode->pifs->bc, cur);
+      if (!page)
+        break;
+        
+      struct pifs_folder *folder = (void *) &page->data[0];
+      if (folder->magic != PIFS_MAGIC_FOLDER)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up (magic = 0x%08X).",
+               cur, folder->magic);
+      if (folder->entries_count > PIFS_COUNT_FOLDER_ENTRIES)
+        PANIC ("Block %"PRDSNu" of filesystem is messed up "
+               "(entries_count = %u).", cur, folder->entries_count);
+               
+      if (index < folder->entries_count)
+        {
+          // found:
+          
+          const char *src = &folder->entries[index].name[0];
+          off_t actual_len = strnlen (src, PIFS_NAME_LENGTH);
+          if (actual_len > *len-1)
+            {
+              // the name is too long
+              result = false;
+            }
+          else
+            {
+              result = true;
+              memcpy (dest, src, actual_len);
+              dest[actual_len] = 0;
+            }
+          *len = actual_len+1;
+          
+          block_cache_return (inode->pifs->bc, page);
+          break;
+        }
+      else
+        {
+          // proceed:
+          
+          index -= folder->entries_count;
+          if (cur == folder->extends)
+            PANIC ("Block %"PRDSNu" of filesystem is messed up "
+                   "(cur == folder->extends).", cur);
+          cur = folder->extends;
+          
+          block_cache_return (inode->pifs->bc, page);
+          if (cur == 0)
+            {
+              *len = 0;
+              break;
+            }
+        }
+    }
   
   rwlock_release_read (&inode->pifs->pifs_rwlock);
-  return NULL;
+  return result;
 }
 
 static void

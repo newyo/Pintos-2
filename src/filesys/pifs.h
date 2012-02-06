@@ -90,13 +90,11 @@ struct pifs_inode *pifs_open2 (struct pifs_device  *pifs,
                                struct pifs_inode   *folder);
 void pifs_close (struct pifs_inode *inode);
 
-/**
- * Returns nth filename in directory.   Cost: ceil((index+1) / 24).
- * 
- * \param inode [in, null, folder]
- * \param len [out] When *len >= null, result is not null terminated.
- */
-const char *pifs_readdir (struct pifs_inode *inode, size_t index, off_t *len);
+// *len includes terminator, returns actual length
+bool pifs_readdir (struct pifs_inode *inode,
+                   size_t             index,
+                   off_t             *len,
+                   char              *dest);
 
 off_t pifs_read (struct pifs_inode *inode,
                  size_t             start,

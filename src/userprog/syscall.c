@@ -512,19 +512,16 @@ syscall_handler_SYS_READDIR (_SYSCALL_HANDLER_ARGS)
   lock_acquire (&filesys_lock);
     
   struct pifs_inode *inode = file_get_inode (fd_data->file);
+  
   if (!inode->is_directory || (inode->length <= fd_data->nth_readdir))
     goto end;
     
-  off_t len = 0;
-  const char *read = pifs_readdir (inode, fd_data->nth_readdir++, &len);
-  if (!read)
-    goto end;
-  if (len < 0)
-    len = strlen (read);
-  if (len > READDIR_MAX_LEN)
-    goto end;
-  memcpy (name, read, len+1);
-  if_->eax = true;
+  off_t len = READDIR_MAX_LEN + 1;
+  if (pifs_readdir (inode, fd_data->nth_readdir, &len, name))
+    {
+      ++fd_data->nth_readdir;
+      if_->eax = true;
+    }
   
 end:
   lock_release (&filesys_lock);

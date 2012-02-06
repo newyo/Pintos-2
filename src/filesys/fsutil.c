@@ -24,10 +24,10 @@ fsutil_ls (char **argv UNUSED)
   if (dir == NULL)
     PANIC ("root dir open failed");
     
-  const char *name;
+  char name[32];
   size_t nth = 0;
-  off_t len;
-  while ( (name = pifs_readdir (dir, nth++, &len)) )
+  off_t len = sizeof (name);
+  while (pifs_readdir (dir, nth++, &len, name))
     printf ("%.*s\n", len, name);
     
   pifs_close (dir);
