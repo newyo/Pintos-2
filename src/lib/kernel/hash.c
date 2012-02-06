@@ -9,6 +9,21 @@
 #include "../debug.h"
 #include "threads/malloc.h"
 
+#define MAGIC4(C)                      \
+({                                     \
+  __extension__ const char _c[] = (C); \
+  __extension__ uint32_t _r = 0;       \
+  _r |= _c[3];                         \
+  _r <<= 8;                            \
+  _r |= _c[2];                         \
+  _r <<= 8;                            \
+  _r |= _c[1];                         \
+  _r <<= 8;                            \
+  _r |= _c[0];                         \
+  _r;                                  \
+})
+#define MAGIC_HASH MAGIC4 ("hash")
+
 #define list_elem_to_hash_elem(LIST_ELEM)                       \
         list_entry(LIST_ELEM, struct hash_elem, list_elem)
 
@@ -35,6 +50,7 @@ hash_init (struct hash *h,
   h->hash = hash;
   h->less = less;
   h->aux = aux;
+  h->magic = MAGIC_HASH;
 
   if (h->buckets != NULL) 
     {
@@ -61,6 +77,7 @@ void
 hash_clear (struct hash *h, hash_action_func *destructor) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   
   size_t i;
 
@@ -96,6 +113,7 @@ void
 hash_destroy (struct hash *h, hash_action_func *destructor) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   
   if (destructor != NULL)
     hash_clear (h, destructor);
@@ -111,6 +129,7 @@ hash_insert (struct hash *h, struct hash_elem *new)
 {
   ASSERT (h != NULL);
   ASSERT (new != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   
   struct list *bucket = find_bucket (h, new);
   struct hash_elem *old = find_elem (h, bucket, new);
@@ -129,6 +148,7 @@ struct hash_elem *
 hash_replace (struct hash *h, struct hash_elem *new) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (new != NULL);
   
   struct list *bucket = find_bucket (h, new);
@@ -149,6 +169,7 @@ struct hash_elem *
 hash_find (struct hash *h, struct hash_elem *e) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (e != NULL);
   
   return find_elem (h, find_bucket (h, e), e);
@@ -165,6 +186,7 @@ struct hash_elem *
 hash_delete (struct hash *h, struct hash_elem *e)
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (e != NULL);
   
   struct hash_elem *found = find_elem (h, find_bucket (h, e), e);
@@ -177,6 +199,7 @@ void
 hash_delete_found (struct hash *h, struct hash_elem *found)
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (found != NULL);
   
   remove_elem (h, found);
@@ -192,11 +215,11 @@ hash_delete_found (struct hash *h, struct hash_elem *found)
 void
 hash_apply (struct hash *h, hash_action_func *action) 
 {
-  size_t i;
-  
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (action != NULL);
 
+  size_t i;
   for (i = 0; i < h->bucket_cnt; i++) 
     {
       struct list *bucket = &h->buckets[i];
@@ -231,6 +254,7 @@ void
 hash_first (struct hash_iterator *i, struct hash *h) 
 {
   ASSERT (i != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (h != NULL);
 
   i->hash = h;
@@ -281,6 +305,7 @@ size_t
 hash_size (struct hash *h) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   
   return h->elem_cnt;
 }
@@ -290,6 +315,7 @@ bool
 hash_empty (struct hash *h) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   
   return h->elem_cnt == 0;
 }
@@ -303,7 +329,6 @@ unsigned
 hash_bytes (const void *buf_, size_t size)
 {
   ASSERT (buf_ != NULL);
-  ASSERT (size > 0);
   
   /* Fowler-Noll-Vo 32-bit hash, for bytes. */
   const unsigned char *buf = buf_;
@@ -348,6 +373,7 @@ static struct list *
 find_bucket (struct hash *h, struct hash_elem *e) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (e != NULL);
   
   size_t bucket_idx = h->hash (e, h->aux) & (h->bucket_cnt - 1);
@@ -360,6 +386,7 @@ static struct hash_elem *
 find_elem (struct hash *h, struct list *bucket, struct hash_elem *e) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (bucket != NULL);
   ASSERT (e != NULL);
   
@@ -401,6 +428,7 @@ static void
 rehash (struct hash *h) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   
   size_t old_bucket_cnt, new_bucket_cnt;
   struct list *new_buckets, *old_buckets;
@@ -468,6 +496,7 @@ static void
 insert_elem (struct hash *h, struct list *bucket, struct hash_elem *e) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (bucket != NULL);
   ASSERT (e != NULL);
   
@@ -481,6 +510,7 @@ static void
 remove_elem (struct hash *h, struct hash_elem *e) 
 {
   ASSERT (h != NULL);
+  ASSERT (h->magic == MAGIC_HASH);
   ASSERT (e != NULL);
   
   h->elem_cnt--;
