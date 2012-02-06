@@ -366,7 +366,7 @@ pifs_destroy_sub1 (struct hash_elem *e, void *pifs_)
     }
 }
 
-static void
+static void NO_RETURN
 pifs_destroy_sub2 (struct hash_elem *e UNUSED, void *pifs_ UNUSED)
 {
   PANIC ("PIFS: There were still open inodes after destruction!");
