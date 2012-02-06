@@ -224,7 +224,8 @@ block_cache_return (struct block_cache *bc, struct block_page *page)
   ASSERT (page != NULL);
   ASSERT (page->magic == BC_PAGE_MAGIC);
   
-  BC_DEBUG ("BC return %d (%s) [%u].\n", page->nth, page->dirty ? "DIRTY" : "clean", page->lease_counter);
+  BC_DEBUG ("BC return %d (%s) [%u].\n", page->nth,
+            page->dirty ? "DIRTY" : "clean", page->lease_counter);
   
   ASSERT (page->lease_counter > 0);
   ASSERT (!lru_is_interior (&page->lru_elem));
