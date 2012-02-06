@@ -421,6 +421,8 @@ thread_exit (void)
   ASSERT (!intr_context ());
   struct thread *t = thread_current ();
   
+  //printf (">>> Exit: %u (%s)\n", t->tid, t->name);
+  
   intr_disable ();
   list_remove (&t->allelem);
   

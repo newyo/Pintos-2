@@ -11,6 +11,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "threads/interrupt.h"
+#include "userprog/process.h"
 
 #define PIFS_NAME_LENGTH 16
 
@@ -220,7 +221,6 @@ pifs_deletor_fun (void *pifs_)
         
       // proceed:
         
-      ASSERT (inode != NULL);
       ASSERT (inode->pifs == pifs);
       
       rwlock_acquire_write (&pifs->pifs_rwlock);
@@ -352,13 +352,51 @@ pifs_init (struct pifs_device *pifs, struct block_cache *bc)
   return true;
 }
 
+static void
+pifs_destroy_sub1 (struct hash_elem *e, void *pifs_)
+{
+  struct pifs_device *pifs = pifs_;
+  struct pifs_inode *ee = hash_entry (e, struct pifs_inode, elem);
+  ASSERT (ee->pifs == pifs);
+  if (ee->open_count > 0)
+    {
+      PIFS_DEBUG ("PIFS: force closing inode %u\n", ee->sector);
+      ee->open_count = 1;
+      pifs_close (ee);
+    }
+}
+
+static void
+pifs_destroy_sub2 (struct hash_elem *e UNUSED, void *pifs_ UNUSED)
+{
+  PANIC ("PIFS: There were still open inodes after destruction!");
+}
+
 void
 pifs_destroy (struct pifs_device *pifs)
 {
   ASSERT (pifs != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
-  // TODO
+  // close all open inodes:
+  
+  intr_disable ();
+  hash_apply (&pifs->open_inodes, &pifs_destroy_sub1);
+  intr_enable ();
+  
+  // tell deletor to shut down:
+  
+  intr_disable ();
+  struct pifs_deletor_item *item = malloc (sizeof (*item));
+  memset (item, 0, sizeof (*item));
+  list_push_back (&pifs->deletor_list, &item->elem);
+  sema_up (&pifs->deletor_sema);
+  intr_enable ();
+  
+  // destroy the pifs_device:
+  
+  process_wait (pifs->deletor_thread);
+  hash_destroy (&pifs->open_inodes, &pifs_destroy_sub2);
 }
 
 static inline struct pifs_header *
@@ -1159,6 +1197,7 @@ pifs_unmark_blocks (struct pifs_device *pifs,
   while (i != end)
     {
       // TODO
+      break;
     }
 }
 

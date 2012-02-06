@@ -42,11 +42,16 @@ filesys_init (bool format)
 
   if (format) 
     {
+      printf ("Formatting filesystem with PIFS.\n");
       if (!pifs_format (&fs_pifs))
         PANIC ("Your device is either too big or too small.");
     }
-  else if (!pifs_sanity_check (&fs_pifs))
-    PANIC ("PIFS's basic sanity check failed.");
+  else
+    {
+    printf ("Using a PIFS filesystem.\n");
+    if (!pifs_sanity_check (&fs_pifs))
+      PANIC ("PIFS's basic sanity check failed.");
+  }
     
   printf ("Initialized filesystem.\n");
   fs_initialized = true;
