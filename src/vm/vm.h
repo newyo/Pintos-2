@@ -5,7 +5,6 @@
 #include <hash.h>
 #include "lru.h"
 #include "threads/thread.h"
-#include "filesys/file.h"
 
 #define MIN_ALLOC_ADDR ((void *) (1<<16))
 
@@ -73,7 +72,9 @@ enum vm_ensure_result vm_ensure (struct thread  *t,
                                  void           *user_addr,
                                  void          **kpage_);
 
-mapid_t vm_mmap_open (struct thread *t, void *user_addr, struct file *file);
+mapid_t vm_mmap_open (struct thread     *t,
+                      void              *user_addr,
+                      struct pifs_inode *inode);
 bool vm_mmap_close (struct thread *t, mapid_t map);
 
 enum vm_is_readonly_result
@@ -104,7 +105,7 @@ vm_ensure_group_is_readonly (struct vm_ensure_group *g, void *user_addr);
 
 void *vm_palloc (void);
 
-mapid_t vm_mmap_acquire (struct thread *owner, struct file *file);
+mapid_t vm_mmap_acquire (struct thread *owner, struct pifs_inode *inode);
 bool vm_mmap_dispose (struct thread *owner, mapid_t id);
 void vm_mmap_dispose2 (struct mmap_alias *alias);
 void vm_mmap_dispose_real (struct vm_page *ee);

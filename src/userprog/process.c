@@ -441,11 +441,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
 
   /* Allocate and activate page directory. */
+  vm_init_thread (t);
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL)
     goto done;
   process_activate ();
-  vm_init_thread (t);
 
   /* Read and verify executable header. */
   struct Elf32_Ehdr ehdr;

@@ -1081,16 +1081,16 @@ vm_ensure_group_is_readonly (struct vm_ensure_group *g, void *user_addr)
 }
 
 mapid_t
-vm_mmap_acquire (struct thread *owner, struct file *file)
+vm_mmap_acquire (struct thread *owner, struct pifs_inode *inode)
 {
   ASSERT (owner != NULL);
-  ASSERT (file != NULL);
+  ASSERT (inode != NULL);
   ASSERT (intr_get_level () == INTR_ON);
   
   enum intr_level old_level;
   lock_acquire2 (&vm_lock, &old_level);
   
-  mapid_t result = mmap_alias_acquire (owner, file);
+  mapid_t result = mmap_alias_acquire (owner, inode);
   
   lock_release (&vm_lock);
   intr_set_level (old_level);

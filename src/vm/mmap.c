@@ -61,7 +61,7 @@ mmap_write_kpage (struct mmap_kpage *page)
   size_t start = PGSIZE * page->page_num;
   off_t len = r->length >= start+PGSIZE ? PGSIZE : r->length - start;
   off_t wrote UNUSED;
-  wrote = file_write_at (r->file, page->kernel_page->user_addr, len, start);
+  wrote = pifs_write (r->inode, start, len, page->kernel_page->user_addr);
   ASSERT (wrote == len);
   
   lock_release (&mmap_filesys_lock);
@@ -86,14 +86,14 @@ mmap_writer_read (struct mmap_kpage *page)
   if (r->length >= start+PGSIZE)
     {
       off_t read UNUSED;
-      read = file_read_at (r->file, user_addr, PGSIZE, start);
+      read = pifs_read (r->inode, start, PGSIZE, user_addr);
       result = read == PGSIZE;
     }
   else
     {
       off_t len = r->length >= start+PGSIZE ? PGSIZE : r->length - start;
       off_t read UNUSED;
-      read = file_read_at (r->file, user_addr, len, start);
+      read = pifs_read (r->inode, start, len, user_addr);
       result = read == len;
       memset (user_addr+len, 0, PGSIZE-len);
     }
@@ -131,16 +131,13 @@ static unsigned
 mmap_region_hash (const struct hash_elem *e, void *aux UNUSED)
 {
   typedef char _CASSERT[0 - !(sizeof (unsigned) ==
-                              sizeof (struct pifs_inode*))];
+                              sizeof (struct pifs_inode *))];
   ASSERT (e != NULL);
   
   struct mmap_region *ee = hash_entry (e, struct mmap_region, regions_elem);
   ASSERT (ee->magic == REGION_MAGIC);
-  ASSERT (ee->file != NULL);
-  
-  struct pifs_inode *result = file_get_inode (ee->file);
-  ASSERT (result != NULL);
-  return (unsigned) result;
+  ASSERT (ee->inode != NULL);
+  return (unsigned) ee->inode;
 }
 
 static bool
@@ -282,7 +279,7 @@ mmap_alias_dispose (struct thread *owner, struct mmap_alias *alias)
         PANIC ("Unreferenced mmap region was not empty.");
       }
       hash_destroy (&alias->region->kpages, &panic_if_not_empty);
-      file_close (alias->region->file);
+      pifs_close (alias->region->inode);
       hash_delete (&mmap_regions, &alias->region->regions_elem);
       free (alias->region);
     }
@@ -378,6 +375,7 @@ mmap_retreive_alias  (struct thread *owner, mapid_t id)
   
   struct mmap_alias key;
   memset (&key, 0, sizeof (key));
+  key.magic = ALIAS_MAGIC;
   key.id = id;
   
   struct hash_elem *e = hash_find (&owner->mmap_aliases, &key.aliases_elem);
@@ -399,16 +397,16 @@ mmap_alias_pages_count (struct mmap_alias *alias)
 }
 
 mapid_t
-mmap_alias_acquire (struct thread *owner, struct file *file)
+mmap_alias_acquire (struct thread *owner, struct pifs_inode *inode)
 {
   ASSERT (owner != NULL);
-  ASSERT (file != NULL);
+  ASSERT (inode != NULL);
   ASSERT (intr_get_level () == INTR_OFF);
   
   struct mmap_region key;
   memset (&key, 0, sizeof (key));
   key.magic = REGION_MAGIC;
-  key.file = file;
+  key.inode = inode;
   
   struct hash_elem *e_region = hash_find (&mmap_regions, &key.regions_elem);
   struct mmap_region *region;
@@ -425,13 +423,9 @@ mmap_alias_acquire (struct thread *owner, struct file *file)
           return MAP_FAILED;
         }
       region->magic = REGION_MAGIC;
-      region->file = file_reopen (file);
-      if (region->file == NULL)
-        {
-          free (region);
-          return MAP_FAILED;
-        }
-      region->length = file_length (region->file);
+      ++inode->open_count;
+      region->inode = inode;
+      region->length = inode->length; // TODO: remove member?
       list_init (&region->aliases);
     }
     

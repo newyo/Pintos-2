@@ -910,19 +910,19 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->children);
   sema_init (&t->wait_sema, 0);
   
+  struct thread *current_thread = running_thread ();
   if (!thread_mlfqs)
     {
       t->priority = priority;
     }
   else if (t != idle_thread)
     {
-      struct thread *current_thread = running_thread ();
       t->priority = current_thread->priority;
       t->nice = current_thread->nice;
     }
     
 #ifdef FILESYS
-  struct pifs_inode *cwd = running_thread ()->cwd;
+  struct pifs_inode *cwd = current_thread->cwd;
   if (cwd != NULL)
     {
       ++cwd->open_count;

@@ -424,7 +424,7 @@ syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
       return;
     }
   
-  mapid_t id = vm_mmap_acquire (g->thread, fd_data->file);
+  mapid_t id = vm_mmap_acquire (g->thread, file_get_inode (fd_data->file));
   if (id == MAP_FAILED || vm_mmap_pages (g->thread, id, base))
     if_->eax = id;
   else
@@ -470,7 +470,7 @@ syscall_handler_SYS_CHDIR (_SYSCALL_HANDLER_ARGS)
     {
       struct thread *t = thread_current ();
       pifs_close (t->cwd);
-      t->cwd = new_cwd_file->inode;
+      t->cwd = file_get_inode (new_cwd_file);
       __sync_fetch_and_add(&t->cwd->open_count, 1);
       file_close (new_cwd_file);
     }
@@ -538,7 +538,7 @@ syscall_handler_SYS_ISDIR (_SYSCALL_HANDLER_ARGS)
     kill_segv (g);
     
   vm_ensure_group_destroy (g);
-  if_->eax = fd_data->file->inode->is_directory;
+  if_->eax = file_get_inode (fd_data->file)->is_directory;
 }
 
 static void

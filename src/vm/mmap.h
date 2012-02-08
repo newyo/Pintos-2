@@ -5,19 +5,20 @@
 #include <hash.h>
 #include <list.h>
 #include "threads/thread.h"
-#include "filesys/file.h"
 #include "vm/vm.h"
+
+struct pifs_inode;
 
 struct mmap_region
 {
-  struct file      *file;
-  size_t            length;
-  struct list       aliases;
-  struct hash       kpages;
+  struct pifs_inode *inode;
+  size_t             length;
+  struct list        aliases;
+  struct hash        kpages;
   
-  struct hash_elem  regions_elem;
+  struct hash_elem   regions_elem;
   
-  uint32_t          magic;
+  uint32_t           magic;
 };
 
 struct mmap_alias
@@ -59,7 +60,7 @@ void mmap_init (void);
 void mmap_init_thread (struct thread *owner);
 void mmap_clean (struct thread *owner);
 
-mapid_t mmap_alias_acquire (struct thread *owner, struct file *file);
+mapid_t mmap_alias_acquire (struct thread *owner, struct pifs_inode *inode);
 void mmap_alias_dispose (struct thread *owner, struct mmap_alias *alias);
 
 struct mmap_upage *mmap_retreive_upage (struct vm_page *vm_page);

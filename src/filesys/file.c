@@ -5,14 +5,26 @@
 
 #define FILE_MAGIC (('F' << 24) + ('I' << 16) + ('L' << 8) + 'E')
 
+struct file 
+  {
+    uint32_t           magic;
+    
+    struct pifs_inode *inode;      /* File's inode. */
+    off_t              pos;        /* Current position. */
+    bool               deny_write; /* Has file_deny_write() been called? */
+  };
+
 /* Opens a file for the given INODE, of which it takes ownership,
    and returns the new file.  Returns a null pointer if an
    allocation fails or if INODE is null. */
 struct file *
 file_open (struct pifs_inode *inode) 
 {
+  if (inode == NULL)
+    return NULL;
+    
   struct file *file = calloc (1, sizeof *file);
-  if (inode != NULL && file != NULL)
+  if (file != NULL)
     {
       file->magic = FILE_MAGIC;
       file->inode = inode;
@@ -59,7 +71,7 @@ struct pifs_inode *
 file_get_inode (struct file *file) 
 {
   ASSERT (file != NULL);
-  ASSERT (file->magic == FILE_MAGIC);
+  //ASSERT (file->magic == FILE_MAGIC);
   
   return file->inode;
 }
