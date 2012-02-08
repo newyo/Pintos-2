@@ -1,0 +1,2184 @@
+TOTAL TESTING SCORE: 87.6%
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+SUMMARY BY TEST SET
+
+Test Set                                      Pts Max  % Ttl  % Max
+--------------------------------------------- --- --- ------ ------
+tests/filesys/extended/Rubric.functionality    24/ 34  21.2%/ 30.0%
+tests/filesys/extended/Rubric.robustness        7/ 10  10.5%/ 15.0%
+tests/filesys/extended/Rubric.persistence      20/ 23  17.4%/ 20.0%
+tests/filesys/base/Rubric                      30/ 30  20.0%/ 20.0%
+tests/userprog/Rubric.functionality            98/108   9.1%/ 10.0%
+tests/userprog/Rubric.robustness               88/ 88   5.0%/  5.0%
+tests/vm/Rubric.functionality                  22/ 55   3.2%/  8.0%
+tests/vm/Rubric.robustness                     18/ 28   1.3%/  2.0%
+--------------------------------------------- --- --- ------ ------
+Total                                                  87.6%/110.0%
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+SUMMARY OF INDIVIDUAL TESTS
+
+Functionality of extended file system (tests/filesys/extended/Rubric.functionality):
+	- Test directory support.
+	     1/ 1 tests/filesys/extended/dir-mkdir
+	     3/ 3 tests/filesys/extended/dir-mk-tree
+
+	     1/ 1 tests/filesys/extended/dir-rmdir
+	     3/ 3 tests/filesys/extended/dir-rm-tree
+
+	  ** 0/ 5 tests/filesys/extended/dir-vine
+
+	- Test file growth.
+	     1/ 1 tests/filesys/extended/grow-create
+	     1/ 1 tests/filesys/extended/grow-seq-sm
+	     3/ 3 tests/filesys/extended/grow-seq-lg
+	     3/ 3 tests/filesys/extended/grow-sparse
+	     3/ 3 tests/filesys/extended/grow-two-files
+	     1/ 1 tests/filesys/extended/grow-tell
+	     1/ 1 tests/filesys/extended/grow-file-size
+
+	- Test directory growth.
+	     1/ 1 tests/filesys/extended/grow-dir-lg
+	     1/ 1 tests/filesys/extended/grow-root-sm
+	     1/ 1 tests/filesys/extended/grow-root-lg
+
+	- Test writing from multiple processes.
+	  ** 0/ 5 tests/filesys/extended/syn-rw
+
+	- Section summary.
+	     14/ 16 tests passed
+	     24/ 34 points subtotal
+
+Robustness of file system (tests/filesys/extended/Rubric.robustness):
+	     1/ 1 tests/filesys/extended/dir-empty-name
+	     1/ 1 tests/filesys/extended/dir-open
+	     1/ 1 tests/filesys/extended/dir-over-file
+	     1/ 1 tests/filesys/extended/dir-under-file
+
+	  ** 0/ 3 tests/filesys/extended/dir-rm-cwd
+	     2/ 2 tests/filesys/extended/dir-rm-parent
+	     1/ 1 tests/filesys/extended/dir-rm-root
+
+	- Section summary.
+	      6/  7 tests passed
+	      7/ 10 points subtotal
+
+Persistence of file system (tests/filesys/extended/Rubric.persistence):
+	     1/ 1 tests/filesys/extended/dir-empty-name-persistence
+	     1/ 1 tests/filesys/extended/dir-mk-tree-persistence
+	     1/ 1 tests/filesys/extended/dir-mkdir-persistence
+	     1/ 1 tests/filesys/extended/dir-open-persistence
+	     1/ 1 tests/filesys/extended/dir-over-file-persistence
+	  ** 0/ 1 tests/filesys/extended/dir-rm-cwd-persistence
+	     1/ 1 tests/filesys/extended/dir-rm-parent-persistence
+	     1/ 1 tests/filesys/extended/dir-rm-root-persistence
+	     1/ 1 tests/filesys/extended/dir-rm-tree-persistence
+	     1/ 1 tests/filesys/extended/dir-rmdir-persistence
+	     1/ 1 tests/filesys/extended/dir-under-file-persistence
+	  ** 0/ 1 tests/filesys/extended/dir-vine-persistence
+	     1/ 1 tests/filesys/extended/grow-create-persistence
+	     1/ 1 tests/filesys/extended/grow-dir-lg-persistence
+	     1/ 1 tests/filesys/extended/grow-file-size-persistence
+	     1/ 1 tests/filesys/extended/grow-root-lg-persistence
+	     1/ 1 tests/filesys/extended/grow-root-sm-persistence
+	     1/ 1 tests/filesys/extended/grow-seq-lg-persistence
+	     1/ 1 tests/filesys/extended/grow-seq-sm-persistence
+	     1/ 1 tests/filesys/extended/grow-sparse-persistence
+	     1/ 1 tests/filesys/extended/grow-tell-persistence
+	     1/ 1 tests/filesys/extended/grow-two-files-persistence
+	  ** 0/ 1 tests/filesys/extended/syn-rw-persistence
+
+	- Section summary.
+	     20/ 23 tests passed
+	     20/ 23 points subtotal
+
+Functionality of base file system (tests/filesys/base/Rubric):
+	- Test basic support for small files.
+	     1/ 1 tests/filesys/base/sm-create
+	     2/ 2 tests/filesys/base/sm-full
+	     2/ 2 tests/filesys/base/sm-random
+	     2/ 2 tests/filesys/base/sm-seq-block
+	     3/ 3 tests/filesys/base/sm-seq-random
+
+	- Test basic support for large files.
+	     1/ 1 tests/filesys/base/lg-create
+	     2/ 2 tests/filesys/base/lg-full
+	     2/ 2 tests/filesys/base/lg-random
+	     2/ 2 tests/filesys/base/lg-seq-block
+	     3/ 3 tests/filesys/base/lg-seq-random
+
+	- Test synchronized multiprogram access to files.
+	     4/ 4 tests/filesys/base/syn-read
+	     4/ 4 tests/filesys/base/syn-write
+	     2/ 2 tests/filesys/base/syn-remove
+
+	- Section summary.
+	     13/ 13 tests passed
+	     30/ 30 points subtotal
+
+Functionality of system calls (tests/userprog/Rubric.functionality):
+	- Test argument passing on Pintos command line.
+	     3/ 3 tests/userprog/args-none
+	     3/ 3 tests/userprog/args-single
+	     3/ 3 tests/userprog/args-multiple
+	     3/ 3 tests/userprog/args-many
+	     3/ 3 tests/userprog/args-dbl-space
+
+	- Test "create" system call.
+	     3/ 3 tests/userprog/create-empty
+	     3/ 3 tests/userprog/create-long
+	     3/ 3 tests/userprog/create-normal
+	     3/ 3 tests/userprog/create-exists
+
+	- Test "open" system call.
+	     3/ 3 tests/userprog/open-missing
+	     3/ 3 tests/userprog/open-normal
+	     3/ 3 tests/userprog/open-twice
+
+	- Test "read" system call.
+	     3/ 3 tests/userprog/read-normal
+	     3/ 3 tests/userprog/read-zero
+
+	- Test "write" system call.
+	     3/ 3 tests/userprog/write-normal
+	     3/ 3 tests/userprog/write-zero
+
+	- Test "close" system call.
+	     3/ 3 tests/userprog/close-normal
+
+	- Test "exec" system call.
+	     5/ 5 tests/userprog/exec-once
+	     5/ 5 tests/userprog/exec-multiple
+	     5/ 5 tests/userprog/exec-arg
+
+	- Test "wait" system call.
+	  ** 0/ 5 tests/userprog/wait-simple
+	  ** 0/ 5 tests/userprog/wait-twice
+
+	- Test "exit" system call.
+	     5/ 5 tests/userprog/exit
+
+	- Test "halt" system call.
+	     3/ 3 tests/userprog/halt
+
+	- Test recursive execution of user programs.
+	    15/15 tests/userprog/multi-recurse
+
+	- Test read-only executable feature.
+	     3/ 3 tests/userprog/rox-simple
+	     3/ 3 tests/userprog/rox-child
+	     3/ 3 tests/userprog/rox-multichild
+
+	- Section summary.
+	     26/ 28 tests passed
+	     98/108 points subtotal
+
+Robustness of system calls (tests/userprog/Rubric.robustness):
+	- Test robustness of file descriptor handling.
+	     2/ 2 tests/userprog/close-stdin
+	     2/ 2 tests/userprog/close-stdout
+	     2/ 2 tests/userprog/close-bad-fd
+	     2/ 2 tests/userprog/close-twice
+	     2/ 2 tests/userprog/read-bad-fd
+	     2/ 2 tests/userprog/read-stdout
+	     2/ 2 tests/userprog/write-bad-fd
+	     2/ 2 tests/userprog/write-stdin
+	     2/ 2 tests/userprog/multi-child-fd
+
+	- Test robustness of pointer handling.
+	     3/ 3 tests/userprog/create-bad-ptr
+	     3/ 3 tests/userprog/exec-bad-ptr
+	     3/ 3 tests/userprog/open-bad-ptr
+	     3/ 3 tests/userprog/read-bad-ptr
+	     3/ 3 tests/userprog/write-bad-ptr
+
+	- Test robustness of buffer copying across page boundaries.
+	     3/ 3 tests/userprog/create-bound
+	     3/ 3 tests/userprog/open-boundary
+	     3/ 3 tests/userprog/read-boundary
+	     3/ 3 tests/userprog/write-boundary
+
+	- Test handling of null pointer and empty strings.
+	     2/ 2 tests/userprog/create-null
+	     2/ 2 tests/userprog/open-null
+	     2/ 2 tests/userprog/open-empty
+
+	- Test robustness of system call implementation.
+	     3/ 3 tests/userprog/sc-bad-arg
+	     3/ 3 tests/userprog/sc-bad-sp
+	     5/ 5 tests/userprog/sc-boundary
+	     5/ 5 tests/userprog/sc-boundary-2
+
+	- Test robustness of "exec" and "wait" system calls.
+	     5/ 5 tests/userprog/exec-missing
+	     5/ 5 tests/userprog/wait-bad-pid
+	     5/ 5 tests/userprog/wait-killed
+
+	- Test robustness of exception handling.
+	     1/ 1 tests/userprog/bad-read
+	     1/ 1 tests/userprog/bad-write
+	     1/ 1 tests/userprog/bad-jump
+	     1/ 1 tests/userprog/bad-read2
+	     1/ 1 tests/userprog/bad-write2
+	     1/ 1 tests/userprog/bad-jump2
+
+	- Section summary.
+	     34/ 34 tests passed
+	     88/ 88 points subtotal
+
+Functionality of virtual memory subsystem (tests/vm/Rubric.functionality):
+	- Test stack growth.
+	     3/ 3 tests/vm/pt-grow-stack
+	     3/ 3 tests/vm/pt-grow-stk-sc
+	     3/ 3 tests/vm/pt-big-stk-obj
+	     3/ 3 tests/vm/pt-grow-pusha
+
+	- Test paging behavior.
+	     3/ 3 tests/vm/page-linear
+	  ** 0/ 3 tests/vm/page-parallel
+	     3/ 3 tests/vm/page-shuffle
+	     4/ 4 tests/vm/page-merge-seq
+	  ** 0/ 4 tests/vm/page-merge-par
+	  ** 0/ 4 tests/vm/page-merge-mm
+	  ** 0/ 4 tests/vm/page-merge-stk
+
+	- Test "mmap" system call.
+	  ** 0/ 2 tests/vm/mmap-read
+	  ** 0/ 2 tests/vm/mmap-write
+	  ** 0/ 2 tests/vm/mmap-shuffle
+
+	  ** 0/ 2 tests/vm/mmap-twice
+
+	  ** 0/ 2 tests/vm/mmap-unmap
+	  ** 0/ 1 tests/vm/mmap-exit
+
+	  ** 0/ 3 tests/vm/mmap-clean
+
+	  ** 0/ 2 tests/vm/mmap-close
+	  ** 0/ 2 tests/vm/mmap-remove
+
+	- Section summary.
+	      7/ 20 tests passed
+	     22/ 55 points subtotal
+
+Robustness of virtual memory subsystem (tests/vm/Rubric.robustness):
+	- Test robustness of page table support.
+	     2/ 2 tests/vm/pt-bad-addr
+	     3/ 3 tests/vm/pt-bad-read
+	     2/ 2 tests/vm/pt-write-code
+	     3/ 3 tests/vm/pt-write-code2
+	     4/ 4 tests/vm/pt-grow-bad
+
+	- Test robustness of "mmap" system call.
+	     1/ 1 tests/vm/mmap-bad-fd
+	  ** 0/ 1 tests/vm/mmap-inherit
+	     1/ 1 tests/vm/mmap-null
+	  ** 0/ 1 tests/vm/mmap-zero
+
+	     2/ 2 tests/vm/mmap-misalign
+
+	  ** 0/ 2 tests/vm/mmap-over-code
+	  ** 0/ 2 tests/vm/mmap-over-data
+	  ** 0/ 2 tests/vm/mmap-over-stk
+	  ** 0/ 2 tests/vm/mmap-overlap
+
+
+	- Section summary.
+	      8/ 14 tests passed
+	     18/ 28 points subtotal
+
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/filesys/extended/dir-vine FAILURE:
+
+run: created files and directories only to level 150: FAILED
+
+OUTPUT FROM tests/filesys/extended/dir-vine:
+
+Copying tests/filesys/extended/dir-vine to scratch partition...
+Copying tests/filesys/extended/tar to scratch partition...
+qemu -hda /dev/shm/Fhd9qC_htt.dsk -hdb /dev/shm/pintos-tmp.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run dir-vine
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 9,072 sectors (4 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 517 sectors (258 kB), Pintos scratch (22)
+hda3: 8,192 sectors (4 MB), Pintos swap (23)
+hdb: 5,040 sectors (2 MB), model "QM00002", serial "QEMU HARDDISK"
+hdb1: 4,096 sectors (2 MB), Pintos file system (21)
+filesys: using hdb1
+scratch: using hda2
+swap: using hda3
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'dir-vine' into the file system...
+Putting 'tar' into the file system...
+Erasing ustar archive...
+Executing 'dir-vine':
+(dir-vine) begin
+(dir-vine) creating many levels of files and directories...
+(dir-vine) created files and directories only to level 150: FAILED
+dir-vine: exit(1)
+Execution of 'dir-vine' complete.
+Filesystem has shut down.
+Timer: 123 ticks
+Thread: 30 idle ticks, 47 kernel ticks, 46 user ticks
+hdb1 (filesys): 183 reads, 979 writes
+hda2 (scratch): 516 reads, 2 writes
+hda3 (swap): 0 reads, 0 writes
+Console: 1347 characters output
+Keyboard: 0 keys pressed
+Exception: 1 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/filesys/extended/syn-rw FAILURE:
+
+run: 16 bytes read starting at offset 1520 in "logfile" differ from expected: FAILED
+
+OUTPUT FROM tests/filesys/extended/syn-rw:
+
+Copying tests/filesys/extended/syn-rw to scratch partition...
+Copying tests/filesys/extended/tar to scratch partition...
+Copying tests/filesys/extended/child-syn-rw to scratch partition...
+qemu -hda /dev/shm/FiED9mwJTV.dsk -hdb /dev/shm/pintos-tmp.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run syn-rw
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  104,755,200 loops/s.
+hda: 10,080 sectors (4 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 764 sectors (382 kB), Pintos scratch (22)
+hda3: 8,192 sectors (4 MB), Pintos swap (23)
+hdb: 5,040 sectors (2 MB), model "QM00002", serial "QEMU HARDDISK"
+hdb1: 4,096 sectors (2 MB), Pintos file system (21)
+filesys: using hdb1
+scratch: using hda2
+swap: using hda3
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'syn-rw' into the file system...
+Putting 'tar' into the file system...
+Putting 'child-syn-rw' into the file system...
+Erasing ustar archive...
+Executing 'syn-rw':
+(syn-rw) begin
+(syn-rw) create "logfile"
+(syn-rw) open "logfile"
+(syn-rw) exec child 1 of 4: "child-syn-rw 0"
+(syn-rw) exec child 2 of 4: "child-syn-rw 1"
+(syn-rw) exec child 3 of 4: "child-syn-rw 2"
+(syn-rw) exec child 4 of 4: "child-syn-rw 3"
+(child-syn-rw) 16 bytes read starting at offset 1520 in "logfile" differ from expected.
+(child-syn-rw) Data actually read:
+000005f0  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00 |................|
+(child-syn-rw) Expected data:
+000005f0  b8 21 03 78 b5 32 bd 39-da 32 69 7c 8e 32 d1 b3 |.!.x.2.9.2i|.2..|
+(child-syn-rw) 16 bytes read starting at offset 1520 in "logfile" differ from expected: FAILED
+child-syn-rw: exit(1)
+(child-syn-rw) 16 bytes read starting at offset 1520 in "logfile" differ from expected.
+(child-syn-rw) Data actually read:
+000005f0  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00 |................|
+(child-syn-rw) Expected data:
+000005f0  b8 21 03 78 b5 32 bd 39-da 32 69 7c 8e 32 d1 b3 |.!.x.2.9.2i|.2..|
+(child-syn-rw) 16 bytes read starting at offset 1520 in "logfile" differ from expected: FAILED
+child-syn-rw: exit(1)
+(child-syn-rw) 16 bytes read starting at offset 1520 in "logfile" differ from expected.
+(child-syn-rw) Data actually read:
+000005f0  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00 |................|
+(child-syn-rw) Expected data:
+000005f0  b8 21 03 78 b5 32 bd 39-da 32 69 7c 8e 32 d1 b3 |.!.x.2.9.2i|.2..|
+(child-syn-rw) 16 bytes read starting at offset 1520 in "logfile" differ from expected: FAILED
+child-syn-rw: exit(1)
+(child-syn-rw) 16 bytes read starting at offset 1520 in "logfile" differ from expected.
+(child-syn-rw) Data actually read:
+000005f0  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00 |................|
+(child-syn-rw) Expected data:
+000005f0  b8 21 03 78 b5 32 bd 39-da 32 69 7c 8e 32 d1 b3 |.!.x.2.9.2i|.2..|
+(child-syn-rw) 16 bytes read starting at offset 1520 in "logfile" differ from expected: FAILED
+child-syn-rw: exit(1)
+(syn-rw) wait for child 1 of 4 returned 1 (expected 0)
+(syn-rw) wait for child 1 of 4 returned 1 (expected 0): FAILED
+syn-rw: exit(1)
+Execution of 'syn-rw' complete.
+Filesystem has shut down.
+Timer: 106 ticks
+Thread: 30 idle ticks, 54 kernel ticks, 22 user ticks
+hdb1 (filesys): 61 reads, 785 writes
+hda2 (scratch): 763 reads, 2 writes
+hda3 (swap): 0 reads, 0 writes
+Console: 3299 characters output
+Keyboard: 0 keys pressed
+Exception: 13 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/filesys/extended/dir-rm-cwd FAILURE:
+
+run: open "." (must fail): FAILED
+
+OUTPUT FROM tests/filesys/extended/dir-rm-cwd:
+
+Copying tests/filesys/extended/dir-rm-cwd to scratch partition...
+Copying tests/filesys/extended/tar to scratch partition...
+qemu -hda /dev/shm/QJ88OMiZbY.dsk -hdb /dev/shm/pintos-tmp.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run dir-rm-cwd
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 9,072 sectors (4 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 514 sectors (257 kB), Pintos scratch (22)
+hda3: 8,192 sectors (4 MB), Pintos swap (23)
+hdb: 5,040 sectors (2 MB), model "QM00002", serial "QEMU HARDDISK"
+hdb1: 4,096 sectors (2 MB), Pintos file system (21)
+filesys: using hdb1
+scratch: using hda2
+swap: using hda3
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'dir-rm-cwd' into the file system...
+Putting 'tar' into the file system...
+Erasing ustar archive...
+Executing 'dir-rm-cwd':
+(dir-rm-cwd) begin
+(dir-rm-cwd) open "/"
+(dir-rm-cwd) mkdir "a"
+(dir-rm-cwd) open "/a"
+(dir-rm-cwd) verify "/a" is empty
+(dir-rm-cwd) "/" and "/a" must have different inumbers
+(dir-rm-cwd) chdir "a"
+(dir-rm-cwd) try to remove "/a"
+(dir-rm-cwd) remove successful
+(dir-rm-cwd) open "/a" (must fail)
+(dir-rm-cwd) open "." (must fail)
+(dir-rm-cwd) open "." (must fail): FAILED
+dir-rm-cwd: exit(1)
+Execution of 'dir-rm-cwd' complete.
+Filesystem has shut down.
+Timer: 81 ticks
+Thread: 30 idle ticks, 49 kernel ticks, 2 user ticks
+hdb1 (filesys): 30 reads, 526 writes
+hda2 (scratch): 513 reads, 2 writes
+hda3 (swap): 0 reads, 0 writes
+Console: 1583 characters output
+Keyboard: 0 keys pressed
+Exception: 1 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/filesys/extended/dir-rm-cwd-persistence FAILURE:
+
+Prerequisite test tests/filesys/extended/dir-rm-cwd failed.
+
+OUTPUT FROM tests/filesys/extended/dir-rm-cwd-persistence:
+
+qemu -hda /dev/shm/9STFlU3Qkn.dsk -hdb /dev/shm/pintos-tmp.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q run 'tar fs.tar /' append fs.tar
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 11,088 sectors (5 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 2,048 sectors (1 MB), Pintos scratch (22)
+hda3: 8,192 sectors (4 MB), Pintos swap (23)
+hdb: 5,040 sectors (2 MB), model "QM00002", serial "QEMU HARDDISK"
+hdb1: 4,096 sectors (2 MB), Pintos file system (21)
+filesys: using hdb1
+scratch: using hda2
+swap: using hda3
+Using a PIFS filesystem.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Executing 'tar fs.tar /':
+tar: exit(0)
+Execution of 'tar fs.tar /' complete.
+Appending 'fs.tar' to ustar archive on scratch device...
+Filesystem has shut down.
+Timer: 115 ticks
+Thread: 30 idle ticks, 39 kernel ticks, 46 user ticks
+hdb1 (filesys): 1060 reads, 519 writes
+hda2 (scratch): 0 reads, 518 writes
+hda3 (swap): 0 reads, 0 writes
+Console: 1095 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+Copying tests/filesys/extended/dir-rm-cwd.tar out of /dev/shm/9STFlU3Qkn.dsk...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/filesys/extended/dir-vine-persistence FAILURE:
+
+Prerequisite test tests/filesys/extended/dir-vine failed.
+
+OUTPUT FROM tests/filesys/extended/dir-vine-persistence:
+
+qemu -hda /dev/shm/KHccNit4tQ.dsk -hdb /dev/shm/pintos-tmp.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q run 'tar fs.tar /' append fs.tar
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 11,088 sectors (5 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 2,048 sectors (1 MB), Pintos scratch (22)
+hda3: 8,192 sectors (4 MB), Pintos swap (23)
+hdb: 5,040 sectors (2 MB), model "QM00002", serial "QEMU HARDDISK"
+hdb1: 4,096 sectors (2 MB), Pintos file system (21)
+filesys: using hdb1
+scratch: using hda2
+swap: using hda3
+Using a PIFS filesystem.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Executing 'tar fs.tar /':
+fs.tar: create failed
+tar: exit(1)
+Execution of 'tar fs.tar /' complete.
+Appending 'fs.tar' to ustar archive on scratch device...
+Kernel PANIC at ../../filesys/fsutil.c:195 in fsutil_append(): fs.tar: open failed
+Call stack: 0xc0029ab4 0xc002f21b 0xc0020503 0xc0020987.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 54 ticks
+Thread: 30 idle ticks, 23 kernel ticks, 1 user ticks
+hdb1 (filesys): 33 reads, 0 writes
+hda2 (scratch): 0 reads, 0 writes
+hda3 (swap): 0 reads, 0 writes
+Console: 1403 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+Copying tests/filesys/extended/dir-vine.tar out of /dev/shm/KHccNit4tQ.dsk...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/filesys/extended/syn-rw-persistence FAILURE:
+
+Prerequisite test tests/filesys/extended/syn-rw failed.
+
+OUTPUT FROM tests/filesys/extended/syn-rw-persistence:
+
+qemu -hda /dev/shm/zmm5qpOduy.dsk -hdb /dev/shm/pintos-tmp.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q run 'tar fs.tar /' append fs.tar
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 11,088 sectors (5 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 2,048 sectors (1 MB), Pintos scratch (22)
+hda3: 8,192 sectors (4 MB), Pintos swap (23)
+hdb: 5,040 sectors (2 MB), model "QM00002", serial "QEMU HARDDISK"
+hdb1: 4,096 sectors (2 MB), Pintos file system (21)
+filesys: using hdb1
+scratch: using hda2
+swap: using hda3
+Using a PIFS filesystem.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Executing 'tar fs.tar /':
+tar: exit(0)
+Execution of 'tar fs.tar /' complete.
+Appending 'fs.tar' to ustar archive on scratch device...
+Filesystem has shut down.
+Timer: 147 ticks
+Thread: 30 idle ticks, 47 kernel ticks, 70 user ticks
+hdb1 (filesys): 1580 reads, 779 writes
+hda2 (scratch): 0 reads, 777 writes
+hda3 (swap): 0 reads, 0 writes
+Console: 1095 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+Copying tests/filesys/extended/syn-rw.tar out of /dev/shm/zmm5qpOduy.dsk...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/userprog/wait-simple FAILURE:
+
+Test output failed to match any acceptable form.
+
+Acceptable output:
+  (wait-simple) begin
+  (child-simple) run
+  child-simple: exit(81)
+  (wait-simple) wait(exec()) = 81
+  (wait-simple) end
+  wait-simple: exit(0)
+Differences in `diff -u' format:
+  (wait-simple) begin
+  (child-simple) run
+  child-simple: exit(81)
+- (wait-simple) wait(exec()) = 81
++ (wait-simple) wait(exec()) = -1
+  (wait-simple) end
+  wait-simple: exit(0)
+
+OUTPUT FROM tests/userprog/wait-simple:
+
+Copying tests/userprog/wait-simple to scratch partition...
+Copying tests/userprog/child-simple to scratch partition...
+qemu -hda /dev/shm/UzFOTEsjRr.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run wait-simple
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 450 sectors (225 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'wait-simple' into the file system...
+Putting 'child-simple' into the file system...
+Erasing ustar archive...
+Executing 'wait-simple':
+(wait-simple) begin
+(child-simple) run
+child-simple: exit(81)
+(wait-simple) wait(exec()) = -1
+(wait-simple) end
+wait-simple: exit(0)
+Execution of 'wait-simple' complete.
+Filesystem has shut down.
+Timer: 75 ticks
+Thread: 30 idle ticks, 43 kernel ticks, 2 user ticks
+hda2 (filesys): 44 reads, 459 writes
+hda3 (scratch): 449 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1270 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/userprog/wait-twice FAILURE:
+
+Test output failed to match any acceptable form.
+
+Acceptable output:
+  (wait-twice) begin
+  (child-simple) run
+  child-simple: exit(81)
+  (wait-twice) wait(exec()) = 81
+  (wait-twice) wait(exec()) = -1
+  (wait-twice) end
+  wait-twice: exit(0)
+Differences in `diff -u' format:
+  (wait-twice) begin
+  (child-simple) run
+  child-simple: exit(81)
+- (wait-twice) wait(exec()) = 81
++ (wait-twice) wait(exec()) = -1
+  (wait-twice) wait(exec()) = -1
+  (wait-twice) end
+  wait-twice: exit(0)
+
+OUTPUT FROM tests/userprog/wait-twice:
+
+Copying tests/userprog/wait-twice to scratch partition...
+Copying tests/userprog/child-simple to scratch partition...
+qemu -hda /dev/shm/WCv0CH5jTt.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run wait-twice
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 450 sectors (225 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'wait-twice' into the file system...
+Putting 'child-simple' into the file system...
+Erasing ustar archive...
+Executing 'wait-twice':
+(wait-twice) begin
+(child-simple) run
+child-simple: exit(81)
+(wait-twice) wait(exec()) = -1
+(wait-twice) wait(exec()) = -1
+(wait-twice) end
+wait-twice: exit(0)
+Execution of 'wait-twice' complete.
+Filesystem has shut down.
+Timer: 75 ticks
+Thread: 30 idle ticks, 43 kernel ticks, 2 user ticks
+hda2 (filesys): 44 reads, 459 writes
+hda3 (scratch): 449 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1293 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/page-parallel FAILURE:
+
+run: wait for child 2: FAILED
+
+OUTPUT FROM tests/vm/page-parallel:
+
+Copying tests/vm/page-parallel to scratch partition...
+Copying tests/vm/child-linear to scratch partition...
+qemu -hda /dev/shm/7M_Jr56lsb.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run page-parallel
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 462 sectors (231 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'page-parallel' into the file system...
+Putting 'child-linear' into the file system...
+Erasing ustar archive...
+Executing 'page-parallel':
+(page-parallel) begin
+(page-parallel) exec "child-linear"
+(page-parallel) exec "child-linear"
+(page-parallel) exec "child-linear"
+(page-parallel) exec "child-linear"
+(page-parallel) wait for child 0
+child-linear: exit(66)
+(page-parallel) wait for child 1
+child-linear: exit(66)
+child-linear: exit(66)
+child-linear: exit(66)
+(page-parallel) wait for child 2
+(page-parallel) wait for child 2: FAILED
+page-parallel: exit(1)
+Execution of 'page-parallel' complete.
+Filesystem has shut down.
+Timer: 494 ticks
+Thread: 30 idle ticks, 44 kernel ticks, 420 user ticks
+hda2 (filesys): 45 reads, 471 writes
+hda3 (scratch): 461 reads, 2 writes
+hda4 (swap): 12832 reads, 12832 writes
+Console: 1577 characters output
+Keyboard: 0 keys pressed
+Exception: 2628 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/page-merge-par FAILURE:
+
+run: TIMEOUT after 60 seconds of host CPU time
+
+OUTPUT FROM tests/vm/page-merge-par:
+
+Copying tests/vm/page-merge-par to scratch partition...
+Copying tests/vm/child-sort to scratch partition...
+qemu -hda /dev/shm/U3Ua6qfum5.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run page-merge-par
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 476 sectors (238 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'page-merge-par' into the file system...
+Putting 'child-sort' into the file system...
+Erasing ustar archive...
+Executing 'page-merge-par':
+(page-merge-par) begin
+(page-merge-par) init
+(page-merge-par) sort chunk 0
+(page-merge-par) sort chunk 1
+(page-merge-par) sort chunk 2
+(page-merge-par) sort chunk 3
+(page-merge-par) sort chunk 4
+(page-merge-par) sort chunk 5
+(page-merge-par) sort chunk 6
+
+TIMEOUT after 60 seconds of host CPU time
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/page-merge-mm FAILURE:
+
+run: TIMEOUT after 60 seconds of host CPU time
+
+OUTPUT FROM tests/vm/page-merge-mm:
+
+Copying tests/vm/page-merge-mm to scratch partition...
+Copying tests/vm/child-qsort-mm to scratch partition...
+qemu -hda /dev/shm/BVZ1K0TAuW.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run page-merge-mm
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 490 sectors (245 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'page-merge-mm' into the file system...
+Putting 'child-qsort-mm' into the file system...
+Erasing ustar archive...
+Executing 'page-merge-mm':
+(page-merge-mm) begin
+(page-merge-mm) init
+(page-merge-mm) sort chunk 0
+(page-merge-mm) sort chunk 1
+(page-merge-mm) sort chunk 2
+(page-merge-mm) sort chunk 3
+(page-merge-mm) sort chunk 4
+(page-merge-mm) sort chunk 5
+(page-merge-mm) sort chunk 6
+
+TIMEOUT after 60 seconds of host CPU time
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/page-merge-stk FAILURE:
+
+run: TIMEOUT after 60 seconds of host CPU time
+
+OUTPUT FROM tests/vm/page-merge-stk:
+
+Copying tests/vm/page-merge-stk to scratch partition...
+Copying tests/vm/child-qsort to scratch partition...
+qemu -hda /dev/shm/8FEvFASi4L.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run page-merge-stk
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 490 sectors (245 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'page-merge-stk' into the file system...
+Putting 'child-qsort' into the file system...
+Erasing ustar archive...
+Executing 'page-merge-stk':
+(page-merge-stk) begin
+(page-merge-stk) init
+(page-merge-stk) sort chunk 0
+(page-merge-stk) sort chunk 1
+(page-merge-stk) sort chunk 2
+(page-merge-stk) sort chunk 3
+(page-merge-stk) sort chunk 4
+(page-merge-stk) sort chunk 5
+(page-merge-stk) sort chunk 6
+
+TIMEOUT after 60 seconds of host CPU time
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-read FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049db1 0x80480ec 0x8048894 0x80488c0
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-read:
+0x08049db1: mmap (../../lib/user/syscall.c:147)
+0x080480ec: test_main (../../tests/vm/mmap-read.c:18)
+0x08048894: main (../../tests/main.c:13)
+0x080488c0: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-read:
+
+Copying tests/vm/mmap-read to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+qemu -hda /dev/shm/Wv93wNnttr.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-read
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 237 sectors (118 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-read' into the file system...
+Putting 'sample.txt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-read':
+(mmap-read) begin
+(mmap-read) open "sample.txt"
+(mmap-read) mmap "sample.txt"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049db1 0x80480ec 0x8048894 0x80488c0.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 64 ticks
+Thread: 30 idle ticks, 32 kernel ticks, 2 user ticks
+hda2 (filesys): 25 reads, 246 writes
+hda3 (scratch): 236 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1592 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-write FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049ded 0x8048124 0x80488d0 0x80488fc
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-write:
+0x08049ded: mmap (../../lib/user/syscall.c:147)
+0x08048124: test_main (../../tests/vm/mmap-write.c:23)
+0x080488d0: main (../../tests/main.c:13)
+0x080488fc: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-write:
+
+Copying tests/vm/mmap-write to scratch partition...
+qemu -hda /dev/shm/cVARYaG_JE.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-write
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  111,206,400 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 234 sectors (117 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-write' into the file system...
+Erasing ustar archive...
+Executing 'mmap-write':
+(mmap-write) begin
+(mmap-write) create "sample.txt"
+(mmap-write) open "sample.txt"
+(mmap-write) mmap "sample.txt"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049ded 0x8048124 0x80488d0 0x80488fc.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 68 ticks
+Thread: 30 idle ticks, 36 kernel ticks, 2 user ticks
+hda2 (filesys): 25 reads, 246 writes
+hda3 (scratch): 233 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1586 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-shuffle FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x804a029 0x804811a 0x8048b0c 0x8048b38
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-shuffle:
+0x0804a029: mmap (../../lib/user/syscall.c:147)
+0x0804811a: test_main (../../tests/vm/mmap-shuffle.c:25)
+0x08048b0c: main (../../tests/main.c:13)
+0x08048b38: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-shuffle:
+
+Copying tests/vm/mmap-shuffle to scratch partition...
+qemu -hda /dev/shm/tFAh6rSwak.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-shuffle
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 258 sectors (129 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-shuffle' into the file system...
+Erasing ustar archive...
+Executing 'mmap-shuffle':
+(mmap-shuffle) begin
+(mmap-shuffle) create "buffer"
+(mmap-shuffle) open "buffer"
+(mmap-shuffle) mmap "buffer"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x804a029 0x804811a 0x8048b0c 0x8048b38.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 74 ticks
+Thread: 30 idle ticks, 33 kernel ticks, 11 user ticks
+hda2 (filesys): 28 reads, 525 writes
+hda3 (scratch): 257 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1589 characters output
+Keyboard: 0 keys pressed
+Exception: 1 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-twice FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049ddd 0x804812f 0x80488c0 0x80488ec
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-twice:
+0x08049ddd: mmap (../../lib/user/syscall.c:147)
+0x0804812f: test_main (../../tests/vm/mmap-twice.c:21)
+0x080488c0: main (../../tests/main.c:13)
+0x080488ec: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-twice:
+
+Copying tests/vm/mmap-twice to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+qemu -hda /dev/shm/ifS7t7AZao.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-twice
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 237 sectors (118 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-twice' into the file system...
+Putting 'sample.txt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-twice':
+(mmap-twice) begin
+(mmap-twice) open "sample.txt" #0
+(mmap-twice) mmap "sample.txt" #0 at 0x10000000
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049ddd 0x804812f 0x80488c0 0x80488ec.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 66 ticks
+Thread: 30 idle ticks, 34 kernel ticks, 2 user ticks
+hda2 (filesys): 25 reads, 246 writes
+hda3 (scratch): 236 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1618 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-unmap FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d31 0x80480e6 0x8048814 0x8048840
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-unmap:
+0x08049d31: mmap (../../lib/user/syscall.c:147)
+0x080480e6: test_main (../../tests/vm/mmap-unmap.c:18)
+0x08048814: main (../../tests/main.c:13)
+0x08048840: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-unmap:
+
+Copying tests/vm/mmap-unmap to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+qemu -hda /dev/shm/oooJobP2Nu.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-unmap
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 237 sectors (118 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-unmap' into the file system...
+Putting 'sample.txt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-unmap':
+(mmap-unmap) begin
+(mmap-unmap) open "sample.txt"
+(mmap-unmap) mmap "sample.txt"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d31 0x80480e6 0x8048814 0x8048840.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 64 ticks
+Thread: 30 idle ticks, 32 kernel ticks, 2 user ticks
+hda2 (filesys): 25 reads, 246 writes
+hda3 (scratch): 236 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1598 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-exit FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d59 0x8048119 0x804883c 0x8048868
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-exit:
+0x08049d59: chdir (../../lib/user/syscall.c:159)
+0x08048119: test_main (../../tests/vm/mmap-exit.c:22)
+0x0804883c: _start (../../lib/user/entry.c:9)
+0x08048868: random_init (../../lib/random.c:40)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-exit:
+
+Copying tests/vm/mmap-exit to scratch partition...
+Copying tests/vm/child-mm-wrt to scratch partition...
+qemu -hda /dev/shm/eOM8kmzurZ.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-exit
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 465 sectors (232 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-exit' into the file system...
+Putting 'child-mm-wrt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-exit':
+(mmap-exit) begin
+(child-mm-wrt) begin
+(child-mm-wrt) create "sample.txt"
+(child-mm-wrt) open "sample.txt"
+(child-mm-wrt) mmap "sample.txt"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d59 0x8048119 0x804883c 0x8048868.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 75 ticks
+Thread: 30 idle ticks, 42 kernel ticks, 3 user ticks
+hda2 (filesys): 48 reads, 478 writes
+hda3 (scratch): 464 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1656 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-clean FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049e89 0x80480ec 0x804896c 0x8048998
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-clean:
+0x08049e89: mmap (../../lib/user/syscall.c:147)
+0x080480ec: test_main (../../tests/vm/mmap-clean.c:21)
+0x0804896c: main (../../tests/main.c:13)
+0x08048998: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-clean:
+
+Copying tests/vm/mmap-clean to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+qemu -hda /dev/shm/eEsglpDXLw.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-clean
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 239 sectors (119 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-clean' into the file system...
+Putting 'sample.txt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-clean':
+(mmap-clean) begin
+(mmap-clean) open "sample.txt"
+(mmap-clean) mmap "sample.txt"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049e89 0x80480ec 0x804896c 0x8048998.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 65 ticks
+Thread: 30 idle ticks, 32 kernel ticks, 3 user ticks
+hda2 (filesys): 26 reads, 248 writes
+hda3 (scratch): 238 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1598 characters output
+Keyboard: 0 keys pressed
+Exception: 1 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-close FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d59 0x80480e6 0x804883c 0x8048868
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-close:
+0x08049d59: mmap (../../lib/user/syscall.c:147)
+0x080480e6: test_main (../../tests/vm/mmap-close.c:19)
+0x0804883c: main (../../tests/main.c:13)
+0x08048868: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-close:
+
+Copying tests/vm/mmap-close to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+qemu -hda /dev/shm/rfsmPRYKnT.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-close
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 238 sectors (119 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-close' into the file system...
+Putting 'sample.txt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-close':
+(mmap-close) begin
+(mmap-close) open "sample.txt"
+(mmap-close) mmap "sample.txt"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d59 0x80480e6 0x804883c 0x8048868.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 64 ticks
+Thread: 30 idle ticks, 32 kernel ticks, 2 user ticks
+hda2 (filesys): 25 reads, 247 writes
+hda3 (scratch): 237 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1598 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-remove FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049e39 0x80480ec 0x804891c 0x8048948
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-remove:
+0x08049e39: mmap (../../lib/user/syscall.c:147)
+0x080480ec: test_main (../../tests/vm/mmap-remove.c:20)
+0x0804891c: main (../../tests/main.c:13)
+0x08048948: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-remove:
+
+Copying tests/vm/mmap-remove to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+qemu -hda /dev/shm/ZO9nzkQA0Z.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-remove
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 238 sectors (119 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-remove' into the file system...
+Putting 'sample.txt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-remove':
+(mmap-remove) begin
+(mmap-remove) open "sample.txt"
+(mmap-remove) mmap "sample.txt"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049e39 0x80480ec 0x804891c 0x8048948.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 64 ticks
+Thread: 30 idle ticks, 32 kernel ticks, 2 user ticks
+hda2 (filesys): 26 reads, 247 writes
+hda3 (scratch): 237 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1604 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-inherit FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049de5 0x80480ec 0x80488c8 0x80488f4
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-inherit:
+0x08049de5: mmap (../../lib/user/syscall.c:147)
+0x080480ec: test_main (../../tests/vm/mmap-inherit.c:19)
+0x080488c8: main (../../tests/main.c:13)
+0x080488f4: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-inherit:
+
+Copying tests/vm/mmap-inherit to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+Copying tests/vm/child-inherit to scratch partition...
+qemu -hda /dev/shm/nyjhrG6dEJ.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-inherit
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 469 sectors (234 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-inherit' into the file system...
+Putting 'sample.txt' into the file system...
+Putting 'child-inherit' into the file system...
+Erasing ustar archive...
+Executing 'mmap-inherit':
+(mmap-inherit) begin
+(mmap-inherit) open "sample.txt"
+(mmap-inherit) mmap "sample.txt"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049de5 0x80480ec 0x80488c8 0x80488f4.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 75 ticks
+Thread: 30 idle ticks, 44 kernel ticks, 1 user ticks
+hda2 (filesys): 29 reads, 478 writes
+hda3 (scratch): 468 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1658 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-zero FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d49 0x804811f 0x804882c 0x8048858
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-zero:
+0x08049d49: mmap (../../lib/user/syscall.c:147)
+0x0804811f: test_main (../../tests/vm/mmap-zero.c:25)
+0x0804882c: main (../../tests/main.c:13)
+0x08048858: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-zero:
+
+Copying tests/vm/mmap-zero to scratch partition...
+qemu -hda /dev/shm/TblL4xShgx.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-zero
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 232 sectors (116 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-zero' into the file system...
+Erasing ustar archive...
+Executing 'mmap-zero':
+(mmap-zero) begin
+(mmap-zero) create empty file "empty"
+(mmap-zero) open "empty"
+(mmap-zero) mmap "empty"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d49 0x804811f 0x804882c 0x8048858.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 64 ticks
+Thread: 30 idle ticks, 32 kernel ticks, 2 user ticks
+hda2 (filesys): 22 reads, 242 writes
+hda3 (scratch): 231 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1575 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-over-code FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d31 0x8048108 0x8048814 0x8048840
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-over-code:
+0x08049d31: mmap (../../lib/user/syscall.c:147)
+0x08048108: test_main (../../tests/vm/mmap-over-code.c:16)
+0x08048814: main (../../tests/main.c:13)
+0x08048840: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-over-code:
+
+Copying tests/vm/mmap-over-code to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+qemu -hda /dev/shm/nU48QWAYYk.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-over-code
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 237 sectors (118 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-over-code' into the file system...
+Putting 'sample.txt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-over-code':
+(mmap-over-code) begin
+(mmap-over-code) open "sample.txt"
+(mmap-over-code) try to mmap over code segment
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d31 0x8048108 0x8048814 0x8048840.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 64 ticks
+Thread: 30 idle ticks, 32 kernel ticks, 2 user ticks
+hda2 (filesys): 23 reads, 246 writes
+hda3 (scratch): 236 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1634 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-over-data FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d31 0x8048108 0x8048814 0x8048840
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-over-data:
+0x08049d31: mmap (../../lib/user/syscall.c:147)
+0x08048108: test_main (../../tests/vm/mmap-over-data.c:18)
+0x08048814: main (../../tests/main.c:13)
+0x08048840: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-over-data:
+
+Copying tests/vm/mmap-over-data to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+qemu -hda /dev/shm/FZRhslXxs1.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-over-data
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 237 sectors (118 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-over-data' into the file system...
+Putting 'sample.txt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-over-data':
+(mmap-over-data) begin
+(mmap-over-data) open "sample.txt"
+(mmap-over-data) try to mmap over data segment
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d31 0x8048108 0x8048814 0x8048840.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 64 ticks
+Thread: 30 idle ticks, 32 kernel ticks, 2 user ticks
+hda2 (filesys): 23 reads, 246 writes
+hda3 (scratch): 236 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1634 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-over-stk FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d31 0x8048108 0x8048814 0x8048840
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-over-stk:
+0x08049d31: mmap (../../lib/user/syscall.c:147)
+0x08048108: test_main (../../tests/vm/mmap-over-stk.c:16)
+0x08048814: main (../../tests/main.c:13)
+0x08048840: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-over-stk:
+
+Copying tests/vm/mmap-over-stk to scratch partition...
+Copying ../../tests/vm/sample.txt to scratch partition...
+qemu -hda /dev/shm/JjydfALg1C.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-over-stk
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 237 sectors (118 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-over-stk' into the file system...
+Putting 'sample.txt' into the file system...
+Erasing ustar archive...
+Executing 'mmap-over-stk':
+(mmap-over-stk) begin
+(mmap-over-stk) open "sample.txt"
+(mmap-over-stk) try to mmap over stack segment
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d31 0x8048108 0x8048814 0x8048840.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 64 ticks
+Thread: 30 idle ticks, 32 kernel ticks, 2 user ticks
+hda2 (filesys): 23 reads, 246 writes
+hda3 (scratch): 236 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1629 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+DETAILS OF tests/vm/mmap-overlap FAILURE:
+
+Kernel panic in run: PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d81 0x80480ee 0x8048864 0x8048890
+Translation of call stack:
+In kernel.o:
+0xc0029ab4: debug_panic (../../lib/kernel/debug.c:38)
+0xc0036b0b: mmap_aliases_hash (../../vm/mmap.c:194)
+0xc002b627: find_bucket (../../lib/kernel/hash.c:379)
+0xc002b9c4: hash_find (../../lib/kernel/hash.c:176)
+0xc0036cd1: mmap_retreive_alias (../../vm/mmap.c:384)
+0xc003440e: vm_mmap_pages (../../vm/vm.c:1200)
+0xc002e1c3: syscall_handler_SYS_MMAP (../../userprog/syscall.c:428)
+0xc002e5b4: syscall_handler (../../userprog/syscall.c:589)
+0xc0023259: intr_handler (../../threads/interrupt.c:312)
+0xc00232ff: intr_entry (threads/intr-stubs.S:38)
+In tests/vm/mmap-overlap:
+0x08049d81: mmap (../../lib/user/syscall.c:147)
+0x080480ee: test_main (../../tests/vm/mmap-overlap.c:15)
+0x08048864: main (../../tests/main.c:13)
+0x08048890: _start (../../lib/user/entry.c:9)
+Translations of user virtual addresses above are based on a guess at
+the binary to use.  If this guess is incorrect, then those
+translations will be misleading.
+
+OUTPUT FROM tests/vm/mmap-overlap:
+
+Copying tests/vm/mmap-overlap to scratch partition...
+Copying tests/vm/zeros to scratch partition...
+qemu -hda /dev/shm/hB8mkblb37.dsk -m 4 -net none -nographic -monitor null
+PiLo hda1
+Loading...............
+Kernel command line: -q -f extract run mmap-overlap
+Initialized threading.
+Pintos booting with 4096 kB RAM...
+383 pages available in kernel pool.
+383 pages available in user pool.
+Calibrating timer...  157,081,600 loops/s.
+hda: 13,104 sectors (6 MB), model "QM00001", serial "QEMU HARDDISK"
+hda1: 251 sectors (125 kB), Pintos OS kernel (20)
+hda2: 4,096 sectors (2 MB), Pintos file system (21)
+hda3: 247 sectors (123 kB), Pintos scratch (22)
+hda4: 8,192 sectors (4 MB), Pintos swap (23)
+filesys: using hda2
+scratch: using hda3
+swap: using hda4
+Formatting filesystem with PIFS.
+Initialized filesystem.
+Initialized swapping.
+Initialized user's virtual memory.
+Initialized mmapping.
+Boot complete.
+Extracting ustar archive from scratch device into file system...
+Putting 'mmap-overlap' into the file system...
+Putting 'zeros' into the file system...
+Erasing ustar archive...
+Executing 'mmap-overlap':
+(mmap-overlap) begin
+(mmap-overlap) open "zeros" once
+(mmap-overlap) mmap "zeros"
+Kernel PANIC at ../../vm/mmap.c:194 in mmap_aliases_hash(): assertion `ee->magic == ALIAS_MAGIC' failed.
+Call stack: 0xc0029ab4 0xc0036b0b 0xc002b627 0xc002b9c4 0xc0036cd1 0xc003440e 0xc002e1c3 0xc002e5b4 0xc0023259 0xc00232ff 0x8049d81 0x80480ee 0x8048864 0x8048890.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Filesystem has shut down.
+Timer: 65 ticks
+Thread: 30 idle ticks, 33 kernel ticks, 2 user ticks
+hda2 (filesys): 24 reads, 256 writes
+hda3 (scratch): 246 reads, 2 writes
+hda4 (swap): 0 reads, 0 writes
+Console: 1600 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
