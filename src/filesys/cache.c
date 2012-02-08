@@ -208,9 +208,15 @@ block_cache_write (struct block_cache *bc, block_sector_t nth)
   ASSERT (bc->magic == BC_MAGIC);
   ASSERT (intr_get_level () == INTR_ON);
   
-  struct block_page *result = block_cache_retreive (bc, nth, NULL);
+  bool retreived;
+  struct block_page *result = block_cache_retreive (bc, nth, &retreived);
   ASSERT (result != NULL);
   BC_DEBUG ("BC write %d [%u]\n", nth, result->lease_counter);
+  if (!retreived)
+    {
+      block_read (bc->device, nth, &result->data);
+      result->dirty = false;
+    }
   result->dirty = true;
   lock_release (&bc->bc_lock);
   return result;
