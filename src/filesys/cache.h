@@ -27,21 +27,21 @@ struct block_cache
   struct hash       hash;             // [nth -> struct block_page]
   struct lock       bc_lock;          // concurrent modification lock
   
-  uint32_t          magic;
+  uint32_t          magic;            // ensures the struct is initialized
 };
 
 struct block_page
 {
 /* public: */
-  block_data       data;
-  bool             dirty;
+  block_data       data;  // data contained in this block
+  bool             dirty; // set true if data was changed
 /* private: */
-  uint32_t         magic; // I put the magic here so it may get overwritten
+  uint32_t         magic; // ensure user does not write too much data
   
-  size_t           lease_counter;
-  block_sector_t   nth;
-  struct lru_elem  lru_elem;
-  struct hash_elem hash_elem;
+  size_t           lease_counter; // how often this block was leased
+  block_sector_t   nth;// nth sector of the block device
+  struct lru_elem  lru_elem; // struct block_cache::pages_disposable
+  struct hash_elem hash_elem; // struct block_cache::hash
 };
 
 bool block_cache_init (struct block_cache *bc,

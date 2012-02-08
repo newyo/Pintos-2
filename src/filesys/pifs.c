@@ -53,16 +53,16 @@ typedef char _CASSERT_PIFS_PTR_SIZE[0 - !(sizeof (pifs_ptr) ==
 
 struct pifs_inode_header
 {
-  pifs_magic        magic;
+  pifs_magic        magic; // Magic denoting the inode type
   pifs_ptr          extends; // pointer to overflow bucket
   pifs_ptr          parent_folder;
-  struct pifs_attrs attrs; // not implemented
+  struct pifs_attrs attrs; // rights management, not implemented
   pifs_ptr          long_name; // not implemented
 } PACKED;
 
 struct pifs_long_name // not implemented by us, but for completeness
 {
-  pifs_magic        magic;
+  pifs_magic        magic; // = PIFS_MAGIC_NAME
   pifs_ptr          unused1; // unused for this inode type
   pifs_ptr          unused2; // unused for this inode type
   struct pifs_attrs unused3; // unused for this inode type
@@ -74,33 +74,34 @@ struct pifs_long_name // not implemented by us, but for completeness
 
 struct pifs_header
 {
-  pifs_magic        magic;
+  pifs_magic        magic; // = PIFS_MAGIC_HEADER
   pifs_ptr          extends; // if there are too many blocks
-  pifs_ptr          root_folder;
+  pifs_ptr          root_folder; // sector of the root folder
   struct pifs_attrs unused; // unused for this inode type
   pifs_ptr          long_name; // name of device (not implemented)
   
-  uint16_t          blocks_count;
-  char              used_map[PIFS_COUNT_USED_MAP_ENTRIES];
+  uint16_t          blocks_count; // number of elements in the used_map
+                                  // must by devidable by 8
+  char              used_map[PIFS_COUNT_USED_MAP_ENTRIES]; // bitmap
 } PACKED;
 
 struct pifs_folder_entry
 {
   char     name[PIFS_NAME_LENGTH];
-  pifs_ptr block;
+  pifs_ptr block; // sector of the file
 } PACKED;
 
 struct pifs_folder
 {
-  pifs_magic               magic;
+  pifs_magic               magic; // = PIFS_MAGIC_FOLDER
   pifs_ptr                 extends; // if there are too many files
-  pifs_ptr                 parent_folder; // 0 for root
+  pifs_ptr                 parent_folder; // 0 if this folder is root
   struct pifs_attrs        attrs; // not implemented
   pifs_ptr                 long_name; // not implemented
   
   char                     padding[14];
   
-  uint8_t                  entries_count;
+  uint8_t                  entries_count; // # of items in ::entries
   // TODO: An optimization would be sorting the entries in an extend.
   //       I don't think sorting over all extends would be much of a speed-up.
   struct pifs_folder_entry entries[PIFS_COUNT_FOLDER_ENTRIES];
@@ -114,15 +115,15 @@ struct pifs_file_block_ref
 
 struct pifs_file
 {
-  pifs_magic                 magic;
+  pifs_magic                 magic; // = PIFS_MAGIC_FILE
   pifs_ptr                   extends; // if there are too many blocks
   pifs_ptr                   parent_folder;
   struct pifs_attrs          attrs; // not implemented
   pifs_ptr                   long_name; // not implemented
   
-  uint32_t                   length;
+  uint32_t                   length; // total file length
   
-  uint8_t                    blocks_count;
+  uint8_t                    blocks_count; // # of elements in ::blocks
   struct pifs_file_block_ref blocks[PIFS_COUNT_FILE_BLOCKS];
 } PACKED;
 
