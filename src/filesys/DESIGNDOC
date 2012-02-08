@@ -1,0 +1,369 @@
+       	       	     +-------------------------+
+		     |		CS 140	       |
+		     | PROJECT 4: FILE SYSTEMS |
+		     |	   DESIGN DOCUMENT     |
+		     +-------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+René Kijewski  <kijewski@inf.fu-berlin.de>
+Christian Mehlis  <mehlis@inf.fu-berlin.de>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+		     INDEXED AND EXTENSIBLE FILES
+		     ============================
+
+Die Dateien {directory,free_map,inode}.{c,h} wurden gelöscht.
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+Datenstrukturen auf der Festplatte:
+
+Jede Inode-Art beginnt mit diesem Header:
++struct pifs_inode_header
++{
++  pifs_magic        magic; // Magic denoting the inode type
++  pifs_ptr          extends; // pointer to overflow bucket
++  pifs_ptr          parent_folder;
++  struct pifs_attrs attrs; // rights management, not implemented
++  pifs_ptr          long_name; // not implemented
++} PACKED;
+
+Lange Dateinamen für bis zu 491 Zeichen. Nicht von uns implementiert, aber als
+Gedankengang über mögliche Verbesserungen:
++struct pifs_long_name
++{
++  pifs_magic        magic; // = PIFS_MAGIC_NAME
++  pifs_ptr          unused1; // unused for this inode type
++  pifs_ptr          unused2; // unused for this inode type
++  struct pifs_attrs unused3; // unused for this inode type
++  pifs_ptr          unused4; // unused for this inode type
++  
++  uint32_t          len;
++  char              used_map[PIFS_COUNT_LONG_NAME_CHARS];
++} PACKED;
+
+Datenstruktur, die die Freemap des Dateisystems verwaltet:
++struct pifs_header
++{
++  pifs_magic        magic; // = PIFS_MAGIC_HEADER
++  pifs_ptr          extends; // if there are too many blocks
++  pifs_ptr          root_folder; // sector of the root folder
++  struct pifs_attrs unused; // unused for this inode type
++  pifs_ptr          long_name; // name of device (not implemented)
++  
++  uint16_t          blocks_count; // number of elements in the used_map
++                                  // must by devidable by 8
++  char              used_map[PIFS_COUNT_USED_MAP_ENTRIES]; // bitmap
++} PACKED;
+
+Verweis auf die Nutzdaten einer Datei. Linear angeordnet, nicht sparse:
++struct pifs_file_block_ref
++{
++  pifs_ptr start; // erster zugehöriger Block
++  uint8_t  count; // Anzahl der Blöcke
++} PACKED;
+
+Inodestruktur einer Datei:
++struct pifs_file
++{
++  pifs_magic                 magic; // = PIFS_MAGIC_FILE
++  pifs_ptr                   extends; // if there are too many blocks
++  pifs_ptr                   parent_folder;
++  struct pifs_attrs          attrs; // not implemented
++  pifs_ptr                   long_name; // not implemented
++  
++  uint32_t                   length; // total file length
++  
++  uint8_t                    blocks_count; // # of elements in ::blocks
++  struct pifs_file_block_ref blocks[PIFS_COUNT_FILE_BLOCKS];
++} PACKED;
+
+>> A2: What is the maximum size of a file supported by your inode
+>> structure?  Show your work.
+
+Die maximale Dateigröße ist 2^64-1. Beschränkt wird diese Größe dadurch, dass
+ein Dateisystem nur 2^64-1 Bytes groß sein kann und auch noch Metadaten
+mitgespeichert werden müssen.
+In unserer konkreten implementierung ist das Dateisystem auf 242556 Seiten
+~= 124 MB beschränkt, da der Initialisierungscode eine vereinfachte Logik zum
+initialisieren der Use-Map verwendet.
+
+---- SYNCHRONIZATION ----
+
+Aus dem ersten Projekt, ein read-write-lock:
++struct rwlock
++  {
++    struct lock edit_lock; // Lock beim Schreiben von readers_count/writers_count
++    struct condition readers_list, writers_list; // Monitore
++    volatile unsigned readers_count, writers_count;
++  };
+
+>> A3: Explain how your code avoids a race if two processes attempt to
+>> extend a file at the same time.
+
+Wir benutzen ein read-write-lock. Beim schreiben auf das Dateisystem hat ein
+Prozess exklusiven Zugriff auf das Dateisystem. Ein Prozess ist der erste und
+hängt seine Daten zuerst an, danach erst der andere.
+(Hätten wir mehr Zeit gehabt, hätten wir das große, exklusive Lock aufgehoben
+und auf Inode-Basis gelockt.)
+
+>> A4: Suppose processes A and B both have file F open, both
+>> positioned at end-of-file.  If A reads and B writes F at the same
+>> time, A may read all, part, or none of what B writes.  However, A
+>> may not read data other than what B writes, e.g. if B writes
+>> nonzero data, A is not allowed to see all zeros.  Explain how your
+>> code avoids this race.
+
+Durch das rwlock kann es zwar mehrere Leser auf einmal geben, aber es kann nicht
+gelesen werden, während geschrieben wird. Wenn also ein Leser an die Reihe
+kommt, wurden bereits alle Modifikationen durchgeführt.
+
+>> A5: Explain how your synchronization design provides "fairness".
+>> File access is "fair" if readers cannot indefinitely block writers
+>> or vice versa.  That is, many processes reading from a file cannot
+>> prevent forever another process from writing the file, and many
+>> processes writing to a file cannot prevent another process forever
+>> from reading the file.
+
+Wir sind nicht fair, wenn stets ein neuer Leser kommt, bevor alle anderen Leser
+fertig sind, wird der Schreiber nie an die Reihe kommen. Implementierung
+derzeit:Nachdem ein Schreiber an der Reihe war, kommen die Leser an Reihe,
+sofern denn Leser gequeued sind. Es wäre möglich, fairness zu gewährleisten,
+indem nur N Leser lesen dürfen, ehe zu den Schreibern gewechselt wird.
+
+---- RATIONALE ----
+
+>> A6: Is your inode structure a multilevel index?  If so, why did you
+>> choose this particular combination of direct, indirect, and doubly
+>> indirect blocks?  If not, why did you choose an alternative inode
+>> structure, and what advantages and disadvantages does your
+>> structure have, compared to a multilevel index?
+
+Wir verwenden kein Multilevelindexing, da dieses mehr Aufwand bedeuten würde.
+Multilevelindexing würde bei großen Dateien Geschwindingkeitsvorteile liefern,
+jedoch bei sehr kleinen Nachteile. In ext werden deshalb auch unterschiedlich
+große Indirektionsebenen verwendet, je nach Dateigröße. Da wir in den Tests nur
+2 MB große Festplatten verwenden, sahen wir keinen Bedarf für Indirektion.
+Unser Dateisystem muss nur einen Block lesen, wenn die Datei kleiner ist als:
+- minimale Fragmentierung: 12 MB
+- maximale Fragmentierung: 50 kB
+und weitere Blocks entsprechend.
+
+			    SUBDIRECTORIES
+			    ==============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+Eine enthaltene Datei im Ordner:
++struct pifs_folder_entry
++{
++  char     name[PIFS_NAME_LENGTH];
++  pifs_ptr block; // sector of the file
++} PACKED;
+
+Inode-Struktur eines Ordners:
++struct pifs_folder
++{
++  pifs_magic               magic; // = PIFS_MAGIC_FOLDER
++  pifs_ptr                 extends; // if there are too many files
++  pifs_ptr                 parent_folder; // 0 if this folder is root
++  struct pifs_attrs        attrs; // not implemented
++  pifs_ptr                 long_name; // not implemented
++  
++  char                     padding[14];
++  
++  uint8_t                  entries_count; // # of items in ::entries
++  struct pifs_folder_entry entries[PIFS_COUNT_FOLDER_ENTRIES];
++} PACKED;
+
+---- ALGORITHMS ----
+
+>> B2: Describe your code for traversing a user-specified path.  How
+>> do traversals of absolute and relative paths differ?
+
+---- SYNCHRONIZATION ----
+
+>> B4: How do you prevent races on directory entries?  For example,
+>> only one of two simultaneous attempts to remove a single file
+>> should succeed, as should only one of two simultaneous attempts to
+>> create a file with the same name, and so on.
+
+Wieder rwlock. Das Anlegen und Löschen von Dateien ist eine schreibende
+Operation. Das Löschen ist bei uns so implementiert, dass zuerst ein Inode
+geöffnet wird und in diesem das gelöscht Flag gesetzt wird. Schon dann und nicht
+erst beim Schließen wird der Eintrag im Elternordner gelöscht.
+
+>> B5: Does your implementation allow a directory to be removed if it
+>> is open by a process or if it is in use as a process's current
+>> working directory?  If so, what happens to that process's future
+>> file system operations?  If not, how do you prevent it?
+
+Derzeit ist es erlaubt, den cwd (den eigenen und eines anderen Threads) zu
+löschen. Dies führt zu Fehlern (auch in den entsprechenden Tests). Mögliche
+Abhilfen wären, dass nicht nur der Inode des cwd offen gehalten wird, sondern
+auch von allen Oberodnern. Tendenziell ist dies aufwendiger als nötig.
+Alternativ könnte auch eine Liste oder ein Hash der offenen working directories
+geführt werden, worin erst ein Lookup gemacht wird, ehe der Ordner gelöscht
+wird.
+
+---- RATIONALE ----
+
+>> B6: Explain why you chose to represent the current directory of a
+>> process the way you did.
+
+Wir haben zuerst überlegt, dass der Thread einen String, der den offenen Ordner
+angibt, speichert. Vermutlich wäre es jedoch möglich, das Betriebssystem zu
+DoSen, indem eine tiefe Verschachtelung angelegt wird und mehrere Kindprozesse
+gestartet werden. Somit würde der Speicher schnell und unnötig aufgebraucht.
+
+Wir haben den CWD als offenen Inode des Ordners implementiert, da so sämtliche
+Operation relativ zum CWD sehr einfach umsetzbar sind. Jeder Ordner (und auch
+jede Datei) kennen ihren Oberordner. Bei einem ".." müsste also nur in den
+Oberorder gegangen werden. Auch sind Aufrufe von Dateien im aktuellen Ordner
+werden beschleunigt, da nicht erst der aktuelle Ordner auf der Festplatte
+gesucht werden muss, sondern dessen Sektor bereits bekannt ist.
+
+			     BUFFER CACHE
+			     ============
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+struct allocator: siehe vm/DESIGNDOC
+
+Zeichenarray der Länge eines Blockdevicesectors:
++typedef char block_data[BLOCK_SECTOR_SIZE];
+
+Abstraktionsschicht über Blockdevices, die einen Block-Cache implementiert:
++struct block_cache
++{
++/* public */
++  struct block     *device;           // associated block device
++/* private: */
++  struct semaphore  use_count;        // count of items left in pages_allocator
++  struct allocator  pages_allocator;  // allocator of struct block_page
++  struct lru        pages_disposable; // returned pages (the cache)
++  struct hash       hash;             // [nth -> struct block_page]
++  struct lock       bc_lock;          // concurrent modification lock
++  
++  uint32_t          magic;            // ensures the struct is initialized
++};
+
+Ein gecachter Block des Devices:
++struct block_page
++{
++/* public: */
++  block_data       data;  // data contained in this block
++  bool             dirty; // set true if data was changed
++/* private: */
++  uint32_t         magic; // ensure user does not write too much data
++  
++  size_t           lease_counter; // how often this block was leased
++  block_sector_t   nth; // nth sector of the block device
++  struct lru_elem  lru_elem; // struct block_cache::pages_disposable
++  struct hash_elem hash_elem; // struct block_cache::hash
++};
+
+---- ALGORITHMS ----
+
+>> C2: Describe how your cache replacement algorithm chooses a cache
+>> block to evict.
+
+Alle Blocksektoren, die derzeit nicht alloziert sind, werden in eine LRU-Liste
+gesteckt. Der am längesten nicht verwendete Sektor wird ggf. auf die Festplatte
+geschrieben und als Speicher für den neuen Sektor verwendet.
+
+>> C3: Describe your implementation of write-behind.
+
+Wir schreiben die Daten erst dann auf die Festplatte, wenn die LRU-List voll
+ist. Das Schreiben nach einer bestimmten Zeit oder Intervalweise ist derzeit
+noch nicht implementiert. Die Implementierung von intervalweisem Schreiben wäre
+tendenziell einfacher umsetzbar. Durch unsere Hash der offenen Seiten, kann sehr
+einfach über alle alle Sektoren traversiert werden. Die ausgeliehenen Sektoren
+haben ein Feld, ob die geändert wurden, welchen von der Flush-Funktion
+zurückgesetzt wird.
+
+>> C4: Describe your implementation of read-ahead.
+
+Wir implementieren Read-Ahead nicht.
+
+---- SYNCHRONIZATION ----
+
+>> C5: When one process is actively reading or writing data in a
+>> buffer cache block, how are other processes prevented from evicting
+>> that block?
+
+Die ausgeliehenen Sektoren haben einen lease counter. Wenn der auf 0 geht, wird
+der Sektor in die LRU-Liste gestellt.
+
+>> C6: During the eviction of a block from the cache, how are other
+>> processes prevented from attempting to access the block?
+
+Der Blockcache verwendet einen Lock, der es verhintert, dass zwei Thread
+gleichzeitig den gleichen Sektor zum Lesen oder Schreiben öffnen wollen.
+
+---- RATIONALE ----
+
+>> C7: Describe a file workload likely to benefit from buffer caching,
+>> and workloads likely to benefit from read-ahead and write-behind.
+
+Buffer-caching: wenn mehrere Dateien in einem Ordner geöffnet werden sollen,
+                müssen durch b~ nicht alle Metadaten der Ordner auf dem Pfad
+                mehrmals von der Festplatte geladen werden.
+Read-ahead: Wenn eine Datei linear gelesen wird.
+Write-behind: Wenn mehrmals hintereinander im selben Block einer Datei
+              geschrieben wird.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+Ich fand diese Aufgabe weniger sinnvoll für das Verständnis der Arbeit eines
+Betriebssystems als die anderen Projekte. Vielleicht sollte man hierauf in den
+nächsten Semestern besser verzichten und in dieser Zeit dafür sinnvolle, moderne
+Aspekte von Betriebssystemen behandeln ...
+
+Vermutlich sollte dieser Teil restlos gestrichen werden und dafür den Studenten
+mehr Zeit für die drei anderen Projekte gegeben werden.
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students in future quarters?
+
+>> Any other comments?
