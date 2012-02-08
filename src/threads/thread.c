@@ -1117,3 +1117,30 @@ thread_is_file_currently_executed (struct file *f)
   intr_set_level (old_level);
   return result;
 }
+
+#ifdef FILESYS
+bool
+thread_is_file_currently_cwd (struct pifs_inode *inode)
+{
+  if (inode == NULL)
+    return false;
+  int old_level = intr_disable ();
+  
+  bool result = false;
+  
+  struct list_elem *e;
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+      ASSERT (is_thread (t));
+      if (inode == t->cwd)
+        {
+          result = true;
+          break;
+        }
+    }
+  intr_set_level (old_level);
+  return result;
+}
+#endif

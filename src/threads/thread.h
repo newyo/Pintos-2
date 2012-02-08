@@ -192,6 +192,7 @@ bool thread_activate_pool_statistics (bool yes);
 
 #ifdef FILESYS
 # include "filesys/pifs.h"
+bool thread_is_file_currently_cwd (struct pifs_inode *inode);
 #endif
 
 #endif /* threads/thread.h */
