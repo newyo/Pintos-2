@@ -99,9 +99,9 @@ Inodestruktur einer Datei:
 Die maximale Dateigröße ist 2^64-1. Beschränkt wird diese Größe dadurch, dass
 ein Dateisystem nur 2^64-1 Bytes groß sein kann und auch noch Metadaten
 mitgespeichert werden müssen.
-In unserer konkreten implementierung ist das Dateisystem auf 242556 Seiten
+In unserer konkreten Implementierung ist das Dateisystem auf 242.556 Seiten
 ~= 124 MB beschränkt, da der Initialisierungscode eine vereinfachte Logik zum
-initialisieren der Use-Map verwendet.
+Initialisieren der Use-Map verwendet.
 
 ---- SYNCHRONIZATION ----
 
@@ -142,7 +142,7 @@ kommt, wurden bereits alle Modifikationen durchgeführt.
 
 Wir sind nicht fair, wenn stets ein neuer Leser kommt, bevor alle anderen Leser
 fertig sind, wird der Schreiber nie an die Reihe kommen. Implementierung
-derzeit:Nachdem ein Schreiber an der Reihe war, kommen die Leser an Reihe,
+derzeit: Nachdem ein Schreiber an der Reihe war, kommen die Leser an Reihe,
 sofern denn Leser gequeued sind. Es wäre möglich, fairness zu gewährleisten,
 indem nur N Leser lesen dürfen, ehe zu den Schreibern gewechselt wird.
 
@@ -156,13 +156,14 @@ indem nur N Leser lesen dürfen, ehe zu den Schreibern gewechselt wird.
 
 Wir verwenden kein Multilevelindexing, da dieses mehr Aufwand bedeuten würde.
 Multilevelindexing würde bei großen Dateien Geschwindingkeitsvorteile liefern,
-jedoch bei sehr kleinen Nachteile. In ext werden deshalb auch unterschiedlich
-große Indirektionsebenen verwendet, je nach Dateigröße. Da wir in den Tests nur
+jedoch bei sehr kleinen Nachteile. In ext-Dateisystemen werden deshalb auch 
+unterschiedlich große Indirektionsebenen verwendet, je nach Dateigröße.
+Da wir in den Tests nur
 2 MB große Festplatten verwenden, sahen wir keinen Bedarf für Indirektion.
 Unser Dateisystem muss nur einen Block lesen, wenn die Datei kleiner ist als:
 - minimale Fragmentierung: 12 MB
 - maximale Fragmentierung: 50 kB
-und weitere Blocks entsprechend.
+und weitere Blöcke entsprechend.
 
 			    SUBDIRECTORIES
 			    ==============
@@ -199,6 +200,18 @@ Inode-Struktur eines Ordners:
 
 >> B2: Describe your code for traversing a user-specified path.  How
 >> do traversals of absolute and relative paths differ?
+
+Man bewegt sich relativ zum CWD, auf das ein offener inode gehalten wird. Sollte
+der Pfad mit einem '/' beginnt, dann wird '/' als Wurzel als Basispfad 
+verwendet.
+Der Pfad-String wird an allen '/' aufgetrennt und dann pro Element:
+Wenn Element == "..", dann gehe in das Eltern-Ordner, außer bei '/', 
+                      der kein Eltern-Element hat (bleibe in '/').
+                ".", dann bleibe im Verzeichnis.
+                <bel.>, dann suche in den Buckets des Ordners auf dem 
+                        Dateisystem nach dem ges. String. Falls vorhanden
+                        betrete den Ordner und fahre fort, falls nicht 
+                        vorhanden, FEHLER.
 
 ---- SYNCHRONIZATION ----
 
