@@ -45,23 +45,14 @@ hash_init (struct hash *h,
   ASSERT (less != NULL);
   
   h->elem_cnt = 0;
-  h->bucket_cnt = 4;
-  h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
+  h->bucket_cnt = 0;
+  h->buckets = NULL;
   h->hash = hash;
   h->less = less;
   h->aux = aux;
   h->magic = MAGIC_HASH;
 
-  if (h->buckets != NULL) 
-    {
-      size_t i;
-      for (i = 0; i < h->bucket_cnt; ++i)
-        list_init (&h->buckets[i]);
-      hash_clear (h, NULL);
-      return true;
-    }
-  else
-    return false;
+  return true;
 }
 
 /* Removes all the elements from H.
@@ -94,7 +85,7 @@ hash_clear (struct hash *h, hash_action_func *destructor)
           }
 
       list_init (bucket); 
-    }    
+    }
 
   h->elem_cnt = 0;
 }
@@ -131,6 +122,28 @@ hash_insert (struct hash *h, struct hash_elem *new)
   ASSERT (new != NULL);
   ASSERT (h->magic == MAGIC_HASH);
   
+  if (h->buckets == NULL)
+    {
+      h->bucket_cnt = 4;
+      h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
+      if (!h->buckets)
+        {
+          h->bucket_cnt = 2;
+          h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
+          if (!h->buckets)
+            {
+              h->bucket_cnt = 1;
+              h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
+              if (!h->buckets)
+                PANIC ("Hash insert: out of memory.");
+            }
+        }
+      size_t i;
+      for (i = 0; i < h->bucket_cnt; ++i)
+        list_init (&h->buckets[i]);
+      hash_clear (h, NULL);
+    }
+  
   struct list *bucket = find_bucket (h, new);
   struct hash_elem *old = find_elem (h, bucket, new);
 
@@ -151,6 +164,9 @@ hash_replace (struct hash *h, struct hash_elem *new)
   ASSERT (h->magic == MAGIC_HASH);
   ASSERT (new != NULL);
   
+  if (!h->buckets)
+    return hash_insert (h, new);
+    
   struct list *bucket = find_bucket (h, new);
   struct hash_elem *old = find_elem (h, bucket, new);
 
@@ -172,6 +188,8 @@ hash_find (struct hash *h, struct hash_elem *e)
   ASSERT (h->magic == MAGIC_HASH);
   ASSERT (e != NULL);
   
+  if (!h->buckets)
+    return NULL;
   return find_elem (h, find_bucket (h, e), e);
 }
 
@@ -189,6 +207,8 @@ hash_delete (struct hash *h, struct hash_elem *e)
   ASSERT (h->magic == MAGIC_HASH);
   ASSERT (e != NULL);
   
+  if (!h->buckets)
+    return NULL;
   struct hash_elem *found = find_elem (h, find_bucket (h, e), e);
   if (found != NULL) 
     hash_delete_found (h, found);
@@ -259,7 +279,8 @@ hash_first (struct hash_iterator *i, struct hash *h)
 
   i->hash = h;
   i->bucket = i->hash->buckets;
-  i->elem = list_elem_to_hash_elem (list_head (i->bucket));
+  if (i->bucket)
+    i->elem = list_elem_to_hash_elem (list_head (i->bucket));
 }
 
 /* Advances I to the next element in the hash table and returns

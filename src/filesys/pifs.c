@@ -218,7 +218,10 @@ pifs_deletor_fun (void *pifs_)
       struct pifs_inode *inode = ee->inode;
       free (ee);
       if (!inode)
-        return;
+        {
+          sema_up (&pifs->deletor_thread_down);
+          return;
+        }
         
       // proceed:
         
@@ -342,6 +345,7 @@ pifs_init (struct pifs_device *pifs, struct block_cache *bc)
   rwlock_init (&pifs->pifs_rwlock);
   sema_init (&pifs->deletor_sema, 0);
   list_init (&pifs->deletor_list);
+  sema_init (&pifs->deletor_thread_down, 0);
   
   pifs->deletor_thread = thread_create ("[PIFS-DELETOR]", PRI_MAX,
                                         &pifs_deletor_fun, pifs);
@@ -393,10 +397,10 @@ pifs_destroy (struct pifs_device *pifs)
   list_push_back (&pifs->deletor_list, &item->elem);
   sema_up (&pifs->deletor_sema);
   intr_enable ();
+  sema_down (&pifs->deletor_thread_down);
   
   // destroy the pifs_device:
   
-  process_wait (pifs->deletor_thread);
   hash_destroy (&pifs->open_inodes, &pifs_destroy_sub2);
 }
 

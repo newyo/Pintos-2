@@ -96,15 +96,14 @@ sema_try_down2 (struct semaphore *sema, enum intr_level *ilevel)
 
    This function may be called from an interrupt handler. */
 void
-sema_up (struct semaphore *sema) 
+sema_up2 (struct semaphore *sema, enum intr_level *ilevel) 
 {
-  enum intr_level old_level;
-  struct list_elem *max;
 
   ASSERT (sema != NULL);
 
-  old_level = intr_disable ();
+  *ilevel = intr_disable ();
   sema->value++;
+  struct list_elem *max;
   if (list_empty (&sema->waiters))
     max = NULL;
   else
@@ -115,12 +114,15 @@ sema_up (struct semaphore *sema)
     }
   
   if (max && thread_cmp_priority (&thread_current ()->elem, max, NULL))
-    {
-      intr_set_level (old_level);
-      thread_yield ();
-    }
-  else
-    intr_set_level (old_level);
+    thread_yield ();
+}
+
+void
+sema_up (struct semaphore *sema)
+{
+  enum intr_level old_level;
+  sema_up2 (sema, &old_level);
+  intr_set_level (old_level);
 }
 
 static void sema_test_helper (void *sema_);
@@ -235,16 +237,23 @@ lock_try_acquire2 (struct lock *lock, enum intr_level *ilevel)
    make sense to try to release a lock within an interrupt
    handler. */
 void
-lock_release (struct lock *lock) 
+lock_release2 (struct lock *lock, enum intr_level *ilevel) 
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
   //ASSERT (!intr_context ());
   
-  enum intr_level old_level = intr_disable ();
+  *ilevel = intr_disable ();
   list_remove_properly (&lock->holder_elem);
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+}
+
+void
+lock_release (struct lock *lock)
+{
+  enum intr_level old_level;
+  lock_release2 (lock, &old_level);
   intr_set_level (old_level);
 }
 

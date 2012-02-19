@@ -33,6 +33,7 @@ struct pifs_device
   struct semaphore    deletor_sema;
   struct list         deletor_list;
   tid_t               deletor_thread;
+  struct semaphore    deletor_thread_down;
 };
 
 struct pifs_inode

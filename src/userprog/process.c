@@ -294,7 +294,7 @@ process_wait (tid_t child_tid)
   if (!child)
     goto end;
   struct thread *current = thread_current ();
-  if (current->pagedir != NULL && child->parent != current)
+  if (child->parent != current)
     goto end;
   sema_down (&child->wait_sema);
   

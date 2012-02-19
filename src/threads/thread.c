@@ -26,9 +26,9 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
-
 static struct list sleep_list;
 static struct list zombie_list;
+static struct hash tids_hash;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -91,7 +91,6 @@ static tid_t allocate_tid (void);
 static void thread_recalculate_priorities (struct thread *t, void *aux);
 static void thread_recalculate_load_avg (void);
 static size_t thread_get_ready_threads (void);
-static void thread_foreach2 (thread_action_func *func, void *aux);
 
 static void sleep_wakeup (void);
 static int thread_get_priority_of (struct thread *t);
@@ -113,6 +112,24 @@ thread_list_entry (const struct list_elem *e)
   struct thread *result = list_entry (e, struct thread, elem);
   ASSERT (is_thread (result));
   return result;
+}
+
+static unsigned
+thread_tids_hash (const struct hash_elem *e, void *aux UNUSED)
+{
+  ASSERT (e != NULL);
+  return hash_entry (e, struct thread, tids_elem)->tid;
+}
+
+/* Compares the value of two hash elements A and B, given
+   auxiliary data AUX.  Returns true if A is less than B, or
+   false if A is greater than or equal to B. */
+static bool
+thread_tids_less (const struct hash_elem *a,
+                  const struct hash_elem *b,
+                  void *aux UNUSED)
+{
+  return thread_tids_hash (a, NULL) < thread_tids_hash (b, NULL);
 }
 
 /* Initializes the threading system by transforming the code
@@ -147,7 +164,8 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-    
+  hash_init (&tids_hash, thread_tids_hash, thread_tids_less, NULL);
+  
   printf ("Initialized threading.\n");
 }
 
@@ -235,8 +253,8 @@ thread_tick (void)
        * not at any other time.
        */
       thread_recalculate_load_avg ();
-      thread_foreach2 (thread_recalculate_recent_cpu, NULL);
-      thread_foreach2 (thread_recalculate_priorities, NULL);
+      thread_foreach (thread_recalculate_recent_cpu, NULL);
+      thread_foreach (thread_recalculate_priorities, NULL);
     }
     
   if (t->pagedir != NULL)
@@ -297,6 +315,7 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  hash_insert (&tids_hash, &t->tids_elem);
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
@@ -426,6 +445,8 @@ thread_exit (void)
   intr_disable ();
   list_remove (&t->allelem);
   
+  ASSERT (list_empty (&t->lock_list));
+  
   if (t->cwd)
     {
       pifs_close (t->cwd);
@@ -482,6 +503,7 @@ thread_dispel_zombie (struct thread *t)
   else
     ASSERT (!list_is_interior (&t->parent_elem));
   
+  hash_delete (&tids_hash, &t->tids_elem);
   list_remove (&t->elem);
   palloc_free_page (t);
 }
@@ -530,13 +552,6 @@ void
 thread_foreach (thread_action_func *func, void *aux)
 {
   thread_for_list (func, aux, &all_list);
-  thread_for_list (func, aux, &zombie_list);
-}
-
-static void
-thread_foreach2 (thread_action_func *func, void *aux)
-{
-  thread_for_list (func, aux, &all_list);
 }
 
 bool
@@ -567,12 +582,10 @@ thread_cmp_priority (const struct list_elem *a,
 
 /* removes thread from ready_list and inserts it to sleep_list */
 void
-sleep_add(int64_t wakeup)
+sleep_add (int64_t wakeup)
 {
   if(wakeup < 0)
-    {
-      wakeup = 0;
-    }
+    wakeup = 0;
   
   enum intr_level old_level = intr_disable ();
   struct thread *current_thread = thread_current ();
@@ -770,8 +783,9 @@ thread_recalculate_priorities (struct thread *t, void *aux UNUSED)
 
   /*     PRI_MAX -  (recent_cpu / 4) - (nice * 2) */
   /* <=> PRI_MAX - ((recent_cpu / 4) + (nice * 2)) */
-  int result = PRI_MAX - fp_round (fp_add (fp_div (t->recent_cpu, fp_from_int(4)),
-                                           fp_from_int(t->nice * 2)));
+  int result = PRI_MAX - fp_round (fp_add (fp_div (t->recent_cpu,
+                                                   fp_from_int (4)),
+                                           fp_from_int (t->nice*2)));
   if (result > PRI_MAX)
     result = PRI_MAX;
   else if (result < PRI_MIN)
@@ -827,7 +841,7 @@ thread_get_ready_threads (void)
    ready list.  It is returned by next_thread_to_run() as a
    special case when the ready list is empty. */
 static void NO_RETURN
-idle (void *idle_started_ UNUSED)
+idle (void *idle_started_)
 {
   struct semaphore *idle_started = idle_started_;
   idle_thread = thread_current ();
@@ -881,11 +895,14 @@ running_thread (void)
 }
 
 /* Returns true if T appears to point to a valid thread. */
-static bool
+static bool UNUSED
 is_thread (struct thread *t)
 {
-  return t != NULL && t->status > 0 && t->status < THREAD_MAX &&
-         t->magic == THREAD_MAGIC;
+  ASSERT (t != NULL);
+  ASSERT ((uintptr_t) t % 4096 == 0);
+  ASSERT (t->status > 0 && t->status < THREAD_MAX);
+  ASSERT (t->magic == THREAD_MAGIC);
+  return true;
 }
 
 /* Does basic initialization of T as a blocked thread named
@@ -984,6 +1001,7 @@ thread_schedule_tail (struct thread *prev)
   if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread) 
     {
       ASSERT (prev != cur);
+      hash_delete (&tids_hash, &prev->tids_elem);
       palloc_free_page (prev);
     }
 }
@@ -1043,14 +1061,8 @@ schedule (void)
 static tid_t
 allocate_tid (void) 
 {
-  static tid_t next_tid = 1;
-  tid_t tid;
-
-  lock_acquire (&tid_lock);
-  tid = next_tid++;
-  lock_release (&tid_lock);
-
-  return tid;
+  static tid_t next_tid = 0;
+  return __sync_add_and_fetch (&next_tid, 1);
 }
 
 /* Offset of `stack' member within `struct thread'.
@@ -1060,36 +1072,14 @@ const uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 struct thread *
 thread_find_tid (tid_t tid)
 {
-  struct thread *result = NULL;
   enum intr_level old_level = intr_disable ();
-  
-  struct list_elem *e;
-  for (e = list_begin (&all_list); e != list_end (&all_list);
-       e = list_next (e))
-    {
-      struct thread *t = list_entry (e, struct thread, allelem);
-      ASSERT (is_thread (t));
-      if (t->tid == tid)
-        {
-          result = t;
-          goto end;
-        }
-    }
-  
-  for (e = list_begin (&zombie_list); e != list_end (&zombie_list);
-       e = list_next (e))
-    {
-      struct thread *t = thread_list_entry (e);
-      if (t->tid == tid)
-        {
-          result = t;
-          goto end;
-        }
-    }
-
-end:
+  struct thread key;
+  key.magic = THREAD_MAGIC;
+  key.status = THREAD_ZOMBIE;
+  key.tid = tid;
+  struct hash_elem *e = hash_find (&tids_hash, &key.tids_elem);
   intr_set_level (old_level);
-  return result;
+  return e ? hash_entry (e, struct thread, tids_elem) : NULL;
 }
 
 bool
