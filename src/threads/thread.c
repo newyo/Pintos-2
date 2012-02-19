@@ -244,7 +244,7 @@ thread_tick (void)
         kernel_ticks++;
     }
 
-  if(thread_mlfqs && ((timer_ticks () % TIMER_FREQ) == 0))
+  if (thread_mlfqs && ((timer_ticks () % TIMER_FREQ) == 0))
     {
       /* Because of assumptions made by some of the tests, 
        * load_avg must be updated exactly when the system 
@@ -337,7 +337,8 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
   
-  hash_init (&t->fds, fd_hash, fd_less, t);
+  hash_init (&t->fds_hash, fd_hash, fd_less, t);
+  heap_init (&t->fds_heap, fd_heap_less, t);
   t->exit_code = -1;
   
   struct thread *current_thread = thread_current ();

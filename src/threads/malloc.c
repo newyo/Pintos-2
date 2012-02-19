@@ -79,6 +79,7 @@ malloc_init (void)
       d->blocks_per_arena = (PGSIZE - sizeof (struct arena)) / block_size;
       list_init (&d->free_list);
     }
+  printf ("Initialized malloc'ing.\n");
 }
 
 /* Obtains and returns a new block of at least SIZE bytes.

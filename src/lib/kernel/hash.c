@@ -125,19 +125,10 @@ hash_insert (struct hash *h, struct hash_elem *new)
   if (h->buckets == NULL)
     {
       h->bucket_cnt = 4;
-      h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
-      if (!h->buckets)
-        {
-          h->bucket_cnt = 2;
-          h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
-          if (!h->buckets)
-            {
-              h->bucket_cnt = 1;
-              h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
-              if (!h->buckets)
-                PANIC ("Hash insert: out of memory.");
-            }
-        }
+      h->buckets = malloc (sizeof (*h->buckets) * h->bucket_cnt);
+      if (!h->buckets) // TODO: change API
+        PANIC ("Hash insert: out of memory.");
+        
       size_t i;
       for (i = 0; i < h->bucket_cnt; ++i)
         list_init (&h->buckets[i]);

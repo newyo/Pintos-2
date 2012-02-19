@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include <hash.h>
+#include <heap.h>
 #include "synch.h"
 #include "fixed-point.h"
 
@@ -112,7 +113,8 @@ struct thread
 
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct hash fds;                    /* open file descriptors */
+    struct hash fds_hash;               /* open file descriptors */
+    struct heap fds_heap;               /* open file descriptors */
     int exit_code;                      /* exit code of the thread */
 
     /* Shared between thread.c and userprog/process.c. */

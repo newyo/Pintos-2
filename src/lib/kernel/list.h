@@ -98,7 +98,6 @@ struct list_elem
     struct list_elem *next;     /* Next list element. */
     
     unsigned int magic;
-    char end[0];
   };
 
 /* List. */
@@ -128,7 +127,7 @@ is_list_elem (const struct list_elem *elem)
   ({ \
     __typeof (LIST_ELEM) _list_elem = (LIST_ELEM); \
     ASSERT (is_list_elem (_list_elem)); \
-    (STRUCT*) ((uint8_t*)&_list_elem->end - offsetof (__typeof (STRUCT), MEMBER.end)); \
+    (STRUCT*) ((uintptr_t) _list_elem - offsetof (STRUCT, MEMBER)); \
   })
 
 /* List initialization.

@@ -20,8 +20,6 @@
 //#define SYSCALL_DEBUG(...) printf (__VA_ARGS__)
 #define SYSCALL_DEBUG(...)
 
-#define TODO_NO_RETURN NO_RETURN
-
 static void syscall_handler (struct intr_frame *);
 
 static struct lock filesys_lock, stdin_lock;
@@ -230,17 +228,21 @@ syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
       return;
     }
   
-  // TODO: implement a proper function to find a free fd
-  for (fd->fd = 3; fd->fd < INT_MAX; ++fd->fd)
-    if (hash_find (&g->thread->fds, &fd->elem) == NULL)
-      break;
-  if (fd->fd == INT_MAX)
+  struct heap_elem *e = heap_peek_min (&g->thread->fds_heap);
+  if (e != NULL)
     {
-      free (fd);
-      if_->eax = -ENFILE;
-      vm_ensure_group_destroy (g);
-      return;
+      fd->fd = hash_entry (e, struct fd, heap_elem)->fd;
+      if (fd->fd >= INT_MAX || fd->fd < 3)
+        {
+          free (fd);
+          if_->eax = -ENFILE;
+          vm_ensure_group_destroy (g);
+          return;
+        }
+      ++fd->fd;
     }
+  else
+    fd->fd = 3;
   
   fd->file = SYNC (filesys_open (filename));
   if (!fd->file)
@@ -251,19 +253,20 @@ syscall_handler_SYS_OPEN (_SYSCALL_HANDLER_ARGS)
       return;
     }
 
-  hash_insert (&g->thread->fds, &fd->elem);
+  hash_insert (&g->thread->fds_hash, &fd->hash_elem);
+  heap_insert (&g->thread->fds_heap, &fd->heap_elem);
   if_->eax = fd->fd;
   vm_ensure_group_destroy (g);
 }
 
 static struct fd *
-retrieve_fd (unsigned fd)
+retrieve_fd (struct thread *t, unsigned fd)
 {
   struct fd search;
   memset (&search, 0, sizeof (search));
   search.fd = fd;
-  struct hash_elem *e = hash_find (&thread_current ()->fds, &search.elem);
-  return e ? hash_entry (e, struct fd, elem) : NULL;
+  struct hash_elem *e = hash_find (&t->fds_hash, &search.hash_elem);
+  return e ? hash_entry (e, struct fd, hash_elem) : NULL;
 }
 
 static void
@@ -272,7 +275,7 @@ syscall_handler_SYS_FILESIZE (_SYSCALL_HANDLER_ARGS)
   // int filesize (int fd);
   ENSURE_USER_ARGS (1);
   
-  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  struct fd *fd_data = retrieve_fd (g->thread, *(unsigned *) arg1);
   vm_ensure_group_destroy (g);
   if_->eax = fd_data ? SYNC (file_length (fd_data->file)) : -1;
 }
@@ -294,7 +297,7 @@ syscall_handler_SYS_READ (_SYSCALL_HANDLER_ARGS)
     
   if (fd != 0)
     {
-      struct fd *fd_data = retrieve_fd (fd);
+      struct fd *fd_data = retrieve_fd (g->thread, fd);
       if (!fd_data)
         {
           if_->eax = -EBADF;
@@ -347,7 +350,7 @@ syscall_handler_SYS_WRITE (_SYSCALL_HANDLER_ARGS)
       return;
     }
   
-  struct fd *fd_data = retrieve_fd (fd);
+  struct fd *fd_data = retrieve_fd (g->thread, fd);
   if (fd_data)
     {
       lock_acquire (&filesys_lock);
@@ -372,7 +375,7 @@ syscall_handler_SYS_SEEK (_SYSCALL_HANDLER_ARGS)
   unsigned position = *(unsigned *) arg2;
   vm_ensure_group_destroy (g);
   
-  struct fd *fd_data = retrieve_fd (fd);
+  struct fd *fd_data = retrieve_fd (g->thread, fd);
   if (!fd_data)
     kill_segv (g);
   SYNC_VOID (file_seek (fd_data->file, position));
@@ -384,7 +387,7 @@ syscall_handler_SYS_TELL (_SYSCALL_HANDLER_ARGS)
   // unsigned tell (int fd);
   ENSURE_USER_ARGS (1);
   
-  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  struct fd *fd_data = retrieve_fd (g->thread, *(unsigned *) arg1);
   if (!fd_data)
     kill_segv (g);
   vm_ensure_group_destroy (g);
@@ -397,11 +400,12 @@ syscall_handler_SYS_CLOSE (_SYSCALL_HANDLER_ARGS)
   // void close (int fd);
   ENSURE_USER_ARGS (1);
   
-  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  struct fd *fd_data = retrieve_fd (g->thread, *(unsigned *) arg1);
   if (!fd_data)
     kill_segv (g);
   
-  hash_delete_found (&g->thread->fds, &fd_data->elem);
+  hash_delete_found (&g->thread->fds_hash, &fd_data->hash_elem);
+  heap_delete (&g->thread->fds_heap, &fd_data->heap_elem);
   vm_ensure_group_destroy (g);
   
   SYNC_VOID (file_close (fd_data->file));
@@ -414,7 +418,7 @@ syscall_handler_SYS_MMAP (_SYSCALL_HANDLER_ARGS)
   // mapid_t mmap (int fd, void *addr);
   ENSURE_USER_ARGS (2);
   
-  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  struct fd *fd_data = retrieve_fd (g->thread, *(unsigned *) arg1);
   void *base = *(void **) arg2;
   vm_ensure_group_destroy (g);
   
@@ -500,7 +504,7 @@ syscall_handler_SYS_READDIR (_SYSCALL_HANDLER_ARGS)
   // bool readdir (int fd, char name[READDIR_MAX_LEN + 1]);
   ENSURE_USER_ARGS (2);
   
-  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  struct fd *fd_data = retrieve_fd (g->thread, *(unsigned *) arg1);
   if (!fd_data)
     kill_segv (g);
   char *name = *(char **) arg2;
@@ -533,7 +537,7 @@ syscall_handler_SYS_ISDIR (_SYSCALL_HANDLER_ARGS)
   // bool isdir (int fd);
   ENSURE_USER_ARGS (1);
   
-  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  struct fd *fd_data = retrieve_fd (g->thread, *(unsigned *) arg1);
   if (!fd_data)
     kill_segv (g);
     
@@ -547,7 +551,7 @@ syscall_handler_SYS_INUMBER (_SYSCALL_HANDLER_ARGS)
   // int inumber (int fd);
   ENSURE_USER_ARGS (1);
   
-  struct fd *fd_data = retrieve_fd (*(unsigned *) arg1);
+  struct fd *fd_data = retrieve_fd (g->thread, *(unsigned *) arg1);
   if (!fd_data)
     kill_segv (g);
   vm_ensure_group_destroy (g);
@@ -594,7 +598,6 @@ syscall_handler (struct intr_frame *if_)
     _HANDLE (SYS_ISDIR);
     _HANDLE (SYS_INUMBER);
     default:
-      printf ("Invalid system call!\n");
       kill_segv (&g);
   }
 }

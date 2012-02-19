@@ -16,13 +16,15 @@ void process_activate (void);
 struct fd
 {
   unsigned          fd;
-  struct hash_elem  elem;
+  struct hash_elem  hash_elem;
+  struct heap_elem  heap_elem;
   struct file      *file;
   size_t            nth_readdir;
 };
 
 bool fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t);
 unsigned fd_hash (const struct hash_elem *e, void *t);
+bool fd_heap_less (const struct heap_elem*, const struct heap_elem*, void*);
 void fd_free (struct hash_elem *e, void *aux);
 
 #endif /* userprog/process.h */

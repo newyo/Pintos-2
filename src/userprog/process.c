@@ -37,21 +37,33 @@ static bool load (const char *file_name, void (**eip) (void), void **esp);
 unsigned
 fd_hash (const struct hash_elem *e, void *t UNUSED)
 {
-  return (unsigned) hash_entry (e, struct fd, elem)->fd;
+  return (unsigned) hash_entry (e, struct fd, hash_elem)->fd;
 }
 
 bool
 fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t UNUSED)
 {
-  struct fd *aa = hash_entry (a, struct fd, elem);
-  struct fd *bb = hash_entry (b, struct fd, elem);
+  struct fd *aa = hash_entry (a, struct fd, hash_elem);
+  struct fd *bb = hash_entry (b, struct fd, hash_elem);
   return aa->fd < bb->fd;
 }
 
-void
-fd_free (struct hash_elem *e, void *aux UNUSED)
+bool
+fd_heap_less (const struct heap_elem *a,
+              const struct heap_elem *b,
+              void *t UNUSED)
 {
-  struct fd *fd = hash_entry (e, struct fd, elem);
+  struct fd *aa = heap_entry (a, struct fd, heap_elem);
+  struct fd *bb = heap_entry (b, struct fd, heap_elem);
+  return aa->fd > bb->fd;
+}
+
+void
+fd_free (struct hash_elem *e, void *t_)
+{
+  struct thread *t = t_;
+  struct fd *fd = hash_entry (e, struct fd, hash_elem);
+  heap_delete (&t->fds_heap, &fd->heap_elem);
   file_close (fd->file);
   free (fd);
 }
@@ -333,7 +345,8 @@ process_exit (void)
     }
     
   // Close all open files
-  hash_destroy (&cur->fds, fd_free);
+  hash_destroy (&cur->fds_hash, fd_free);
+  heap_destroy (&cur->fds_heap);
 
   // Disable VM
   vm_clean (cur);
