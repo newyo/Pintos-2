@@ -211,3 +211,17 @@ heap_delete (struct heap *heap, struct heap_elem *elem)
   heap_fix_bottom_up (heap, pos);
   heap_fix_top_down (heap, pos);
 }
+
+void
+heap_changed_key (struct heap *heap, struct heap_elem *elem)
+{
+  ASSERT (heap != NULL);
+  ASSERT (heap->magic == HEAP_MAGIC);
+  ASSERT (elem != NULL);
+  ASSERT (elem->magic == HEAP_ELEM_MAGIC);
+  ASSERT (elem->index < heap->elem_cnt);
+  
+  unsigned pos = elem->index;
+  heap_fix_bottom_up (heap, pos);
+  heap_fix_top_down (heap, pos);
+}

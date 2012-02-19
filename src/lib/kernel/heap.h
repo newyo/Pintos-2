@@ -33,6 +33,7 @@ void heap_clear (struct heap *heap);
 void heap_destroy (struct heap *heap);
 
 bool heap_insert (struct heap *heap, struct heap_elem *elem);
+void heap_changed_key (struct heap *heap, struct heap_elem *elem);
 struct heap_elem *heap_peek_min (struct heap *heap);
 struct heap_elem *heap_delete_min (struct heap *heap);
 void heap_delete (struct heap *heap, struct heap_elem *elem);
