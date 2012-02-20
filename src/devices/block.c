@@ -17,8 +17,13 @@ struct block
     const struct block_operations *ops;  /* Driver operations. */
     void *aux;                          /* Extra data owned by driver. */
 
-    unsigned long long read_cnt;        /* Number of sectors read. */
-    unsigned long long write_cnt;       /* Number of sectors written. */
+#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4)
+    uint64_t
+#else
+    uint32_t
+#endif
+        read_cnt,        /* Number of sectors read. */
+        write_cnt;       /* Number of sectors written. */
   };
 
 /* List of all block devices. */
@@ -113,16 +118,6 @@ check_sector (struct block *block, block_sector_t sector)
     }
 }
 
-#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4)
-# define ATOM_INC8(X) __sync_fetch_and_add (&(X), 1)
-#else
-# define ATOM_INC8(X) ({ \
-  uint8_t _value = 1; \
-  asm volatile ("lock xaddb %%al, %0" : "+m"(X), "+r"(_value)); \
-  _value; \
-})
-#endif
-
 /* Reads sector SECTOR from BLOCK into BUFFER, which must
    have room for BLOCK_SECTOR_SIZE bytes.
    Internally synchronizes accesses to block devices, so external
@@ -133,7 +128,7 @@ block_read (struct block *block, block_sector_t sector, void *buffer)
   check_sector (block, sector);
   block->ops->read (block->aux, sector, buffer);
   block->read_cnt++;
-  ATOM_INC8 (block->read_cnt);
+  __sync_fetch_and_add (&block->read_cnt, 1);
 }
 
 /* Write sector SECTOR to BLOCK from BUFFER, which must contain
@@ -147,7 +142,7 @@ block_write (struct block *block, block_sector_t sector, const void *buffer)
   check_sector (block, sector);
   ASSERT (block->type != BLOCK_FOREIGN);
   block->ops->write (block->aux, sector, buffer);
-  ATOM_INC8 (block->write_cnt);
+  __sync_fetch_and_add (&block->write_cnt, 1);
 }
 
 /* Returns the number of sectors in BLOCK. */
@@ -182,7 +177,13 @@ block_print_stats (void)
       struct block *block = block_by_role[i];
       if (block != NULL)
         {
-          printf ("%s (%s): %llu reads, %llu writes\n",
+          printf (
+#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4)
+                  "%s (%s): %llu reads, %llu writes\n"
+#else
+                  "%s (%s): %u reads, %u writes\n"
+#endif
+                  ,
                   block->name, block_type_name (block->type),
                   block->read_cnt, block->write_cnt);
         }
