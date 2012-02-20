@@ -128,7 +128,7 @@ struct scsi_capacity10
 #pragma pack()
 
 static void *msc_attached (struct usb_iface *);
-static void msc_detached (class_info);
+static void msc_detached (class_info) NO_RETURN;
 
 static void msc_reset_endpoint (struct usb_endpoint *eop);
 
@@ -246,7 +246,7 @@ msc_attached (struct usb_iface *ui)
   return mci;
 }
 
-static void
+static void NO_RETURN
 msc_detached (class_info ci UNUSED)
 {
   PANIC ("msc_detached: STUB");

@@ -92,6 +92,8 @@ DEPENDS = $(patsubst %.o,%.d,$(OBJECTS))
 threads/kernel.lds.s: CPPFLAGS += -P
 threads/kernel.lds.s: threads/kernel.lds.S threads/loader.h
 
+devices/usb_storage.o: CFLAGS += -fno-strict-aliasing
+
 kernel.o: threads/kernel.lds.s $(OBJECTS) 
 	$(LD) -T $< -o $@ $(OBJECTS)
 
