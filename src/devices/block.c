@@ -113,6 +113,16 @@ check_sector (struct block *block, block_sector_t sector)
     }
 }
 
+#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 4)
+# define ATOM_INC8(X) __sync_fetch_and_add (&(X), 1)
+#else
+# define ATOM_INC8(X) ({ \
+  uint8_t _value = 1; \
+  asm volatile ("lock xaddb %%al, %0" : "+m"(X), "+r"(_value)); \
+  _value; \
+})
+#endif
+
 /* Reads sector SECTOR from BLOCK into BUFFER, which must
    have room for BLOCK_SECTOR_SIZE bytes.
    Internally synchronizes accesses to block devices, so external
@@ -123,7 +133,7 @@ block_read (struct block *block, block_sector_t sector, void *buffer)
   check_sector (block, sector);
   block->ops->read (block->aux, sector, buffer);
   block->read_cnt++;
-  __sync_add_and_fetch (&block->read_cnt, 1);
+  ATOM_INC8 (block->read_cnt);
 }
 
 /* Write sector SECTOR to BLOCK from BUFFER, which must contain
@@ -137,7 +147,7 @@ block_write (struct block *block, block_sector_t sector, const void *buffer)
   check_sector (block, sector);
   ASSERT (block->type != BLOCK_FOREIGN);
   block->ops->write (block->aux, sector, buffer);
-  __sync_add_and_fetch (&block->write_cnt, 1);
+  ATOM_INC8 (block->write_cnt);
 }
 
 /* Returns the number of sectors in BLOCK. */
