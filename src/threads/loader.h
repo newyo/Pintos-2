@@ -34,7 +34,7 @@
 #include <stdint.h>
 
 /* Amount of physical memory, in 4 kB pages. */
-extern uint32_t init_ram_pages;
+extern uint32_t ram_pages;
 #endif
 
 #endif /* threads/loader.h */

@@ -33,20 +33,22 @@ struct pool
   };
 
 /* Two pools: one for kernel data, one for user pages. */
-static struct pool kernel_pool, user_pool;
+struct pool kernel_pool, user_pool;
+
+/* Maximum number of pages to put in user pool. */
+size_t user_page_limit = SIZE_MAX;
 
 static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
 static bool page_from_pool (const struct pool *, void *page);
 
-/* Initializes the page allocator.  At most USER_PAGE_LIMIT
-   pages are put into the user pool. */
+/* Initializes the page allocator. */
 void
-palloc_init (size_t user_page_limit)
+palloc_init (void) 
 {
   /* Free memory starts at 1 MB and runs to the end of RAM. */
   uint8_t *free_start = ptov (1024 * 1024);
-  uint8_t *free_end = ptov (init_ram_pages * PGSIZE);
+  uint8_t *free_end = ptov (ram_pages * PGSIZE);
   
   ASSERT (free_end >= free_start);
   

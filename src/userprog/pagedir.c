@@ -18,7 +18,7 @@ pagedir_create (void)
 {
   uint32_t *pd = palloc_get_page (0);
   if (pd != NULL)
-    memcpy (pd, init_page_dir, PGSIZE);
+    memcpy (pd, base_page_dir, PGSIZE);
   return pd;
 }
 
@@ -32,7 +32,7 @@ pagedir_destroy (uint32_t *pd)
   if (pd == NULL)
     return;
 
-  ASSERT (pd != init_page_dir);
+  ASSERT (pd != base_page_dir);
   for (pde = pd; pde < pd + pd_no (PHYS_BASE); pde++)
     if (*pde & PTE_P) 
       {
@@ -74,7 +74,7 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
           if (pt == NULL) 
             return NULL; 
       
-          *pde = pde_create (pt);
+          *pde = pde_create_user (pt);
         }
       else
         return NULL;
@@ -107,8 +107,8 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   ASSERT (pg_ofs (kpage) == 0);
   ASSERT (is_user_vaddr (upage));
   ASSERT (!is_user_vaddr (kpage));
-  ASSERT (vtop (kpage) >> PTSHIFT < init_ram_pages);
-  ASSERT (pd != init_page_dir);
+  ASSERT (vtop (kpage) >> PTSHIFT < ram_pages);
+  ASSERT (pd != base_page_dir);
 
   pte = lookup_page (pd, upage, true);
 
@@ -224,7 +224,7 @@ void
 pagedir_activate (uint32_t *pd) 
 {
   if (pd == NULL)
-    pd = init_page_dir;
+    pd = base_page_dir;
 
   /* Store the physical address of the page directory into CR3
      aka PDBR (page directory base register).  This activates our

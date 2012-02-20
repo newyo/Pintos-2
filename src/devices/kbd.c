@@ -137,6 +137,10 @@ keyboard_interrupt (struct intr_frame *args UNUSED)
           if (c == 0177 && ctrl && alt)
             shutdown_reboot ();
 
+          /* Print backtraces of all threads if Ctrl+Alt+A pressed. */
+          if (c == 'A' && ctrl && alt)
+            debug_backtrace_all ();
+
           /* Handle Ctrl, Shift.
              Note that Ctrl overrides Shift. */
           if (ctrl && c >= 0x40 && c < 0x60) 

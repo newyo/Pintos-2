@@ -141,7 +141,9 @@ heap_insert (struct heap *heap, struct heap_elem *elem)
   if (heap->elem_cnt >= heap->size)
     {
       // grow if needed
-      size_t new_size = (heap->size+1) * 2;
+      size_t new_size = 2 * heap->size;
+      if (new_size == 0)
+        new_size = 4;
       void *new_data = realloc (heap->data, sizeof (*heap->data) * new_size);
       if (!new_data)
         return false;

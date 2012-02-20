@@ -46,7 +46,8 @@ debug_panic (const char *file, int line, const char *function,
     }
 
   serial_flush ();
-  shutdown ();
+  if (power_off_when_done)
+    shutdown_power_off ();
   for (;;);
 }
 

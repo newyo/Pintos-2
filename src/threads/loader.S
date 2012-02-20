@@ -215,7 +215,7 @@ putc:	pusha
 	jz 3f
 	movw $0x9090, 2b		# Turn "int $0x14" above into NOPs.
 
-3:
+3:	
 	cmp $'\r', %al
 	jne popa_ret
 	mov $'\n', %al

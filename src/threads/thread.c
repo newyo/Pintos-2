@@ -86,7 +86,7 @@ static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
-void thread_schedule_tail (struct thread *prev);
+void schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 static void thread_recalculate_priorities (struct thread *t, void *aux);
 static void thread_recalculate_load_avg (void);
@@ -396,7 +396,6 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
-  
   intr_set_level (old_level);
 }
 
@@ -979,7 +978,7 @@ alloc_frame (struct thread *t, size_t size)
    After this function and its caller returns, the thread switch
    is complete. */
 void
-thread_schedule_tail (struct thread *prev)
+schedule_tail (struct thread *prev) 
 {
   struct thread *cur = running_thread ();
   
@@ -1055,7 +1054,7 @@ schedule (void)
       ASSERT_STACK_NOT_EXCEEDED (next);
       prev = switch_threads (cur, next);
     }
-  thread_schedule_tail (prev);
+  schedule_tail (prev);
 }
 
 /* Returns a tid to use for a new thread. */

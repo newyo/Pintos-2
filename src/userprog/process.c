@@ -502,33 +502,30 @@ load (const char *file_name, void (**eip) (void), void **esp)
         case PT_SHLIB:
           goto done;
         case PT_LOAD:
-          if (validate_segment (&phdr, t->executable)) 
+          if (!validate_segment (&phdr, t->executable))
+            goto done;
+          bool writable = (phdr.p_flags & PF_W) != 0;
+          uint32_t file_page = phdr.p_offset & ~PGMASK;
+          uint32_t mem_page = phdr.p_vaddr & ~PGMASK;
+          uint32_t page_offset = phdr.p_vaddr & PGMASK;
+          uint32_t read_bytes, zero_bytes;
+          if (phdr.p_filesz > 0)
             {
-              bool writable = (phdr.p_flags & PF_W) != 0;
-              uint32_t file_page = phdr.p_offset & ~PGMASK;
-              uint32_t mem_page = phdr.p_vaddr & ~PGMASK;
-              uint32_t page_offset = phdr.p_vaddr & PGMASK;
-              uint32_t read_bytes, zero_bytes;
-              if (phdr.p_filesz > 0)
-                {
-                  /* Normal segment.
-                     Read initial part from disk and zero the rest. */
-                  read_bytes = page_offset + phdr.p_filesz;
-                  zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE)
-                                - read_bytes);
-                }
-              else 
-                {
-                  /* Entirely zero.
-                     Don't read anything from disk. */
-                  read_bytes = 0;
-                  zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
-                }
-              if (!load_segment (t->executable, file_page, (void *) mem_page,
-                                 read_bytes, zero_bytes, writable))
-                goto done;
+              /* Normal segment.
+                 Read initial part from disk and zero the rest. */
+              read_bytes = page_offset + phdr.p_filesz;
+              zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE)
+                            - read_bytes);
             }
-          else
+          else 
+            {
+              /* Entirely zero.
+                 Don't read anything from disk. */
+              read_bytes = 0;
+              zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
+            }
+          if (!load_segment (t->executable, file_page, (void *) mem_page,
+                             read_bytes, zero_bytes, writable))
             goto done;
           break;
         }

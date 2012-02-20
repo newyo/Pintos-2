@@ -10,6 +10,8 @@
 #include <string.h>
 #include "devices/kbd.h"
 #include "devices/input.h"
+#include "devices/pci.h"
+#include "devices/usb.h"
 #include "devices/serial.h"
 #include "devices/shutdown.h"
 #include "devices/timer.h"
@@ -42,7 +44,8 @@
 #include "fixed-point.h"
 
 /* Page directory with kernel mappings only. */
-uint32_t *init_page_dir;
+uint32_t *base_page_dir;
+bool base_page_dir_initialized = false;
 
 #ifdef FILESYS
 /* -f: Format the file system? */
@@ -55,11 +58,15 @@ static const char *scratch_bdev_name;
 static const char *swap_bdev_name;
 #endif /* FILESYS */
 
-/* -ul: Maximum number of pages to put into palloc's user pool. */
-static size_t user_page_limit = SIZE_MAX;
+/* -q: Power off after kernel tasks complete? */
+bool power_off_when_done;
+
+/* -r: Reboot after kernel tasks complete? */
+static bool reboot_when_done;
 
 static void bss_init (void);
 static void paging_init (void);
+static void pci_zone_init (void);
 
 static char **read_command_line (void);
 static char **parse_options (char **argv);
@@ -93,10 +100,10 @@ main (void)
 
   /* Greet user. */
   printf ("Pintos booting with %" PRIu32 " kB RAM...\n",
-          init_ram_pages * PGSIZE / 1024);
+          ram_pages * PGSIZE / 1024);
 
   /* Initialize memory system. */
-  palloc_init (user_page_limit);
+  palloc_init ();
   malloc_init ();
   paging_init ();
 
@@ -108,6 +115,7 @@ main (void)
   intr_init ();
   timer_init ();
   kbd_init ();
+  pci_init ();
   input_init ();
   exception_init ();
   syscall_init ();
@@ -116,9 +124,11 @@ main (void)
   thread_start ();
   serial_init_queue ();
   timer_calibrate ();
+  usb_init ();
 
 #ifdef FILESYS
   /* Initialize file system. */
+  usb_storage_init ();
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
@@ -137,7 +147,12 @@ main (void)
   run_actions (argv);
 
   /* Finish up. */
-  shutdown ();
+  if (reboot_when_done)
+    shutdown_reboot ();
+ 
+  if (power_off_when_done)
+    shutdown_power_off ();
+  
   thread_exit ();
 }
 
@@ -157,7 +172,7 @@ bss_init (void)
 
 /* Populates the base page directory and page table with the
    kernel virtual mapping, and then sets up the CPU to use the
-   new page directory.  Points init_page_dir to the page
+   new page directory.  Points base_page_dir to the page
    directory it creates. */
 static void
 paging_init (void)
@@ -166,9 +181,9 @@ paging_init (void)
   size_t page;
   extern char _start, _end_kernel_text;
 
-  pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO);
+  pd = base_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO);
   pt = NULL;
-  for (page = 0; page < init_ram_pages; page++)
+  for (page = 0; page < ram_pages; page++) 
     {
       uintptr_t paddr = page * PGSIZE;
       char *vaddr = ptov (paddr);
@@ -179,20 +194,41 @@ paging_init (void)
       if (pd[pde_idx] == 0)
         {
           pt = palloc_get_page (PAL_ASSERT | PAL_ZERO);
-          pd[pde_idx] = pde_create (pt);
+          pd[pde_idx] = pde_create_kernel (pt);
         }
 
       pt[pte_idx] = pte_create_kernel (vaddr, !in_kernel_text);
     }
+
+  pci_zone_init ();
 
   /* Store the physical address of the page directory into CR3
      aka PDBR (page directory base register).  This activates our
      new page tables immediately.  See [IA32-v2a] "MOV--Move
      to/from Control Registers" and [IA32-v3a] 3.7.5 "Base Address
      of the Page Directory". */
-  asm volatile ("movl %0, %%cr3" : : "r" (vtop (init_page_dir)));
+  asm volatile ("movl %0, %%cr3" : : "r" (vtop (base_page_dir)));
+
+  base_page_dir_initialized = 1;
   
   printf ("Initialized paging.\n");
+}
+
+/* initialize PCI zone at PCI_ADDR_ZONE_BEGIN - PCI_ADDR_ZONE_END*/
+static void
+pci_zone_init (void)
+{
+  int i;
+  for (i = 0; i < PCI_ADDR_ZONE_PDES; i++)
+    {
+      size_t pde_idx = pd_no ((void *) PCI_ADDR_ZONE_BEGIN) + i;
+      uint32_t pde;
+      void *pt;
+
+      pt = palloc_get_page (PAL_ASSERT | PAL_ZERO);
+      pde = pde_create_kernel (pt);
+      base_page_dir[pde_idx] = pde;
+    }
 }
 
 /* Breaks the kernel command line into words and returns them as
@@ -242,9 +278,9 @@ parse_options (char **argv)
       if (!strcmp (name, "-h"))
         usage ();
       else if (!strcmp (name, "-q"))
-        shutdown_configure (SHUTDOWN_POWER_OFF);
+        power_off_when_done = true;
       else if (!strcmp (name, "-r"))
-        shutdown_configure (SHUTDOWN_REBOOT);
+        reboot_when_done = true;
 #ifdef FILESYS
       else if (!strcmp (name, "-f"))
         format_filesys = true;
@@ -357,15 +393,15 @@ usage (void)
           "  cat FILE           Print FILE to the console.\n"
           "  rm FILE            Delete FILE.\n"
           "Use these actions indirectly via `pintos' -g and -p options:\n"
-          "  extract            Untar from scratch device into file system.\n"
-          "  append FILE        Append FILE to tar file on scratch device.\n"
+          "  extract            Untar from scratch disk into file system.\n"
+          "  append FILE        Append FILE to tar file on scratch disk.\n"
 #endif
           "\nOptions:\n"
           "  -h                 Print this help message and power off.\n"
           "  -q                 Power off VM after actions or on panic.\n"
           "  -r                 Reboot after actions.\n"
 #ifdef FILESYS
-          "  -f                 Format file system device during startup.\n"
+          "  -f                 Format file system disk during startup.\n"
           "  -filesys=BDEV      Use BDEV for file system instead of default.\n"
           "  -scratch=BDEV      Use BDEV for scratch instead of default.\n"
           "  -swap=BDEV         Use BDEV for swap instead of default.\n"
@@ -378,7 +414,7 @@ usage (void)
 }
 
 #ifdef FILESYS
-/* Figure out what block devices to cast in the various Pintos roles. */
+/* Figure out what disks to cast in the various Pintos roles. */
 static void
 locate_block_devices (void)
 {

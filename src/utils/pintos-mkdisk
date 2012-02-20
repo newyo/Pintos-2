@@ -11,7 +11,7 @@ BEGIN { my $self = $0; $self =~ s%/+[^/]*$%%; require "$self/Pintos.pm"; }
 
 our ($disk_fn);			# Output disk file name.
 our (%parts);			# Partitions.
-our ($format);			# "partitioned" (default) or "raw"
+our ($format) = "partitioned"; # "partitioned" (default) or "raw"
 our (%geometry);		# IDE disk geometry.
 our ($align);			# Align partitions on cylinders?
 our ($loader_fn);		# File name of loader.
@@ -91,7 +91,7 @@ my (%disk) = %parts;
 $disk{DISK} = $disk_fn;
 $disk{HANDLE} = $disk_handle;
 $disk{ALIGN} = $align;
-$disk{GEOMETRY} = %geometry;
+$disk{GEOMETRY} = \%geometry;
 $disk{FORMAT} = $format;
 $disk{LOADER} = $loader;
 $disk{ARGS} = \@kernel_args;

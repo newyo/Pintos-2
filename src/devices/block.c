@@ -123,6 +123,7 @@ block_read (struct block *block, block_sector_t sector, void *buffer)
   check_sector (block, sector);
   block->ops->read (block->aux, sector, buffer);
   block->read_cnt++;
+  __sync_add_and_fetch (&block->read_cnt, 1);
 }
 
 /* Write sector SECTOR to BLOCK from BUFFER, which must contain
@@ -136,7 +137,7 @@ block_write (struct block *block, block_sector_t sector, const void *buffer)
   check_sector (block, sector);
   ASSERT (block->type != BLOCK_FOREIGN);
   block->ops->write (block->aux, sector, buffer);
-  block->write_cnt++;
+  __sync_add_and_fetch (&block->write_cnt, 1);
 }
 
 /* Returns the number of sectors in BLOCK. */

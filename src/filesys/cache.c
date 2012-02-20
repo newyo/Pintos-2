@@ -214,6 +214,7 @@ block_cache_write (struct block_cache *bc, block_sector_t nth)
   BC_DEBUG ("BC write %d [%u]\n", nth, result->lease_counter);
   if (!retreived)
     {
+      // FIXME: concurrency failures in calling code
       block_read (bc->device, nth, &result->data);
       result->dirty = false;
     }

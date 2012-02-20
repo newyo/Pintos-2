@@ -32,6 +32,7 @@ our (@disks);			# Extra disk images to pass to simulator.
 our ($loader_fn);		# Bootstrap loader.
 our (%geometry);		# IDE disk geometry.
 our ($align);			# Partition alignment.
+our ($fake_usb) = 0;		# Use fake USB disks instead of IDE?
 
 parse_command_line ();
 prepare_scratch_disk ();
@@ -55,6 +56,7 @@ sub parse_command_line {
 		    "bochs" => sub { set_sim ("bochs") },
 		    "qemu" => sub { set_sim ("qemu") },
 		    "player" => sub { set_sim ("player") },
+		    "hardware" => sub { set_sim ("hardware") },
 
 		    "debug=s" => sub { set_debug ($_[1]) },
 		    "no-debug" => sub { set_debug ("none") },
@@ -94,6 +96,7 @@ sub parse_command_line {
 					   $tmp_disk = 0; },
 		    "disk=s" => sub { set_disk ($_[1]); },
 		    "loader=s" => \$loader_fn,
+		    "fake-usb" => \$fake_usb,
 
 		    "geometry=s" => \&set_geometry,
 		    "align=s" => \&set_align)
@@ -104,6 +107,15 @@ sub parse_command_line {
     $debug = "none" if !defined $debug;
     $vga = exists ($ENV{DISPLAY}) ? "window" : "none" if !defined $vga;
 
+    if ($sim eq 'hardware') {
+	$make_disk = "pintos.dsk" if !defined $make_disk;
+	$tmp_disk = 0;
+	$align = 'full' if !defined $align;
+    }
+
+    $fake_usb = 0, print "warning: ignoring --fake-usb with $sim simulator\n"
+      if $fake_usb && $sim ne 'qemu';
+
     undef $timeout, print "warning: disabling timeout with --$debug\n"
       if defined ($timeout) && $debug ne 'none';
 
@@ -113,8 +125,6 @@ sub parse_command_line {
     $align = "bochs",
       print STDERR "warning: setting --align=bochs for Bochs support\n"
 	if $sim eq 'bochs' && defined ($align) && $align eq 'none';
-
-    $kill_on_failure = 0;
 }
 
 # usage($exitcode).
@@ -131,6 +141,7 @@ Simulator selection:
   --bochs                  (default) Use Bochs as simulator
   --qemu                   Use QEMU as simulator
   --player                 Use VMware Player as simulator
+  --hardware               Don't run simulator; create images for real hardware
 Debugger selection:
   --no-debug               (default) No debugger
   --monitor                Debug with simulator's monitor
@@ -170,6 +181,7 @@ Advanced disk configuration options:
   --align=full             Align partition boundaries to cylinder boundary to
                            let fdisk guess correct geometry and quiet warnings
   --align=none             Don't align partitions at all, to save space
+  --fake-usb               Use USB disks, not IDE, except for boot (qemu only)
 Other options:
   -h, --help               Display this help message.
 EOF
@@ -296,7 +308,7 @@ sub find_disks {
 	open ($handle, '>', $make_disk) or die "$make_disk: create: $!\n";
     }
 
-    # Prepare the arguments to pass to the Pintos kernel.
+    # Add "get" and "put" files to kernel args.
     my (@args);
     push (@args, shift (@kernel_args))
       while @kernel_args && $kernel_args[0] =~ /^-/;
@@ -316,7 +328,7 @@ sub find_disks {
     $disk{DISK} = $make_disk;
     $disk{HANDLE} = $handle;
     $disk{ALIGN} = $align;
-    $disk{GEOMETRY} = %geometry;
+    $disk{GEOMETRY} = \%geometry;
     $disk{FORMAT} = 'partitioned';
     $disk{LOADER} = read_loader ($loader_fn);
     $disk{ARGS} = \@args;
@@ -332,13 +344,19 @@ sub prepare_scratch_disk {
     return if !@gets && !@puts;
 
     my ($p) = $parts{SCRATCH};
-    # Create temporary partition and write the files to put to it,
-    # then write an end-of-archive marker.
+
+    # Create temporary partition and write the files to put to it.
     my ($part_handle, $part_fn) = tempfile (UNLINK => 1, SUFFIX => '.part');
-    put_scratch_file ($_->[0], defined $_->[1] ? $_->[1] : $_->[0],
-		      $part_handle, $part_fn)
-      foreach @puts;
-    write_fully ($part_handle, $part_fn, "\0" x 1024);
+    if (@puts) {
+	# Write ustar header and data for each file.
+	put_scratch_file ($_->[0],
+			  defined $_->[1] ? $_->[1] : $_->[0],
+			  $part_handle, $part_fn)
+	  foreach @puts;
+
+	# Write end-of-archive marker.
+	print $part_handle "\0" x 1024;
+    }
 
     # Make sure the scratch disk is big enough to get big files
     # and at least as big as any requested size.
@@ -368,7 +386,7 @@ sub prepare_scratch_disk {
 
 # Read "get" files from the scratch disk.
 sub finish_scratch_disk {
-    return if !@gets;
+    return if !@gets || $sim eq 'hardware';
 
     # Open scratch partition.
     my ($p) = $parts{SCRATCH};
@@ -379,26 +397,24 @@ sub finish_scratch_disk {
       or die "$part_fn: seek: $!\n";
 
     # Read each file.
-    # If reading fails, delete that file and all subsequent files, but
-    # don't die with an error, because that's a guest error not a host
-    # error.  (If we do exit with an error code, it fouls up the
-    # grading process.)  Instead, just make sure that the host file(s)
-    # we were supposed to retrieve is unlinked.
+    # If reading fails, delete that file and stop reading files.
     my ($ok) = 1;
     my ($part_end) = ($p->{START} + $p->{SECTORS}) * 512;
     foreach my $get (@gets) {
 	my ($name) = defined ($get->[1]) ? $get->[1] : $get->[0];
-	if ($ok) {
-	    my ($error) = get_scratch_file ($name, $part_handle, $part_fn);
-	    if (!$error && sysseek ($part_handle, 0, SEEK_CUR) > $part_end) {
-		$error = "$part_fn: scratch data overflows partition";
-	    }
-	    if ($error) {
-		print STDERR "getting $name failed ($error)\n";
-		$ok = 0;
-	    }
+	my ($error) = get_scratch_file ($name, $part_handle, $part_fn);
+	if ($error) {
+	    print STDERR "$part_fn: getting $name failed ($error)\n";
+	    $ok = 0;
 	}
-	die "$name: unlink: $!\n" if !$ok && !unlink ($name) && !$!{ENOENT};
+	if (sysseek ($part_handle, 0, SEEK_CUR) > $part_end) {
+	    $ok = 0;
+	    print STDERR "$part_fn: scratch data overflows partition\n";
+	}
+	if (!$ok) {
+	    die "$name: unlink: $!\n" if !unlink ($name) && !$!{ENOENT};
+	    last;
+	}
     }
 }
 
@@ -537,6 +553,9 @@ sub run_vm {
 	run_qemu ();
     } elsif ($sim eq 'player') {
 	run_player ();
+    } elsif ($sim eq 'hardware') {
+	print "Pintos disk image written to $make_disk.\n";
+	print "Copy this image to a physical disk for hardware boot.\n";
     } else {
 	die "unknown simulator `$sim'\n";
     }
@@ -545,7 +564,7 @@ sub run_vm {
 # Runs Bochs.
 sub run_bochs {
     # Select Bochs binary based on the chosen debugger.
-    my ($bin) = $debug eq 'monitor' ? 'bochs-dbg' : 'bochs';
+    my ($bin) = $debug eq 'monitor' ? 'bochs' : 'bochs-gdb';
 
     my ($squish_pty);
     if ($serial) {
@@ -567,8 +586,11 @@ panic: action=fatal
 user_shortcut: keys=ctrlaltdel
 EOF
     print BOCHSRC "gdbstub: enabled=1\n" if $debug eq 'gdb';
-    print BOCHSRC "clock: sync=", $realtime ? 'realtime' : 'none',
-      ", time0=0\n";
+    if ($realtime) {
+	print BOCHSRC "clock: sync=realtime\n";
+    } else {
+	print BOCHSRC "clock: sync=none, time0=0\n";
+    }
     print BOCHSRC "ata1: enabled=1, ioaddr1=0x170, ioaddr2=0x370, irq=15\n"
       if @disks > 2;
     print_bochs_disk_line ("ata0-master", $disks[0]);
@@ -622,10 +644,17 @@ sub run_qemu {
     print "warning: qemu doesn't support jitter\n"
       if defined $jitter;
     my (@cmd) = ('qemu');
-    push (@cmd, '-hda', $disks[0]) if defined $disks[0];
-    push (@cmd, '-hdb', $disks[1]) if defined $disks[1];
-    push (@cmd, '-hdc', $disks[2]) if defined $disks[2];
-    push (@cmd, '-hdd', $disks[3]) if defined $disks[3];
+    #push (@cmd, '-no-kqemu');
+    if ($fake_usb) {
+	push (@cmd, '-hda', $disks[0]) if defined $disks[0];
+	push (@cmd, '-usb');
+	push (@cmd, '-usbdevice', "disk:$_") foreach @disks[1...$#disks];
+    } else {
+	push (@cmd, '-hda', $disks[0]) if defined $disks[0];
+	push (@cmd, '-hdb', $disks[1]) if defined $disks[1];
+	push (@cmd, '-hdc', $disks[2]) if defined $disks[2];
+	push (@cmd, '-hdd', $disks[3]) if defined $disks[3];
+    }
     push (@cmd, '-m', $mem);
     push (@cmd, '-net', 'none');
     push (@cmd, '-nographic') if $vga eq 'none';
@@ -664,11 +693,16 @@ config.version = 8
 guestOS = "linux"
 memsize = $mem
 floppy0.present = FALSE
-usb.present = FALSE
+usb.present = TRUE
 sound.present = FALSE
 gui.exitAtPowerOff = TRUE
 gui.exitOnCLIHLT = TRUE
 gui.powerOnAtStartUp = TRUE
+usb.analyzer.enable = TRUE
+debug = TRUE
+loglevel.usb = 20
+loglevel.uhci = 20
+loglevel.pci_uhci = 20
 EOF
 
     print VMX <<EOF if $serial;
@@ -730,7 +764,7 @@ EOF
     }
 
     my ($vmx) = getcwd () . "/pintos.vmx";
-    my (@cmd) = ("vmplayer", $vmx);
+    my (@cmd) = ("vmware", $vmx);
     unshift (@cmd, $squish_unix, "pintos.socket") if $squish_unix;
     print join (' ', @cmd), "\n";
     xsystem (@cmd);
@@ -822,7 +856,7 @@ sub xsystem {
 	    for (;;) {
 		if (waitpid ($pid, WNOHANG) != 0) {
 		    # Subprocess died.  Pass through any remaining data.
-		    do { print $buf } while sysread ($in, $buf, 4096) > 0;
+		    print $buf while sysread ($in, $buf, 4096) > 0;
 		    last;
 		}
 

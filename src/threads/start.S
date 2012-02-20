@@ -45,7 +45,7 @@ start:
 	jbe 1f
 	mov $0x10000, %eax
 1:	shrl $2, %eax		# Total 4 kB pages
-	addr32 movl %eax, init_ram_pages - LOADER_PHYS_BASE - 0x20000
+	addr32 movl %eax, ram_pages - LOADER_PHYS_BASE - 0x20000
 
 #### Enable A20.  Address line 20 is tied low when the machine boots,
 #### which prevents addressing memory about 1 MB.  This code fixes it.
@@ -200,7 +200,7 @@ gdtdesc:
 
 #### Physical memory size in 4 kB pages.  This is exported to the rest
 #### of the kernel.
-.globl init_ram_pages
-init_ram_pages:
+.globl ram_pages
+ram_pages:
 	.long 0
 
